@@ -21,51 +21,47 @@ class TensorflowTileDB(TileDBModel):
     Class that implements all functionality needed to save Tensorflow models as
     TileDB arrays and load Tensorflow models from TileDB arrays.
     """
-    def __init__(self, model: Model, include_optimizer: bool, **kwargs):
-        self.model = model
-        self.include_optimizer = include_optimizer
-        self.serialized_model_weights = None
-        self.serialized_optimizer_weights = None
-
+    def __init__(self, **kwargs):
         super(TensorflowTileDB, self).__init__(**kwargs)
 
-    def save(self, update=False):
+    def save(self, model: Model, include_optimizer: bool, update: bool):
         """
-        Saves a Tensorflow model as a TileDB array
+        Saves a Tensorflow model as a TileDB array.
+        :param model: Tensorflow model.
+        :param include_optimizer: Boolean. Whether to save the optimizer or not.
         :param update: Whether we should update any existing TileDB array
-        model at the target location
+        model at the target location.
         """
-        if len(self.model.weights) != len(self.model._undeduplicated_weights):
+        if len(model.weights) != len(model._undeduplicated_weights):
             logging.warning('Found duplicated `Variable`s in Model\'s `weights`. '
                             'This is usually caused by `Variable`s being shared by '
                             'Layers in the Model. These `Variable`s will be treated '
                             'as separate `Variable`s when the Model is restored.')
 
         # Serialize models weights and optimizer (if needed)
-        self._serialize_model_weights()
+        model_weights = self._serialize_model_weights(model)
 
         # Serialize model optimizer
-        if self.include_optimizer:
-            self._serialize_model_optimizer()
+        optimizer_weights = self._serialize_optimizer_weights(include_optimizer, model)
 
         # Create TileDB model array
         if not update:
             self._create_array()
 
-        self._write_array()
+        self._write_array(model, include_optimizer, model_weights, optimizer_weights)
 
     def load(self, compile_model=True, custom_objects=None):
         """
-        Loads a Tensorflow model from a TileDB array
-        :return: Model. Tensorflow model
+        Loads a Tensorflow model from a TileDB array.
+        :param compile_model: Whether to compile the model after loading or not.
+        :param custom_objects: Optional dictionary mapping names (strings) to
+        custom classes or functions to be considered during deserialization.
+        :return: Model. Tensorflow model.
         """
-
         try:
             model_array = tiledb.open(self.uri)
             model_weights = pickle.loads(model_array[:]['model_weights'].item(0))
-            optimizer_weights = pickle.loads(model_array[:]['optimizer_weights'].item(0))
             model_config = json.loads(model_array.meta['model_config'])
-            training_config = json.loads(model_array.meta['training_config'])
 
             architecture = model_config['config']
             model_class = model_config['class_name']
@@ -78,6 +74,9 @@ class TensorflowTileDB(TileDBModel):
             model.set_weights(model_weights)
 
             if compile_model:
+                optimizer_weights = pickle.loads(model_array[:]['optimizer_weights'].item(0))
+                training_config = json.loads(model_array.meta['training_config'])
+
                 # Compile model.
                 model.compile(**saving_utils.compile_args_from_training_config(
                     training_config, custom_objects))
@@ -100,6 +99,7 @@ class TensorflowTileDB(TileDBModel):
                                         'state. As a result, your model is '
                                         'starting with a freshly initialized '
                                         'optimizer.')
+                return model
         except tiledb.TileDBError as error:
             raise error
         except HTTPError as error:
@@ -159,17 +159,18 @@ class TensorflowTileDB(TileDBModel):
         except Exception as error:
             raise HTTPError(code=400, msg="Error creating file %s " % str(error))
 
-    def _write_array(self):
+    def _write_array(self, model: Model, include_optimizer: bool, serialized_weights: bytes,
+                     serialized_optimizer_weights: bytes):
         """
         Writes Tensorflow model to a TileDB array.
         """
         with tiledb.open(self.uri, 'w') as tf_model_tiledb:
             # Insert weights and optimizer
-            tf_model_tiledb[:] = {"model_weights": np.array([self.serialized_model_weights]),
-                                  "optimizer_weights": np.array([self.serialized_optimizer_weights])}
+            tf_model_tiledb[:] = {"model_weights": np.array([serialized_weights]),
+                                  "optimizer_weights": np.array([serialized_optimizer_weights])}
 
             # Insert all model metadata
-            model_metadata = saving_utils.model_metadata(self.model, self.include_optimizer)
+            model_metadata = saving_utils.model_metadata(model, include_optimizer)
             for key, value in model_metadata.items():
                 if isinstance(value, (dict, list, tuple)):
                     tf_model_tiledb.meta[key] = json.dumps(
@@ -177,23 +178,24 @@ class TensorflowTileDB(TileDBModel):
                 else:
                     tf_model_tiledb.meta[key] = value
 
-            # Insert description
-            tf_model_tiledb.meta["description"] = str(self.description)
-
-    def _serialize_model_weights(self):
+    @staticmethod
+    def _serialize_model_weights(model: Model) -> bytes:
         """
         Serialization of model weights
         """
-        self.serialized_model_weights = pickle.dumps(self.model.get_weights(), protocol=-1)
+        return pickle.dumps(model.get_weights(), protocol=-1)
 
-    def _serialize_model_optimizer(self):
+    @staticmethod
+    def _serialize_optimizer_weights(include_optimizer: bool, model: Model) -> bytes:
         """
-        Serialization of model optimizer
+        Serialization of optimizer weights
         """
-        if self.include_optimizer and self.model.optimizer and \
-                not isinstance(self.model.optimizer, optimizer_v1.TFOptimizer):
+        if include_optimizer and model.optimizer and \
+                not isinstance(model.optimizer, optimizer_v1.TFOptimizer):
 
             optimizer_weights = tf.keras.backend.batch_get_value(
-                getattr(self.model.optimizer, 'weights'))
+                getattr(model.optimizer, 'weights'))
 
-            self.serialized_optimizer_weights = pickle.dumps(optimizer_weights, protocol=-1)
+            return pickle.dumps(optimizer_weights, protocol=-1)
+        else:
+            return bytes('')
