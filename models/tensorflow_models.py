@@ -3,6 +3,7 @@ import json
 import pickle
 from urllib.error import HTTPError
 import numpy as np
+import tensorflow as tf
 import tiledb
 
 from tensorflow.keras import Model
@@ -53,11 +54,58 @@ class TensorflowTileDB(TileDBModel):
 
         self._write_array()
 
-    def load(self):
+    def load(self, compile_model=True, custom_objects=None):
         """
         Loads a Tensorflow model from a TileDB array
         :return: Model. Tensorflow model
         """
+
+        try:
+            model_array = tiledb.open(self.uri)
+            model_weights = pickle.loads(model_array[:]['model_weights'].item(0))
+            optimizer_weights = pickle.loads(model_array[:]['optimizer_weights'].item(0))
+            model_config = json.loads(model_array.meta['model_config'])
+            training_config = json.loads(model_array.meta['training_config'])
+
+            architecture = model_config['config']
+            model_class = model_config['class_name']
+
+            if model_class == 'Sequential':
+                model = tf.keras.Sequential.from_config(architecture)
+            else:
+                model = tf.keras.Model.from_config(architecture)
+
+            model.set_weights(model_weights)
+
+            if compile_model:
+                # Compile model.
+                model.compile(**saving_utils.compile_args_from_training_config(
+                    training_config, custom_objects))
+                saving_utils.try_build_compiled_arguments(model)
+
+                # Set optimizer weights.
+                if optimizer_weights:
+                    try:
+                        model.optimizer._create_all_weights(model.trainable_variables)
+                    except (NotImplementedError, AttributeError):
+                        logging.warning(
+                            'Error when creating the weights of optimizer {}, making it '
+                            'impossible to restore the saved optimizer state. As a result, '
+                            'your model is starting with a freshly initialized optimizer.')
+
+                    try:
+                        model.optimizer.set_weights(optimizer_weights)
+                    except ValueError:
+                        logging.warning('Error in loading the saved optimizer '
+                                        'state. As a result, your model is '
+                                        'starting with a freshly initialized '
+                                        'optimizer.')
+        except tiledb.TileDBError as error:
+            raise error
+        except HTTPError as error:
+            raise error
+        except Exception as error:
+            raise error
 
     def _create_array(self):
         """
@@ -145,5 +193,7 @@ class TensorflowTileDB(TileDBModel):
         if self.include_optimizer and self.model.optimizer and \
                 not isinstance(self.model.optimizer, optimizer_v1.TFOptimizer):
 
-            self.serialized_optimizer_weights = \
-                pickle.dumps(getattr(self.model.optimizer, 'weights'), protocol=-1)
+            optimizer_weights = tf.keras.backend.batch_get_value(
+                getattr(self.model.optimizer, 'weights'))
+
+            self.serialized_optimizer_weights = pickle.dumps(optimizer_weights, protocol=-1)
