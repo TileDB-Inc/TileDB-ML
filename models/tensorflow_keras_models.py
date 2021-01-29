@@ -68,8 +68,11 @@ class TensorflowTileDB(TileDBModel):
 
             if model_class == 'Sequential':
                 model = tf.keras.Sequential.from_config(architecture)
-            else:
+            elif model_class == 'Model':
                 model = tf.keras.Model.from_config(architecture)
+            else:
+                raise NotImplementedError("No support fot Subclassed models at the moment. "
+                                          "The model should be either Functional or Sequential")
 
             model.set_weights(model_weights)
 
