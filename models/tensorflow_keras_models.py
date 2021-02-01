@@ -14,7 +14,7 @@ from tensorflow.python.keras import optimizer_v1
 from tensorflow.python.keras.saving import saving_utils
 from tensorflow.python.keras.saving.saved_model import json_utils
 
-from base_model import TileDBModel
+from .base_model import TileDBModel
 
 TILEDB_CONTEXT = tiledb.Ctx()
 
