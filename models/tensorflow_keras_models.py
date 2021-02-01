@@ -1,3 +1,5 @@
+"""Functionality for saving and loading Tensorflow Keras models as TileDB arrays"""
+
 import logging
 import json
 import pickle
@@ -6,7 +8,8 @@ import numpy as np
 import tensorflow as tf
 import tiledb
 
-from tensorflow.keras import Model
+from tensorflow.python.keras.models import Model, Sequential
+from tensorflow.python.keras.engine.functional import Functional
 from tensorflow.python.keras import optimizer_v1
 from tensorflow.python.keras.saving import saving_utils
 from tensorflow.python.keras.saving.saved_model import json_utils
@@ -32,11 +35,9 @@ class TensorflowTileDB(TileDBModel):
         :param update: Whether we should update any existing TileDB array
         model at the target location.
         """
-        if len(model.weights) != len(model._undeduplicated_weights):
-            logging.warning('Found duplicated `Variable`s in Model\'s `weights`. '
-                            'This is usually caused by `Variable`s being shared by '
-                            'Layers in the Model. These `Variable`s will be treated '
-                            'as separate `Variable`s when the Model is restored.')
+        if not isinstance(model, Functional) and not isinstance(model, Sequential):
+            raise NotImplementedError("No support for Subclassed models at the moment. Your "
+                                      "model should be either Sequential or Functional.")
 
         # Serialize models weights and optimizer (if needed)
         model_weights = self._serialize_model_weights(model)
@@ -50,7 +51,7 @@ class TensorflowTileDB(TileDBModel):
 
         self._write_array(model, include_optimizer, model_weights, optimizer_weights)
 
-    def load(self, compile_model=True, custom_objects=None):
+    def load(self, compile_model: bool, custom_objects: dict) -> Model:
         """
         Loads a Tensorflow model from a TileDB array.
         :param compile_model: Whether to compile the model after loading or not.
@@ -68,11 +69,11 @@ class TensorflowTileDB(TileDBModel):
 
             if model_class == 'Sequential':
                 model = tf.keras.Sequential.from_config(architecture)
-            elif model_class == 'Model':
+            elif model_class == 'Functional':
                 model = tf.keras.Model.from_config(architecture)
             else:
-                raise NotImplementedError("No support fot Subclassed models at the moment. "
-                                          "The model should be either Functional or Sequential")
+                raise NotImplementedError("No support for Subclassed models at the moment. Your "
+                                          "model should be either Sequential or Functional.")
 
             model.set_weights(model_weights)
 
@@ -102,7 +103,7 @@ class TensorflowTileDB(TileDBModel):
                                         'state. As a result, your model is '
                                         'starting with a freshly initialized '
                                         'optimizer.')
-                return model
+            return model
         except tiledb.TileDBError as error:
             raise error
         except HTTPError as error:
@@ -201,4 +202,4 @@ class TensorflowTileDB(TileDBModel):
 
             return pickle.dumps(optimizer_weights, protocol=-1)
         else:
-            return bytes('')
+            return bytes('', encoding='utf8')
