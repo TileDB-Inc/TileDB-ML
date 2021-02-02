@@ -51,7 +51,7 @@ class TestSaveLoadTileDBModel(test.TestCase):
 
         tiledb_uri = os.path.join(self.get_temp_dir(), 'model_array')
         tiledb_model_obj = TensorflowTileDB(uri=tiledb_uri)
-        tiledb_model_obj.save(model=sequential_model, include_optimizer=False, update=False)
+        tiledb_model_obj.save(model=sequential_model, include_optimizer=False)
         self.assertTrue(assert_tiledb_array(tiledb_uri))
 
     @testing_utils.run_v2_only
@@ -60,7 +60,7 @@ class TestSaveLoadTileDBModel(test.TestCase):
 
         tiledb_uri = os.path.join(self.get_temp_dir(), 'model_array')
         tiledb_model_obj = TensorflowTileDB(uri=tiledb_uri)
-        tiledb_model_obj.save(model=functional_model, include_optimizer=False, update=False)
+        tiledb_model_obj.save(model=functional_model, include_optimizer=False)
         self.assertTrue(assert_tiledb_array(tiledb_uri))
 
     @testing_utils.run_v2_only
@@ -70,7 +70,7 @@ class TestSaveLoadTileDBModel(test.TestCase):
 
         tiledb_uri = os.path.join(self.get_temp_dir(), 'model_array')
         tiledb_model_obj = TensorflowTileDB(uri=tiledb_uri)
-        tiledb_model_obj.save(model=sequential_model, include_optimizer=True, update=False)
+        tiledb_model_obj.save(model=sequential_model, include_optimizer=True)
         self.assertTrue(assert_tiledb_array(tiledb_uri))
 
     @testing_utils.run_v2_only
@@ -80,7 +80,7 @@ class TestSaveLoadTileDBModel(test.TestCase):
 
         tiledb_uri = os.path.join(self.get_temp_dir(), 'model_array')
         tiledb_model_obj = TensorflowTileDB(uri=tiledb_uri)
-        tiledb_model_obj.save(model=functional_model, include_optimizer=True, update=False)
+        tiledb_model_obj.save(model=functional_model, include_optimizer=True)
         self.assertTrue(assert_tiledb_array(tiledb_uri))
 
     @testing_utils.run_v2_only
@@ -91,15 +91,15 @@ class TestSaveLoadTileDBModel(test.TestCase):
         tiledb_model_obj = TensorflowTileDB(uri=tiledb_uri)
 
         with self.assertRaises(NotImplementedError):
-            tiledb_model_obj.save(model=self.subclassed_model, include_optimizer=False, update=False)
+            tiledb_model_obj.save(model=self.subclassed_model, include_optimizer=False)
 
     @testing_utils.run_v2_only
     def test_save_load_without_compile_sequential(self):
         sequential_model = testing_utils.get_small_sequential_mlp(num_hidden=1, num_classes=2, input_dim=3)
         tiledb_uri = os.path.join(self.get_temp_dir(), 'model_array')
         tiledb_model_obj = TensorflowTileDB(uri=tiledb_uri)
-        tiledb_model_obj.save(model=sequential_model, include_optimizer=False, update=False)
-        loaded_model = tiledb_model_obj.load(compile_model=False, custom_objects={})
+        tiledb_model_obj.save(model=sequential_model, include_optimizer=False)
+        loaded_model = tiledb_model_obj.load(compile_model=False)
         data = np.random.rand(100, 3)
 
         # Assert model predictions are equal
@@ -110,8 +110,8 @@ class TestSaveLoadTileDBModel(test.TestCase):
         functional_model = testing_utils.get_small_functional_mlp(num_hidden=1, num_classes=2, input_dim=3)
         tiledb_uri = os.path.join(self.get_temp_dir(), 'model_array')
         tiledb_model_obj = TensorflowTileDB(uri=tiledb_uri)
-        tiledb_model_obj.save(model=functional_model, include_optimizer=False, update=False)
-        loaded_model = tiledb_model_obj.load(compile_model=False, custom_objects={})
+        tiledb_model_obj.save(model=functional_model, include_optimizer=False)
+        loaded_model = tiledb_model_obj.load(compile_model=False)
         data = np.random.rand(100, 3)
 
         # Assert model predictions are equal
@@ -123,8 +123,8 @@ class TestSaveLoadTileDBModel(test.TestCase):
         sequential_model = add_optimizer(sequential_model)
         tiledb_uri = os.path.join(self.get_temp_dir(), 'model_array')
         tiledb_model_obj = TensorflowTileDB(uri=tiledb_uri)
-        tiledb_model_obj.save(model=sequential_model, include_optimizer=True, update=False)
-        loaded_model = tiledb_model_obj.load(compile_model=True, custom_objects={})
+        tiledb_model_obj.save(model=sequential_model, include_optimizer=True)
+        loaded_model = tiledb_model_obj.load(compile_model=True)
         data = np.random.rand(100, 3)
 
         model_opt_weights = batch_get_value(getattr(sequential_model.optimizer, 'weights'))
@@ -143,8 +143,8 @@ class TestSaveLoadTileDBModel(test.TestCase):
         functional_model = add_optimizer(functional_model)
         tiledb_uri = os.path.join(self.get_temp_dir(), 'model_array')
         tiledb_model_obj = TensorflowTileDB(uri=tiledb_uri)
-        tiledb_model_obj.save(model=functional_model, include_optimizer=True, update=False)
-        loaded_model = tiledb_model_obj.load(compile_model=True, custom_objects={})
+        tiledb_model_obj.save(model=functional_model, include_optimizer=True)
+        loaded_model = tiledb_model_obj.load(compile_model=True)
         data = np.random.rand(100, 3)
 
         model_opt_weights = batch_get_value(getattr(functional_model.optimizer, 'weights'))
@@ -182,8 +182,8 @@ class TestSaveLoadTileDBModel(test.TestCase):
 
         tiledb_uri = os.path.join(self.get_temp_dir(), 'model_array')
         tiledb_model_obj = TensorflowTileDB(uri=tiledb_uri)
-        tiledb_model_obj.save(model=model, include_optimizer=True, update=False)
-        loaded_model = tiledb_model_obj.load(compile_model=True, custom_objects={})
+        tiledb_model_obj.save(model=model, include_optimizer=True)
+        loaded_model = tiledb_model_obj.load(compile_model=True)
 
         model_opt_weights = batch_get_value(getattr(model.optimizer, 'weights'))
         loaded_opt_weights = batch_get_value(getattr(loaded_model.optimizer, 'weights'))
@@ -228,8 +228,8 @@ class TestSaveLoadTileDBModel(test.TestCase):
 
         tiledb_uri = os.path.join(self.get_temp_dir(), 'model_array')
         tiledb_model_obj = TensorflowTileDB(uri=tiledb_uri)
-        tiledb_model_obj.save(model=model, include_optimizer=True, update=False)
-        loaded_model = tiledb_model_obj.load(compile_model=True, custom_objects={})
+        tiledb_model_obj.save(model=model, include_optimizer=True)
+        loaded_model = tiledb_model_obj.load(compile_model=True)
 
         model_opt_weights = batch_get_value(getattr(model.optimizer, 'weights'))
         loaded_opt_weights = batch_get_value(getattr(loaded_model.optimizer, 'weights'))
@@ -272,8 +272,8 @@ class TestSaveLoadTileDBModel(test.TestCase):
 
         tiledb_uri = os.path.join(self.get_temp_dir(), 'model_array')
         tiledb_model_obj = TensorflowTileDB(uri=tiledb_uri)
-        tiledb_model_obj.save(model=model, include_optimizer=False, update=False)
-        loaded_model = tiledb_model_obj.load(compile_model=False, custom_objects={})
+        tiledb_model_obj.save(model=model, include_optimizer=False)
+        loaded_model = tiledb_model_obj.load(compile_model=False)
 
         data = np.random.rand(50, 10, 10)
 
@@ -304,8 +304,8 @@ class TestSaveLoadTileDBModel(test.TestCase):
 
         tiledb_uri = os.path.join(self.get_temp_dir(), 'model_array')
         tiledb_model_obj = TensorflowTileDB(uri=tiledb_uri)
-        tiledb_model_obj.save(model=model, include_optimizer=True, update=False)
-        loaded_model = tiledb_model_obj.load(compile_model=True, custom_objects={})
+        tiledb_model_obj.save(model=model, include_optimizer=True)
+        loaded_model = tiledb_model_obj.load(compile_model=True)
 
         # Assert model predictions are equal
         np.testing.assert_array_equal(loaded_model.predict(data_x), model.predict(data_x))
@@ -331,8 +331,8 @@ class TestSaveLoadTileDBModel(test.TestCase):
 
         tiledb_uri = os.path.join(self.get_temp_dir(), 'model_array')
         tiledb_model_obj = TensorflowTileDB(uri=tiledb_uri)
-        tiledb_model_obj.save(model=model, include_optimizer=True, update=False)
-        loaded_model = tiledb_model_obj.load(compile_model=True, custom_objects={})
+        tiledb_model_obj.save(model=model, include_optimizer=True)
+        loaded_model = tiledb_model_obj.load(compile_model=True)
 
         # Assert all evaluation results are the same.
         self.assertAllClose(model.evaluate(data_x, data_y), loaded_model.evaluate(data_x, data_y), 1e-9)
@@ -344,7 +344,7 @@ class TestSaveLoadTileDBModel(test.TestCase):
         tiledb_model_obj = TensorflowTileDB(uri="dummy_uri")
 
         with self.assertRaises(tiledb.TileDBError):
-            tiledb_model_obj.load(compile_model=False, custom_objects={})
+            tiledb_model_obj.load(compile_model=False)
 
 
 if __name__ == '__main__':

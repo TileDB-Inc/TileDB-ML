@@ -8,6 +8,7 @@ import tensorflow as tf
 import tiledb
 
 from urllib.error import HTTPError
+from typing import Optional
 
 from tensorflow.python.keras.models import Model, Sequential
 from tensorflow.python.keras.engine.functional import Functional
@@ -28,7 +29,7 @@ class TensorflowTileDB(TileDBModel):
     def __init__(self, **kwargs):
         super(TensorflowTileDB, self).__init__(**kwargs)
 
-    def save(self, model: Model, include_optimizer: bool, update: bool):
+    def save(self, model: Model, include_optimizer: Optional[bool] = False, update: Optional[bool] = False):
         """
         Saves a Tensorflow model as a TileDB array.
         :param model: Tensorflow model.
@@ -44,7 +45,8 @@ class TensorflowTileDB(TileDBModel):
         model_weights = self._serialize_model_weights(model)
 
         # Serialize model optimizer
-        optimizer_weights = self._serialize_optimizer_weights(include_optimizer, model)
+        optimizer_weights = self._serialize_optimizer_weights(model=model,
+                                                              include_optimizer=include_optimizer)
 
         # Create TileDB model array
         if not update:
@@ -52,7 +54,7 @@ class TensorflowTileDB(TileDBModel):
 
         self._write_array(model, include_optimizer, model_weights, optimizer_weights)
 
-    def load(self, compile_model: bool, custom_objects: dict) -> Model:
+    def load(self, compile_model: Optional[bool] = False, custom_objects: Optional[dict] = None) -> Model:
         """
         Loads a Tensorflow model from a TileDB array.
         :param compile_model: Whether to compile the model after loading or not.
@@ -191,7 +193,7 @@ class TensorflowTileDB(TileDBModel):
         return pickle.dumps(model.get_weights(), protocol=-1)
 
     @staticmethod
-    def _serialize_optimizer_weights(include_optimizer: bool, model: Model) -> bytes:
+    def _serialize_optimizer_weights(model: Model, include_optimizer: Optional[bool] = True) -> bytes:
         """
         Serialization of optimizer weights
         """
