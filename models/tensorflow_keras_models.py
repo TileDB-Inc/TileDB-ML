@@ -18,7 +18,7 @@ from tensorflow.python.keras.saving.saved_model import json_utils
 
 from models.base_model import TileDBModel
 
-TILEDB_CONTEXT = tiledb.Ctx()
+tiledb.default_ctx()
 
 
 class TensorflowTileDB(TileDBModel):
@@ -125,7 +125,6 @@ class TensorflowTileDB(TileDBModel):
                            tile=1,
                            dtype=np.int32
                            ),
-                ctx=TILEDB_CONTEXT,
             )
 
             attrs = [
@@ -133,23 +132,20 @@ class TensorflowTileDB(TileDBModel):
                             dtype="S1",
                             var=True,
                             filters=tiledb.FilterList([tiledb.ZstdFilter()]),
-                            ctx=TILEDB_CONTEXT
                             ),
                 tiledb.Attr(name="optimizer_weights",
                             dtype="S1",
                             var=True,
                             filters=tiledb.FilterList([tiledb.ZstdFilter()]),
-                            ctx=TILEDB_CONTEXT
                             ),
             ]
 
             schema = tiledb.ArraySchema(domain=dom,
                                         sparse=False,
                                         attrs=attrs,
-                                        ctx=TILEDB_CONTEXT
                                         )
 
-            tiledb.Array.create(self.uri, schema, ctx=TILEDB_CONTEXT)
+            tiledb.Array.create(self.uri, schema)
         except tiledb.TileDBError as error:
             if "Error while listing with prefix" in str(error):
                 # It is possible to land here if user sets wrong default s3 credentials
@@ -190,7 +186,7 @@ class TensorflowTileDB(TileDBModel):
         """
         Serialization of model weights
         """
-        return pickle.dumps(model.get_weights(), protocol=-1)
+        return pickle.dumps(model.get_weights(), protocol=4)
 
     @staticmethod
     def _serialize_optimizer_weights(model: Model, include_optimizer: Optional[bool] = True) -> bytes:
@@ -203,6 +199,6 @@ class TensorflowTileDB(TileDBModel):
             optimizer_weights = tf.keras.backend.batch_get_value(
                 getattr(model.optimizer, 'weights'))
 
-            return pickle.dumps(optimizer_weights, protocol=-1)
+            return pickle.dumps(optimizer_weights, protocol=4)
         else:
             return bytes('', encoding='utf8')
