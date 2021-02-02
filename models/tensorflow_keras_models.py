@@ -3,10 +3,11 @@
 import logging
 import json
 import pickle
-from urllib.error import HTTPError
 import numpy as np
 import tensorflow as tf
 import tiledb
+
+from urllib.error import HTTPError
 
 from tensorflow.python.keras.models import Model, Sequential
 from tensorflow.python.keras.engine.functional import Functional
@@ -14,7 +15,7 @@ from tensorflow.python.keras import optimizer_v1
 from tensorflow.python.keras.saving import saving_utils
 from tensorflow.python.keras.saving.saved_model import json_utils
 
-from .base_model import TileDBModel
+from models.base_model import TileDBModel
 
 TILEDB_CONTEXT = tiledb.Ctx()
 

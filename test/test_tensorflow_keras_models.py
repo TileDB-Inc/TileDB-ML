@@ -5,12 +5,10 @@ from __future__ import division
 from __future__ import print_function
 
 import os
-
 import tiledb
-from models.tensorflow_keras_models import TensorflowTileDB
-
 import numpy as np
 
+import tensorflow as tf
 from tensorflow.python.keras.backend import batch_get_value
 from tensorflow.python.keras import layers
 from tensorflow.python import keras
@@ -23,8 +21,12 @@ from tensorflow.python.keras.feature_column import dense_features
 from tensorflow.python.keras.feature_column import sequence_feature_column as ksfc
 from tensorflow.python.platform import test
 
+from models.tensorflow_keras_models import TensorflowTileDB
+
 # Suppress all Tensorflow messages
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
 
 def assert_tiledb_array(uri):
