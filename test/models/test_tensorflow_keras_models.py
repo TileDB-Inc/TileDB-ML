@@ -44,7 +44,7 @@ class TestSaveLoadTileDBModel(test.TestCase):
         super(TestSaveLoadTileDBModel, self).setUp()
 
     @testing_utils.run_v2_only
-    def test_save_model_to_tiledb_array_without_optimizer_sequential(self):
+    def test_save_model_to_tiledb_array_without_compile_sequential(self):
         sequential_model = testing_utils.get_small_sequential_mlp(num_hidden=1, num_classes=2, input_dim=3)
 
         tiledb_uri = os.path.join(self.get_temp_dir(), 'model_array')
@@ -53,7 +53,7 @@ class TestSaveLoadTileDBModel(test.TestCase):
         self.assertTrue(assert_tiledb_array(tiledb_uri))
 
     @testing_utils.run_v2_only
-    def test_save_model_to_tiledb_array_without_optimizer_functional(self):
+    def test_save_model_to_tiledb_array_without_compile_functional(self):
         functional_model = testing_utils.get_small_functional_mlp(num_hidden=1, num_classes=2, input_dim=3)
 
         tiledb_uri = os.path.join(self.get_temp_dir(), 'model_array')
@@ -62,7 +62,7 @@ class TestSaveLoadTileDBModel(test.TestCase):
         self.assertTrue(assert_tiledb_array(tiledb_uri))
 
     @testing_utils.run_v2_only
-    def test_save_model_to_tiledb_array_with_optimizer_sequential(self):
+    def test_save_model_to_tiledb_array_with_compile_sequential(self):
         sequential_model = testing_utils.get_small_sequential_mlp(num_hidden=1, num_classes=2, input_dim=3)
         sequential_model = add_optimizer(sequential_model)
 
@@ -72,7 +72,7 @@ class TestSaveLoadTileDBModel(test.TestCase):
         self.assertTrue(assert_tiledb_array(tiledb_uri))
 
     @testing_utils.run_v2_only
-    def test_save_model_to_tiledb_array_with_optimizer_functional(self):
+    def test_save_model_to_tiledb_array_with_compile_functional(self):
         functional_model = testing_utils.get_small_functional_mlp(num_hidden=1, num_classes=2, input_dim=3)
         functional_model = add_optimizer(functional_model)
 
@@ -92,7 +92,7 @@ class TestSaveLoadTileDBModel(test.TestCase):
             tiledb_model_obj.save(model=self.subclassed_model, include_optimizer=False, update=False)
 
     @testing_utils.run_v2_only
-    def test_save_load_without_optimizer_sequential(self):
+    def test_save_load_without_compile_sequential(self):
         sequential_model = testing_utils.get_small_sequential_mlp(num_hidden=1, num_classes=2, input_dim=3)
         tiledb_uri = os.path.join(self.get_temp_dir(), 'model_array')
         tiledb_model_obj = TensorflowTileDB(uri=tiledb_uri)
@@ -104,7 +104,7 @@ class TestSaveLoadTileDBModel(test.TestCase):
         np.testing.assert_array_equal(loaded_model.predict(data), sequential_model.predict(data))
 
     @testing_utils.run_v2_only
-    def test_save_load_without_optimizer_functional(self):
+    def test_save_load_without_compile_functional(self):
         functional_model = testing_utils.get_small_functional_mlp(num_hidden=1, num_classes=2, input_dim=3)
         tiledb_uri = os.path.join(self.get_temp_dir(), 'model_array')
         tiledb_model_obj = TensorflowTileDB(uri=tiledb_uri)
@@ -116,7 +116,7 @@ class TestSaveLoadTileDBModel(test.TestCase):
         np.testing.assert_array_equal(loaded_model.predict(data), functional_model.predict(data))
 
     @testing_utils.run_v2_only
-    def test_save_load_with_optimizer_sequential(self):
+    def test_save_load_with_compile_sequential(self):
         sequential_model = testing_utils.get_small_sequential_mlp(num_hidden=1, num_classes=2, input_dim=3)
         sequential_model = add_optimizer(sequential_model)
         tiledb_uri = os.path.join(self.get_temp_dir(), 'model_array')
@@ -136,7 +136,7 @@ class TestSaveLoadTileDBModel(test.TestCase):
         np.testing.assert_array_equal(loaded_model.predict(data), sequential_model.predict(data))
 
     @testing_utils.run_v2_only
-    def test_save_load_with_optimizer_functional(self):
+    def test_save_load_with_compile_functional(self):
         functional_model = testing_utils.get_small_functional_mlp(num_hidden=1, num_classes=2, input_dim=3)
         functional_model = add_optimizer(functional_model)
         tiledb_uri = os.path.join(self.get_temp_dir(), 'model_array')
