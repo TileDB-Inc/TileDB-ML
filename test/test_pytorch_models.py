@@ -181,6 +181,5 @@ class TestSaveLoadTileDBModel(unittest.TestCase):
                 self.assertTrue(torch.equal(key_item_1[1]['sum'], key_item_2[1]['sum']))
 
 
-
 if __name__ == '__main__':
     unittest.main()
