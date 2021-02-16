@@ -13,8 +13,6 @@ from torch.nn import Module
 
 from models.base_model import TileDBModel
 
-tiledb.default_ctx()
-
 
 class PyTorchTileDB(TileDBModel):
     """
@@ -52,10 +50,11 @@ class PyTorchTileDB(TileDBModel):
         """
         try:
             model_array = tiledb.open(self.uri)
+            model_array_results = model_array[:]
             schema = model_array.schema
 
-            model_state_dict = pickle.loads(model_array[:]['model_state_dict'].item(0))
-            optimizer_state_dict = pickle.loads(model_array[:]['optimizer_state_dict'].item(0))
+            model_state_dict = pickle.loads(model_array_results['model_state_dict'].item(0))
+            optimizer_state_dict = pickle.loads(model_array_results['optimizer_state_dict'].item(0))
 
             # Load model's state and optimizer dictionaries
             model.load_state_dict(model_state_dict)
@@ -66,7 +65,7 @@ class PyTorchTileDB(TileDBModel):
             for idx in range(schema.nattr):
                 attr_name = schema.attr(idx).name
                 if schema.attr(idx).name != 'model_state_dict' and schema.attr(idx).name != 'optimizer_state_dict':
-                    out_dict[attr_name] = pickle.loads(model_array[:][attr_name].item(0))
+                    out_dict[attr_name] = pickle.loads(model_array_results[attr_name].item(0))
             return out_dict
         except tiledb.TileDBError as error:
             raise error

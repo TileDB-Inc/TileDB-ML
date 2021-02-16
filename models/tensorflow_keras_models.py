@@ -18,8 +18,6 @@ from tensorflow.python.keras.saving.saved_model import json_utils
 
 from models.base_model import TileDBModel
 
-tiledb.default_ctx()
-
 
 class TensorflowTileDB(TileDBModel):
     """
@@ -64,7 +62,8 @@ class TensorflowTileDB(TileDBModel):
         """
         try:
             model_array = tiledb.open(self.uri)
-            model_weights = pickle.loads(model_array[:]['model_weights'].item(0))
+            model_array_results = model_array[:]
+            model_weights = pickle.loads(model_array_results['model_weights'].item(0))
             model_config = json.loads(model_array.meta['model_config'])
 
             architecture = model_config['config']
@@ -81,7 +80,7 @@ class TensorflowTileDB(TileDBModel):
             model.set_weights(model_weights)
 
             if compile_model:
-                optimizer_weights = pickle.loads(model_array[:]['optimizer_weights'].item(0))
+                optimizer_weights = pickle.loads(model_array_results['optimizer_weights'].item(0))
                 training_config = json.loads(model_array.meta['training_config'])
 
                 # Compile model.
