@@ -3,6 +3,7 @@
 import logging
 import json
 import pickle
+import platform
 import numpy as np
 import tensorflow as tf
 import tiledb
@@ -159,7 +160,7 @@ class TensorflowTileDB(TileDBModel):
         except HTTPError as error:
             raise error
         except Exception as error:
-            raise HTTPError(code=400, msg="Error creating file %s " % str(error))
+            raise error
 
     def _write_array(self, model: Model, include_optimizer: bool, serialized_weights: bytes,
                      serialized_optimizer_weights: bytes):
@@ -179,6 +180,9 @@ class TensorflowTileDB(TileDBModel):
                         value, default=json_utils.get_json_type).encode('utf8')
                 else:
                     tf_model_tiledb.meta[key] = value
+
+            # Add Python version to metadata
+            tf_model_tiledb.meta['python_version'] = platform.python_version()
 
     @staticmethod
     def _serialize_model_weights(model: Model) -> bytes:

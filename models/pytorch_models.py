@@ -2,12 +2,14 @@
 
 import logging
 import pickle
+import platform
 import numpy as np
 import tiledb
 
 from urllib.error import HTTPError
 from typing import Optional
 
+import torch
 from torch.optim import Optimizer
 from torch.nn import Module
 
@@ -117,7 +119,7 @@ class PyTorchTileDB(TileDBModel):
         except HTTPError as error:
             raise error
         except Exception as error:
-            raise HTTPError(code=400, msg="Error creating file %s " % str(error))
+            raise error
 
     def _write_array(self, serialized_model_info: dict):
         """
@@ -131,6 +133,12 @@ class PyTorchTileDB(TileDBModel):
                 insertion_dict[key] = np.array([value])
 
             tf_model_tiledb[:] = insertion_dict
+
+            # Add Python version to metadata
+            tf_model_tiledb.meta['python_version'] = platform.python_version()
+
+            # Add PyTorch version to metadata
+            tf_model_tiledb.meta['pytorch_version'] = torch.__version__
 
     @staticmethod
     def _serialize_model_info(model_info: dict) -> dict:
