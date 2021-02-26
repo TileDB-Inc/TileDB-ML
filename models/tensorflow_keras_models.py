@@ -28,12 +28,14 @@ class TensorflowTileDB(TileDBModel):
     def __init__(self, **kwargs):
         super(TensorflowTileDB, self).__init__(**kwargs)
 
-    def save(self, model: Model, include_optimizer: Optional[bool] = False, update: Optional[bool] = False):
+    def save(self, model: Model, include_optimizer: Optional[bool] = False, update: Optional[bool] = False,
+             meta: Optional[dict] = None):
         """
         Saves a Tensorflow model as a TileDB array.
         :param model: Tensorflow model.
         :param include_optimizer: Boolean. Whether to save the optimizer or not.
-        :param update: Whether we should update any existing TileDB array
+        :param update: Whether we should update any existing TileDB array.
+        :param meta: Dict. Extra metadata to save in a TileDB array.
         model at the target location.
         """
         if not isinstance(model, Functional) and not isinstance(model, Sequential):
@@ -51,7 +53,7 @@ class TensorflowTileDB(TileDBModel):
         if not update:
             self._create_array()
 
-        self._write_array(model, include_optimizer, model_weights, optimizer_weights)
+        self._write_array(model, include_optimizer, model_weights, optimizer_weights, meta=meta)
 
     def load(self, compile_model: Optional[bool] = False, custom_objects: Optional[dict] = None) -> Model:
         """
@@ -163,7 +165,7 @@ class TensorflowTileDB(TileDBModel):
             raise error
 
     def _write_array(self, model: Model, include_optimizer: bool, serialized_weights: bytes,
-                     serialized_optimizer_weights: bytes):
+                     serialized_optimizer_weights: bytes, meta: Optional[dict]):
         """
         Writes Tensorflow model to a TileDB array.
         """
@@ -183,6 +185,15 @@ class TensorflowTileDB(TileDBModel):
 
             # Add Python version to metadata
             tf_model_tiledb.meta['python_version'] = platform.python_version()
+
+            if meta:
+                for key, value in meta.items():
+                    if isinstance(value, (dict, list, tuple)):
+                        tf_model_tiledb.meta[key] = json.dumps(
+                            value, default=json_utils.get_json_type).encode('utf8')
+                    else:
+                        tf_model_tiledb.meta[key] = value
+
 
     @staticmethod
     def _serialize_model_weights(model: Model) -> bytes:
