@@ -194,7 +194,6 @@ class TensorflowTileDB(TileDBModel):
                     else:
                         tf_model_tiledb.meta[key] = value
 
-
     @staticmethod
     def _serialize_model_weights(model: Model) -> bytes:
         """
