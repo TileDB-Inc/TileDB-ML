@@ -3,6 +3,7 @@
 import logging
 import pickle
 import platform
+import json
 import numpy as np
 import tiledb
 
@@ -25,13 +26,14 @@ class PyTorchTileDB(TileDBModel):
     def __init__(self, **kwargs):
         super(PyTorchTileDB, self).__init__(**kwargs)
 
-    def save(self, model_info: dict, update: Optional[bool] = False):
+    def save(self, model_info: dict, update: Optional[bool] = False, meta: Optional[dict] = None):
         """
         Saves a PyTorch model as a TileDB array.
         :param model_info: Python dictionary. Contains all model info like,
         model.state_dict(), optimizer.state_dict(), loss, etc.
         :param update: Whether we should update any existing TileDB array
         model at the target location.
+        :param meta: Dict. Extra metadata to save in a TileDB array.
         """
 
         # Serialize model and optimizer
@@ -41,14 +43,15 @@ class PyTorchTileDB(TileDBModel):
         if not update:
             self._create_array(serialized_model_info)
 
-        self._write_array(serialized_model_info)
+        self._write_array(serialized_model_info, meta=meta)
 
     def load(self, model: Module, optimizer: Optimizer) -> dict:
         """
         Loads a PyTorch model from a TileDB array.
         :param model: Pytorch Module. A defined PyTorch model.
         :param optimizer: PyTorch Optimizer. A defined PyTorch optimizer.
-        :return: PyTorch Module. A PyTorch model.
+        :return: Dict. A dictionary with attributes other than model or optimizer
+        state_dict.
         """
         try:
             model_array = tiledb.open(self.uri)
@@ -121,7 +124,7 @@ class PyTorchTileDB(TileDBModel):
         except Exception as error:
             raise error
 
-    def _write_array(self, serialized_model_info: dict):
+    def _write_array(self, serialized_model_info: dict, meta: Optional[dict]):
         """
         Writes a PyTorch model to a TileDB array.
         """
@@ -139,6 +142,14 @@ class PyTorchTileDB(TileDBModel):
 
             # Add PyTorch version to metadata
             tf_model_tiledb.meta['pytorch_version'] = torch.__version__
+
+            # Add extra metadata given by the user to array's metadata
+            if meta:
+                for key, value in meta.items():
+                    if isinstance(value, (dict, list, tuple)):
+                        tf_model_tiledb.meta[key] = json.dumps(value).encode('utf8')
+                    else:
+                        tf_model_tiledb.meta[key] = value
 
     @staticmethod
     def _serialize_model_info(model_info: dict) -> dict:
