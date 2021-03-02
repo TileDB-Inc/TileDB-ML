@@ -183,9 +183,10 @@ class TensorflowTileDB(TileDBModel):
                 else:
                     tf_model_tiledb.meta[key] = value
 
-            # Add Python version to metadata
+            # Add Python version to array's metadata
             tf_model_tiledb.meta['python_version'] = platform.python_version()
 
+            # Add extra metadata given by the user to array's metadata
             if meta:
                 for key, value in meta.items():
                     if isinstance(value, (dict, list, tuple)):
