@@ -4,6 +4,7 @@ import logging
 import pickle
 import platform
 import numpy as np
+import json
 import tiledb
 
 from urllib.error import HTTPError
@@ -24,12 +25,13 @@ class SklearnTileDB(TileDBModel):
     def __init__(self, **kwargs):
         super(SklearnTileDB, self).__init__(**kwargs)
 
-    def save(self, model: BaseEstimator, update: Optional[bool] = False):
+    def save(self, model: BaseEstimator, update: Optional[bool] = False, meta: Optional[dict] = None):
         """
         Saves a Sklearn model as a TileDB array.
         :param model: An Sklearn Estimator object. Model to store as TileDB array.
         :param update: Whether we should update any existing TileDB array
         model at the target location.
+        :param meta: Dict. Extra metadata to save in a TileDB array.
         """
 
         # Serialize model
@@ -39,7 +41,7 @@ class SklearnTileDB(TileDBModel):
         if not update:
             self._create_array()
 
-        self._write_array(serialized_model)
+        self._write_array(serialized_model, meta=meta)
 
     def load(self) -> BaseEstimator:
         """
@@ -100,7 +102,7 @@ class SklearnTileDB(TileDBModel):
         except Exception as error:
             raise error
 
-    def _write_array(self, serialized_model: bytes):
+    def _write_array(self, serialized_model: bytes, meta: Optional[dict]):
         """
         Writes a Sklearn model to a TileDB array.
         """
@@ -113,6 +115,14 @@ class SklearnTileDB(TileDBModel):
 
             # Add Sklearn version to metadata
             tf_model_tiledb.meta['sklearn_version'] = sklearn.__version__
+
+            # Add extra metadata given by the user to array's metadata
+            if meta:
+                for key, value in meta.items():
+                    if isinstance(value, (dict, list, tuple)):
+                        tf_model_tiledb.meta[key] = json.dumps(value).encode('utf8')
+                    else:
+                        tf_model_tiledb.meta[key] = value
 
     @staticmethod
     def _serialize_model(model: BaseEstimator) -> bytes:
