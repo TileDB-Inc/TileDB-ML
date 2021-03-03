@@ -34,9 +34,8 @@ class TensorflowTileDB(TileDBModel):
         Saves a Tensorflow model as a TileDB array.
         :param model: Tensorflow model.
         :param include_optimizer: Boolean. Whether to save the optimizer or not.
-        :param update: Whether we should update any existing TileDB array.
+        :param update: Whether we should update any existing TileDB array model at the target location.
         :param meta: Dict. Extra metadata to save in a TileDB array.
-        model at the target location.
         """
         if not isinstance(model, Functional) and not isinstance(model, Sequential):
             raise NotImplementedError("No support for Subclassed models at the moment. Your "
