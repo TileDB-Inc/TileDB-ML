@@ -52,7 +52,7 @@ in order to create simple and flexible model registries with TileDB.
 * We are already working on readers from TileDB arrays to popular machine learning framework Data APIs, as mentioned above.
 
 Our ultimate goal is ALL machine learning data, from raw text, images, audio, to features (Feature Store) and models (Model Registry), represented, stored and managed
-in one and only format, i.e, TileDB.
+in one **Data Engine**, i.e, TileDB.
 
 
 ## Contributing
