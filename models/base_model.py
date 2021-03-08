@@ -15,7 +15,6 @@ class TileDBModel(abc.ABC):
         :param uri: str
         """
         self.uri = uri
-        super().__init__()
 
     @abc.abstractmethod
     def save(self, **kwargs):
@@ -24,7 +23,6 @@ class TileDBModel(abc.ABC):
         Must be implemented per machine learning framework, i.e, Tensorflow,
         PyTorch etc.
         """
-        raise NotImplementedError("Please implement save method!")
 
     @abc.abstractmethod
     def load(self, **kwargs):
@@ -33,4 +31,3 @@ class TileDBModel(abc.ABC):
         Must be implemented per machine learning framework.
         :return: A Tensorflow or PyTorch model.
         """
-        raise NotImplementedError("Please implement load method!")

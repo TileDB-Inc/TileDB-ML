@@ -17,9 +17,6 @@ iris = datasets.load_iris()
 
 class TestSaveLoadTileDBModel(unittest.TestCase):
 
-    def setUp(self):
-        super(TestSaveLoadTileDBModel, self).setUp()
-
     def test_save_load_svc(self):
         with tempfile.TemporaryDirectory() as tiledb_array:
             model = SVC()

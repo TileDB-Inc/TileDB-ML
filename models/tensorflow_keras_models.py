@@ -25,19 +25,16 @@ class TensorflowTileDB(TileDBModel):
     Class that implements all functionality needed to save Tensorflow models as
     TileDB arrays and load Tensorflow models from TileDB arrays.
     """
-    def __init__(self, **kwargs):
-        super(TensorflowTileDB, self).__init__(**kwargs)
 
-    def save(self, model: Model, include_optimizer: Optional[bool] = False, update: Optional[bool] = False,
-             meta: Optional[dict] = None):
+    def save(self, model: Model, include_optimizer: bool = False, update: bool = False, meta: Optional[dict] = None):
         """
         Saves a Tensorflow model as a TileDB array.
         :param model: Tensorflow model.
         :param include_optimizer: Boolean. Whether to save the optimizer or not.
-        :param update: Whether we should update any existing TileDB array model at the target location.
+        :param update: Boolean. Whether we should update any existing TileDB array model at the target location.
         :param meta: Dict. Extra metadata to save in a TileDB array.
         """
-        if not isinstance(model, Functional) and not isinstance(model, Sequential):
+        if not isinstance(model, (Functional, Sequential)):
             raise NotImplementedError("No support for Subclassed models at the moment. Your "
                                       "model should be either Sequential or Functional.")
 
@@ -52,12 +49,16 @@ class TensorflowTileDB(TileDBModel):
         if not update:
             self._create_array()
 
-        self._write_array(model, include_optimizer, model_weights, optimizer_weights, meta=meta)
+        self._write_array(model=model,
+                          include_optimizer=include_optimizer,
+                          serialized_weights=model_weights,
+                          serialized_optimizer_weights=optimizer_weights,
+                          meta=meta)
 
-    def load(self, compile_model: Optional[bool] = False, custom_objects: Optional[dict] = None) -> Model:
+    def load(self, compile_model: bool = False, custom_objects: Optional[dict] = None) -> Model:
         """
         Loads a Tensorflow model from a TileDB array.
-        :param compile_model: Whether to compile the model after loading or not.
+        :param compile_model: Boolean. Whether to compile the model after loading or not.
         :param custom_objects: Optional dictionary mapping names (strings) to
         custom classes or functions to be considered during deserialization.
         :return: Model. Tensorflow model.
@@ -108,12 +109,8 @@ class TensorflowTileDB(TileDBModel):
                                         'starting with a freshly initialized '
                                         'optimizer.')
             return model
-        except tiledb.TileDBError as error:
-            raise error
-        except HTTPError as error:
-            raise error
-        except Exception as error:
-            raise error
+        except:
+            raise
 
     def _create_array(self):
         """
@@ -151,17 +148,14 @@ class TensorflowTileDB(TileDBModel):
             if "Error while listing with prefix" in str(error):
                 # It is possible to land here if user sets wrong default s3 credentials
                 # with respect to default s3 path
-                raise HTTPError(code=400, msg="Error creating file, %s Are your S3 "
-                                              "credentials valid?" % str(error))
+                raise HTTPError(code=400, msg=f"Error creating file, {error} Are your S3 credentials valid?")
 
             if "already exists" in str(error):
                 logging.warning('TileDB array already exists but update=False. '
                                 'Next time set update=True. Returning')
                 raise error
-        except HTTPError as error:
-            raise error
-        except Exception as error:
-            raise error
+        except:
+            raise
 
     def _write_array(self, model: Model, include_optimizer: bool, serialized_weights: bytes,
                      serialized_optimizer_weights: bytes, meta: Optional[dict]):
@@ -188,11 +182,11 @@ class TensorflowTileDB(TileDBModel):
             # Add extra metadata given by the user to array's metadata
             if meta:
                 for key, value in meta.items():
-                    if isinstance(value, (dict, list, tuple)):
+                    try:
                         tf_model_tiledb.meta[key] = json.dumps(
                             value, default=json_utils.get_json_type).encode('utf8')
-                    else:
-                        tf_model_tiledb.meta[key] = value
+                    except:
+                        logging.warning('Exception occurred during Json serialization of metadata!')
 
     @staticmethod
     def _serialize_model_weights(model: Model) -> bytes:
@@ -202,7 +196,7 @@ class TensorflowTileDB(TileDBModel):
         return pickle.dumps(model.get_weights(), protocol=4)
 
     @staticmethod
-    def _serialize_optimizer_weights(model: Model, include_optimizer: Optional[bool] = True) -> bytes:
+    def _serialize_optimizer_weights(model: Model, include_optimizer: bool = True) -> bytes:
         """
         Serialization of optimizer weights
         """
@@ -214,4 +208,4 @@ class TensorflowTileDB(TileDBModel):
 
             return pickle.dumps(optimizer_weights, protocol=4)
         else:
-            return bytes('', encoding='utf8')
+            return b''

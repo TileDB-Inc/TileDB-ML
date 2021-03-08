@@ -1,9 +1,5 @@
 """Tests for TileDB Tensorflow Keras model save and load."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import os
 import tiledb
 import numpy as np
@@ -29,10 +25,6 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
 
-def assert_tiledb_array(uri):
-    return tiledb.array_exists(uri)
-
-
 def add_optimizer(model):
     model.compile(loss='binary_crossentropy',
                   optimizer='rmsprop',
@@ -42,9 +34,6 @@ def add_optimizer(model):
 
 class TestSaveLoadTileDBModel(test.TestCase):
 
-    def setUp(self):
-        super(TestSaveLoadTileDBModel, self).setUp()
-
     @testing_utils.run_v2_only
     def test_save_model_to_tiledb_array_without_compile_sequential(self):
         sequential_model = testing_utils.get_small_sequential_mlp(num_hidden=1, num_classes=2, input_dim=3)
@@ -52,7 +41,7 @@ class TestSaveLoadTileDBModel(test.TestCase):
         tiledb_uri = os.path.join(self.get_temp_dir(), 'model_array')
         tiledb_model_obj = TensorflowTileDB(uri=tiledb_uri)
         tiledb_model_obj.save(model=sequential_model, include_optimizer=False)
-        self.assertTrue(assert_tiledb_array(tiledb_uri))
+        self.assertTrue(tiledb.array_exists(tiledb_uri))
 
     @testing_utils.run_v2_only
     def test_save_model_to_tiledb_array_without_compile_functional(self):
@@ -61,7 +50,7 @@ class TestSaveLoadTileDBModel(test.TestCase):
         tiledb_uri = os.path.join(self.get_temp_dir(), 'model_array')
         tiledb_model_obj = TensorflowTileDB(uri=tiledb_uri)
         tiledb_model_obj.save(model=functional_model, include_optimizer=False)
-        self.assertTrue(assert_tiledb_array(tiledb_uri))
+        self.assertTrue(tiledb.array_exists(tiledb_uri))
 
     @testing_utils.run_v2_only
     def test_save_model_to_tiledb_array_with_compile_sequential(self):
@@ -71,7 +60,7 @@ class TestSaveLoadTileDBModel(test.TestCase):
         tiledb_uri = os.path.join(self.get_temp_dir(), 'model_array')
         tiledb_model_obj = TensorflowTileDB(uri=tiledb_uri)
         tiledb_model_obj.save(model=sequential_model, include_optimizer=True)
-        self.assertTrue(assert_tiledb_array(tiledb_uri))
+        self.assertTrue(tiledb.array_exists(tiledb_uri))
 
     @testing_utils.run_v2_only
     def test_save_model_to_tiledb_array_with_compile_functional(self):
@@ -81,7 +70,7 @@ class TestSaveLoadTileDBModel(test.TestCase):
         tiledb_uri = os.path.join(self.get_temp_dir(), 'model_array')
         tiledb_model_obj = TensorflowTileDB(uri=tiledb_uri)
         tiledb_model_obj.save(model=functional_model, include_optimizer=True)
-        self.assertTrue(assert_tiledb_array(tiledb_uri))
+        self.assertTrue(tiledb.array_exists(tiledb_uri))
 
     @testing_utils.run_v2_only
     def test_save_model_to_tiledb_array_subclassed(self):

@@ -22,14 +22,11 @@ class SklearnTileDB(TileDBModel):
     TileDB arrays and load Sklearn models from TileDB arrays.
     """
 
-    def __init__(self, **kwargs):
-        super(SklearnTileDB, self).__init__(**kwargs)
-
-    def save(self, model: BaseEstimator, update: Optional[bool] = False, meta: Optional[dict] = None):
+    def save(self, model: BaseEstimator, update: bool = False, meta: Optional[dict] = None):
         """
         Saves a Sklearn model as a TileDB array.
         :param model: An Sklearn Estimator object. Model to store as TileDB array.
-        :param update: Whether we should update any existing TileDB array
+        :param update: Boolean. Whether we should update any existing TileDB array
         model at the target location.
         :param meta: Dict. Extra metadata to save in a TileDB array.
         """
@@ -41,7 +38,8 @@ class SklearnTileDB(TileDBModel):
         if not update:
             self._create_array()
 
-        self._write_array(serialized_model, meta=meta)
+        self._write_array(serialized_model=serialized_model,
+                          meta=meta)
 
     def load(self) -> BaseEstimator:
         """
@@ -52,12 +50,8 @@ class SklearnTileDB(TileDBModel):
             model_array_results = model_array[:]
             model = pickle.loads(model_array_results['model_parameters'].item(0))
             return model
-        except tiledb.TileDBError as error:
-            raise error
-        except HTTPError as error:
-            raise error
-        except Exception as error:
-            raise error
+        except:
+            raise
 
     def _create_array(self):
         """
@@ -90,17 +84,14 @@ class SklearnTileDB(TileDBModel):
             if "Error while listing with prefix" in str(error):
                 # It is possible to land here if user sets wrong default s3 credentials
                 # with respect to default s3 path
-                raise HTTPError(code=400, msg="Error creating file, %s Are your S3 "
-                                              "credentials valid?" % str(error))
+                raise HTTPError(code=400, msg=f"Error creating file, {error} Are your S3 credentials valid?")
 
             if "already exists" in str(error):
                 logging.warning('TileDB array already exists but update=False. '
                                 'Next time set update=True. Returning')
                 raise error
-        except HTTPError as error:
-            raise error
-        except Exception as error:
-            raise error
+        except:
+            raise
 
     def _write_array(self, serialized_model: bytes, meta: Optional[dict]):
         """
@@ -119,10 +110,10 @@ class SklearnTileDB(TileDBModel):
             # Add extra metadata given by the user to array's metadata
             if meta:
                 for key, value in meta.items():
-                    if isinstance(value, (dict, list, tuple)):
+                    try:
                         tf_model_tiledb.meta[key] = json.dumps(value).encode('utf8')
-                    else:
-                        tf_model_tiledb.meta[key] = value
+                    except:
+                        logging.warning('Exception occurred during Json serialization of metadata!')
 
     @staticmethod
     def _serialize_model(model: BaseEstimator) -> bytes:

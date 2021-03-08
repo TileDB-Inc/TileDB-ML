@@ -81,9 +81,6 @@ class ConvNet(nn.Module):
 
 class TestSaveLoadTileDBModel(unittest.TestCase):
 
-    def setUp(self):
-        super(TestSaveLoadTileDBModel, self).setUp()
-
     def test_save_and_load_snn(self):
         with tempfile.TemporaryDirectory() as tiledb_array:
             net = SeqNeuralNetwork()
