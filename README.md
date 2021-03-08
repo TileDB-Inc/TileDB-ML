@@ -38,6 +38,26 @@ in order to create simple and flexible model registries with TileDB.
 * [Example for PyTorch Models](https://github.com/TileDB-Inc/TileDB-ML/blob/develop/example_notebooks/models/pytorch_tiledb_models_example.ipynb)
 * [Example for Scikit-Learn Models](https://github.com/TileDB-Inc/TileDB-ML/blob/develop/example_notebooks/models/sklearn_tiledb_models_example.ipynb)
 
+
+## Installation
+
+TileDB-ML can be installed:
+
+- with pip from git
+
+      pip install git+https://github.com/TileDB-Inc/TileDB-ML.git@master
+
+- from source by cloning the [Git](https://github.com/TileDB-Inc/TileDB-ML) repository:
+
+      git clone https://github.com/TileDB-Inc/TileDB-ML.git
+      cd TileDB-ML
+      pip install .
+
+  You may run the test suite with:
+
+     python -m unittest discover tests 
+
+
 ## Roadmap
 
 * We are already working on the integration of TileDB with [ONNX](https://onnx.ai/).
