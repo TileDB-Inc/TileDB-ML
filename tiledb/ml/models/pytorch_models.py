@@ -14,7 +14,7 @@ import torch
 from torch.optim import Optimizer
 from torch.nn import Module
 
-from models.base_model import TileDBModel
+from .base_model import TileDBModel
 
 
 class PyTorchTileDB(TileDBModel):

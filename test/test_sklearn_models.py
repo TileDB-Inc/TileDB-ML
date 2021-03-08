@@ -5,12 +5,10 @@ import numpy as np
 from sklearn import datasets
 from sklearn.svm import LinearSVC, SVC
 from sklearn.naive_bayes import MultinomialNB
-from sklearn.linear_model import (LinearRegression, Lasso, ElasticNet, Ridge,
-                                  Perceptron, LogisticRegression,
-                                  SGDClassifier)
+from sklearn.linear_model import (LinearRegression, ElasticNet)
 from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 
-from models.sklearn_models import SklearnTileDB
+from tiledb.ml.models.sklearn_models import SklearnTileDB
 
 iris = datasets.load_iris()
 

@@ -13,7 +13,7 @@ from typing import Optional
 import sklearn
 from sklearn.base import BaseEstimator
 
-from models.base_model import TileDBModel
+from .base_model import TileDBModel
 
 
 class SklearnTileDB(TileDBModel):
