@@ -26,7 +26,7 @@ can (or will be able to):
 ## Structure and examples
 
 At the moment we provide code for saving and loading Tensorflow, PyTorch and Scikit-Learn models to and from TileDB arrays. 
-The corresponding implementations live in models folder. All implemented Python Classes (``tensorflow_models``, ``pytorch_models.py``, ``sklearn_models.py`` ) 
+The corresponding implementations live in ``tiledb/ml/models`` folder. All implemented Python Classes (``tensorflow_models``, ``pytorch_models.py``, ``sklearn_models.py`` ) 
 inherit from Base Class (``base_model.py``) and implement ``save()`` and ``load()`` functionality. In case you would like to contribute model save/load implementations
 that support other machine learning frameworks, please take a look at the current implementations and commit code accordingly. Please
 also read the contributing section below.
