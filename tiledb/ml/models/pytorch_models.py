@@ -40,8 +40,7 @@ class PyTorchTileDB(TileDBModel):
         if not update:
             self._create_array(serialized_model_info)
 
-        self._write_array(serialized_model_info=serialized_model_info,
-                          meta=meta)
+        self._write_array(serialized_model_info=serialized_model_info, meta=meta)
 
     def load(self, model: Module, optimizer: Optimizer) -> dict:
         """
@@ -56,8 +55,12 @@ class PyTorchTileDB(TileDBModel):
             model_array_results = model_array[:]
             schema = model_array.schema
 
-            model_state_dict = pickle.loads(model_array_results['model_state_dict'].item(0))
-            optimizer_state_dict = pickle.loads(model_array_results['optimizer_state_dict'].item(0))
+            model_state_dict = pickle.loads(
+                model_array_results["model_state_dict"].item(0)
+            )
+            optimizer_state_dict = pickle.loads(
+                model_array_results["optimizer_state_dict"].item(0)
+            )
 
             # Load model's state and optimizer dictionaries
             model.load_state_dict(model_state_dict)
@@ -67,8 +70,13 @@ class PyTorchTileDB(TileDBModel):
             out_dict = {}
             for idx in range(schema.nattr):
                 attr_name = schema.attr(idx).name
-                if schema.attr(idx).name != 'model_state_dict' and schema.attr(idx).name != 'optimizer_state_dict':
-                    out_dict[attr_name] = pickle.loads(model_array_results[attr_name].item(0))
+                if (
+                    schema.attr(idx).name != "model_state_dict"
+                    and schema.attr(idx).name != "optimizer_state_dict"
+                ):
+                    out_dict[attr_name] = pickle.loads(
+                        model_array_results[attr_name].item(0)
+                    )
             return out_dict
         except:
             raise
@@ -79,38 +87,38 @@ class PyTorchTileDB(TileDBModel):
         """
         try:
             dom = tiledb.Domain(
-                tiledb.Dim(name="model",
-                           domain=(1, 1),
-                           tile=1,
-                           dtype=np.int32
-                           ),
+                tiledb.Dim(name="model", domain=(1, 1), tile=1, dtype=np.int32),
             )
 
             attrs = []
 
             for key in serialized_model_info:
                 attrs.append(
-                    tiledb.Attr(name=key,
-                                dtype="S1",
-                                var=True,
-                                filters=tiledb.FilterList([tiledb.ZstdFilter()]),
-                                ), )
+                    tiledb.Attr(
+                        name=key,
+                        dtype="S1",
+                        var=True,
+                        filters=tiledb.FilterList([tiledb.ZstdFilter()]),
+                    ),
+                )
 
-            schema = tiledb.ArraySchema(domain=dom,
-                                        sparse=False,
-                                        attrs=attrs,
-                                        )
+            schema = tiledb.ArraySchema(domain=dom, sparse=False, attrs=attrs,)
 
             tiledb.Array.create(self.uri, schema)
         except tiledb.TileDBError as error:
             if "Error while listing with prefix" in str(error):
                 # It is possible to land here if user sets wrong default s3 credentials
                 # with respect to default s3 path
-                raise HTTPError(code=400, msg=f"Error creating file, {error} Are your S3 credentials valid?")
+                raise HTTPError(
+                    code=400,
+                    msg=f"Error creating file, {error} Are your S3 credentials valid?",
+                )
 
             if "already exists" in str(error):
-                logging.warning('TileDB array already exists but update=False. '
-                                'Next time set update=True. Returning')
+                logging.warning(
+                    "TileDB array already exists but update=False. "
+                    "Next time set update=True. Returning"
+                )
                 raise error
         except:
             raise
@@ -119,25 +127,29 @@ class PyTorchTileDB(TileDBModel):
         """
         Writes a PyTorch model to a TileDB array.
         """
-        with tiledb.open(self.uri, 'w') as tf_model_tiledb:
+        with tiledb.open(self.uri, "w") as tf_model_tiledb:
             # Insertion in TileDB array
-            insertion_dict = {key: np.array([value]) for key, value in serialized_model_info.items()}
+            insertion_dict = {
+                key: np.array([value]) for key, value in serialized_model_info.items()
+            }
 
             tf_model_tiledb[:] = insertion_dict
 
             # Add Python version to metadata
-            tf_model_tiledb.meta['python_version'] = platform.python_version()
+            tf_model_tiledb.meta["python_version"] = platform.python_version()
 
             # Add PyTorch version to metadata
-            tf_model_tiledb.meta['pytorch_version'] = torch.__version__
+            tf_model_tiledb.meta["pytorch_version"] = torch.__version__
 
             # Add extra metadata given by the user to array's metadata
             if meta:
                 for key, value in meta.items():
                     try:
-                        tf_model_tiledb.meta[key] = json.dumps(value).encode('utf8')
+                        tf_model_tiledb.meta[key] = json.dumps(value).encode("utf8")
                     except:
-                        logging.warning('Exception occurred during Json serialization of metadata!')
+                        logging.warning(
+                            "Exception occurred during Json serialization of metadata!"
+                        )
 
     @staticmethod
     def _serialize_model_info(model_info: dict) -> dict:
@@ -147,6 +159,8 @@ class PyTorchTileDB(TileDBModel):
         model.state_dict(), optimizer.state_dict(), loss, etc.
         :return: Python dictionary. Contains pickled model information.
         """
-        serialized_model_info = {key: pickle.dumps(value, protocol=4) for key, value in model_info.items()}
+        serialized_model_info = {
+            key: pickle.dumps(value, protocol=4) for key, value in model_info.items()
+        }
 
         return serialized_model_info

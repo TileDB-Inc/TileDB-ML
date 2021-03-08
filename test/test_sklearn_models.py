@@ -5,7 +5,7 @@ import numpy as np
 from sklearn import datasets
 from sklearn.svm import LinearSVC, SVC
 from sklearn.naive_bayes import MultinomialNB
-from sklearn.linear_model import (LinearRegression, ElasticNet)
+from sklearn.linear_model import LinearRegression, ElasticNet
 from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 
 from tiledb.ml.models.sklearn_models import SklearnTileDB
@@ -14,7 +14,6 @@ iris = datasets.load_iris()
 
 
 class TestSaveLoadTileDBModel(unittest.TestCase):
-
     def test_save_load_svc(self):
         with tempfile.TemporaryDirectory() as tiledb_array:
             model = SVC()

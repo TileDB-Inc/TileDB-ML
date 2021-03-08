@@ -8,6 +8,7 @@ class TileDBModel(abc.ABC):
     This is the base class for all TileDB model storage functionalities, i.e,
     store machine learning models (Tensorflow, PyTorch, ect) as TileDB arrays.
     """
+
     def __init__(self, uri: str):
         """
         Base class for saving machine learning models as TileDB arrays

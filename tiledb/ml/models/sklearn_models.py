@@ -22,7 +22,9 @@ class SklearnTileDB(TileDBModel):
     TileDB arrays and load Sklearn models from TileDB arrays.
     """
 
-    def save(self, model: BaseEstimator, update: bool = False, meta: Optional[dict] = None):
+    def save(
+        self, model: BaseEstimator, update: bool = False, meta: Optional[dict] = None
+    ):
         """
         Saves a Sklearn model as a TileDB array.
         :param model: An Sklearn Estimator object. Model to store as TileDB array.
@@ -38,8 +40,7 @@ class SklearnTileDB(TileDBModel):
         if not update:
             self._create_array()
 
-        self._write_array(serialized_model=serialized_model,
-                          meta=meta)
+        self._write_array(serialized_model=serialized_model, meta=meta)
 
     def load(self) -> BaseEstimator:
         """
@@ -48,7 +49,7 @@ class SklearnTileDB(TileDBModel):
         try:
             model_array = tiledb.open(self.uri)
             model_array_results = model_array[:]
-            model = pickle.loads(model_array_results['model_parameters'].item(0))
+            model = pickle.loads(model_array_results["model_parameters"].item(0))
             return model
         except:
             raise
@@ -59,36 +60,35 @@ class SklearnTileDB(TileDBModel):
         """
         try:
             dom = tiledb.Domain(
-                tiledb.Dim(name="model",
-                           domain=(1, 1),
-                           tile=1,
-                           dtype=np.int32
-                           ),
+                tiledb.Dim(name="model", domain=(1, 1), tile=1, dtype=np.int32),
             )
 
             attrs = [
-                tiledb.Attr(name='model_parameters',
-                            dtype="S1",
-                            var=True,
-                            filters=tiledb.FilterList([tiledb.ZstdFilter()]),
-                            ),
+                tiledb.Attr(
+                    name="model_parameters",
+                    dtype="S1",
+                    var=True,
+                    filters=tiledb.FilterList([tiledb.ZstdFilter()]),
+                ),
             ]
 
-            schema = tiledb.ArraySchema(domain=dom,
-                                        sparse=False,
-                                        attrs=attrs,
-                                        )
+            schema = tiledb.ArraySchema(domain=dom, sparse=False, attrs=attrs,)
 
             tiledb.Array.create(self.uri, schema)
         except tiledb.TileDBError as error:
             if "Error while listing with prefix" in str(error):
                 # It is possible to land here if user sets wrong default s3 credentials
                 # with respect to default s3 path
-                raise HTTPError(code=400, msg=f"Error creating file, {error} Are your S3 credentials valid?")
+                raise HTTPError(
+                    code=400,
+                    msg=f"Error creating file, {error} Are your S3 credentials valid?",
+                )
 
             if "already exists" in str(error):
-                logging.warning('TileDB array already exists but update=False. '
-                                'Next time set update=True. Returning')
+                logging.warning(
+                    "TileDB array already exists but update=False. "
+                    "Next time set update=True. Returning"
+                )
                 raise error
         except:
             raise
@@ -97,23 +97,25 @@ class SklearnTileDB(TileDBModel):
         """
         Writes a Sklearn model to a TileDB array.
         """
-        with tiledb.open(self.uri, 'w') as tf_model_tiledb:
+        with tiledb.open(self.uri, "w") as tf_model_tiledb:
             # Insertion in TileDB array
-            tf_model_tiledb[:] = {'model_parameters': np.array([serialized_model])}
+            tf_model_tiledb[:] = {"model_parameters": np.array([serialized_model])}
 
             # Add Python version to metadata
-            tf_model_tiledb.meta['python_version'] = platform.python_version()
+            tf_model_tiledb.meta["python_version"] = platform.python_version()
 
             # Add Sklearn version to metadata
-            tf_model_tiledb.meta['sklearn_version'] = sklearn.__version__
+            tf_model_tiledb.meta["sklearn_version"] = sklearn.__version__
 
             # Add extra metadata given by the user to array's metadata
             if meta:
                 for key, value in meta.items():
                     try:
-                        tf_model_tiledb.meta[key] = json.dumps(value).encode('utf8')
+                        tf_model_tiledb.meta[key] = json.dumps(value).encode("utf8")
                     except:
-                        logging.warning('Exception occurred during Json serialization of metadata!')
+                        logging.warning(
+                            "Exception occurred during Json serialization of metadata!"
+                        )
 
     @staticmethod
     def _serialize_model(model: BaseEstimator) -> bytes:
