@@ -53,10 +53,9 @@ TileDB-ML can be installed:
       cd TileDB-ML
       pip install .
 
-  You may run the test suite with:
+- You may run the test suite with:
 
-     python -m unittest discover tests 
-
+      python -m unittest discover tests
 
 ## Roadmap
 
