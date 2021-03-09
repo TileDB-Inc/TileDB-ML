@@ -8,7 +8,7 @@ from sklearn.naive_bayes import MultinomialNB
 from sklearn.linear_model import LinearRegression, ElasticNet
 from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 
-from tiledb.ml.models.sklearn_models import SklearnTileDB
+from tiledb.ml.models.sklearn import SklearnTileDB
 
 iris = datasets.load_iris()
 

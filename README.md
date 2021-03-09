@@ -17,7 +17,7 @@ can (or will be able to):
 
 * **Save** machine learning models as TileDB arrays (At the moment we provide implementations for saving Tensorflow Keras, PyTorch and Scikit-Learn models.)
   
-* **Load** machine learning models from TileDB arrays. (At the moment we provide implementations for loading Tensorflow Keras, PyTorch and Scikit-Learn models.)    
+* **Load** machine learning models from TileDB arrays.     
 
 * **Load** features in order to train machine learning models, from TileDB arrays directly to machine learning framework's data APIs. 
   This feature is **NOT** supported at the moment, but we are already working on integrations with Tensorflow data API, PyTorch DataLoader API
@@ -25,9 +25,9 @@ can (or will be able to):
   
 ## Structure and examples
 
-At the moment we provide code for saving and loading Tensorflow, PyTorch and Scikit-Learn models to and from TileDB arrays. 
-The corresponding implementations live in ``tiledb/ml/models`` folder. All implemented Python Classes (``tensorflow_models``, ``pytorch_models.py``, ``sklearn_models.py`` ) 
-inherit from Base Class (``base_model.py``) and implement ``save()`` and ``load()`` functionality. In case you would like to contribute model save/load implementations
+At the moment we provide code for saving and loading models to and from TileDB arrays. 
+The corresponding implementations live in ``tiledb/ml/models`` folder. All implemented classes (``TensorflowTileDB``, ``PyTorchTileDB``, ``SklearnTileDB`` ) 
+inherit from base class (``TileDBModel``) and implement ``save()`` and ``load()`` functionality. In case you would like to contribute model save/load implementations
 that support other machine learning frameworks, please take a look at the current implementations and commit code accordingly. Please
 also read the contributing section below.
 
@@ -59,9 +59,11 @@ TileDB-ML can be installed:
 
 ## Roadmap
 
-* We are already working on the integration of TileDB with [ONNX](https://onnx.ai/).
-* We are already working on model save/load support for other popular machine learning frameworks like XGBoost and CastBoost.
-* We are already working on readers from TileDB arrays to popular machine learning framework Data APIs, as mentioned above.
+We are already working on the following:
+
+* Integration of TileDB with [ONNX](https://onnx.ai/).
+* Model save/load support for other popular machine learning frameworks like XGBoost and CastBoost.
+* Readers from TileDB arrays to popular machine learning framework Data APIs, as mentioned above.
 
 Our ultimate goal is ALL machine learning data, from raw data (text, images, audio), to features (Feature Store) and models (Model Registry), represented, stored and managed
 in one **Data Engine**, i.e, TileDB.

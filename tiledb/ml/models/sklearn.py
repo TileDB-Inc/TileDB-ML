@@ -13,7 +13,7 @@ from typing import Optional
 import sklearn
 from sklearn.base import BaseEstimator
 
-from .base_model import TileDBModel
+from .base import TileDBModel
 
 
 class SklearnTileDB(TileDBModel):
@@ -46,13 +46,10 @@ class SklearnTileDB(TileDBModel):
         """
         Loads a Sklearn model from a TileDB array.
         """
-        try:
-            model_array = tiledb.open(self.uri)
-            model_array_results = model_array[:]
-            model = pickle.loads(model_array_results["model_parameters"].item(0))
-            return model
-        except:
-            raise
+        model_array = tiledb.open(self.uri)
+        model_array_results = model_array[:]
+        model = pickle.loads(model_array_results["model_params"].item(0))
+        return model
 
     def _create_array(self):
         """
@@ -65,14 +62,18 @@ class SklearnTileDB(TileDBModel):
 
             attrs = [
                 tiledb.Attr(
-                    name="model_parameters",
+                    name="model_params",
                     dtype="S1",
                     var=True,
                     filters=tiledb.FilterList([tiledb.ZstdFilter()]),
                 ),
             ]
 
-            schema = tiledb.ArraySchema(domain=dom, sparse=False, attrs=attrs,)
+            schema = tiledb.ArraySchema(
+                domain=dom,
+                sparse=False,
+                attrs=attrs,
+            )
 
             tiledb.Array.create(self.uri, schema)
         except tiledb.TileDBError as error:
@@ -90,8 +91,6 @@ class SklearnTileDB(TileDBModel):
                     "Next time set update=True. Returning"
                 )
                 raise error
-        except:
-            raise
 
     def _write_array(self, serialized_model: bytes, meta: Optional[dict]):
         """
@@ -99,7 +98,7 @@ class SklearnTileDB(TileDBModel):
         """
         with tiledb.open(self.uri, "w") as tf_model_tiledb:
             # Insertion in TileDB array
-            tf_model_tiledb[:] = {"model_parameters": np.array([serialized_model])}
+            tf_model_tiledb[:] = {"model_params": np.array([serialized_model])}
 
             # Add Python version to metadata
             tf_model_tiledb.meta["python_version"] = platform.python_version()

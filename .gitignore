@@ -1,0 +1,11 @@
+*.pyc
+.idea
+.eggs/
+*.egg-info/
+build/
+dist/
+*.DS_Store
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]

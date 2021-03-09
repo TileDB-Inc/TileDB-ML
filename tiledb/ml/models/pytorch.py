@@ -14,7 +14,7 @@ import torch
 from torch.optim import Optimizer
 from torch.nn import Module
 
-from .base_model import TileDBModel
+from .base import TileDBModel
 
 
 class PyTorchTileDB(TileDBModel):
@@ -33,8 +33,10 @@ class PyTorchTileDB(TileDBModel):
         :param meta: Dict. Extra metadata to save in a TileDB array.
         """
 
-        # Serialize model and optimizer
-        serialized_model_info = self._serialize_model_info(model_info)
+        # Serialize model information
+        serialized_model_info = {
+            key: pickle.dumps(value, protocol=4) for key, value in model_info.items()
+        }
 
         # Create TileDB model array
         if not update:
@@ -50,36 +52,32 @@ class PyTorchTileDB(TileDBModel):
         :return: Dict. A dictionary with attributes other than model or optimizer
         state_dict.
         """
-        try:
-            model_array = tiledb.open(self.uri)
-            model_array_results = model_array[:]
-            schema = model_array.schema
 
-            model_state_dict = pickle.loads(
-                model_array_results["model_state_dict"].item(0)
-            )
-            optimizer_state_dict = pickle.loads(
-                model_array_results["optimizer_state_dict"].item(0)
-            )
+        model_array = tiledb.open(self.uri)
+        model_array_results = model_array[:]
+        schema = model_array.schema
 
-            # Load model's state and optimizer dictionaries
-            model.load_state_dict(model_state_dict)
-            optimizer.load_state_dict(optimizer_state_dict)
+        model_state_dict = pickle.loads(model_array_results["model_state_dict"].item(0))
+        optimizer_state_dict = pickle.loads(
+            model_array_results["optimizer_state_dict"].item(0)
+        )
 
-            # Get the rest of the attributes
-            out_dict = {}
-            for idx in range(schema.nattr):
-                attr_name = schema.attr(idx).name
-                if (
-                    schema.attr(idx).name != "model_state_dict"
-                    and schema.attr(idx).name != "optimizer_state_dict"
-                ):
-                    out_dict[attr_name] = pickle.loads(
-                        model_array_results[attr_name].item(0)
-                    )
-            return out_dict
-        except:
-            raise
+        # Load model's state and optimizer dictionaries
+        model.load_state_dict(model_state_dict)
+        optimizer.load_state_dict(optimizer_state_dict)
+
+        # Get the rest of the attributes
+        out_dict = {}
+        for idx in range(schema.nattr):
+            attr_name = schema.attr(idx).name
+            if (
+                schema.attr(idx).name != "model_state_dict"
+                and schema.attr(idx).name != "optimizer_state_dict"
+            ):
+                out_dict[attr_name] = pickle.loads(
+                    model_array_results[attr_name].item(0)
+                )
+        return out_dict
 
     def _create_array(self, serialized_model_info: dict):
         """
@@ -102,7 +100,11 @@ class PyTorchTileDB(TileDBModel):
                     ),
                 )
 
-            schema = tiledb.ArraySchema(domain=dom, sparse=False, attrs=attrs,)
+            schema = tiledb.ArraySchema(
+                domain=dom,
+                sparse=False,
+                attrs=attrs,
+            )
 
             tiledb.Array.create(self.uri, schema)
         except tiledb.TileDBError as error:
@@ -120,8 +122,6 @@ class PyTorchTileDB(TileDBModel):
                     "Next time set update=True. Returning"
                 )
                 raise error
-        except:
-            raise
 
     def _write_array(self, serialized_model_info: dict, meta: Optional[dict]):
         """
@@ -150,17 +150,3 @@ class PyTorchTileDB(TileDBModel):
                         logging.warning(
                             "Exception occurred during Json serialization of metadata!"
                         )
-
-    @staticmethod
-    def _serialize_model_info(model_info: dict) -> dict:
-        """
-        Serializes all key values in model_info dictionary.
-        :param model_info: Python dictionary. Contains all model info like,
-        model.state_dict(), optimizer.state_dict(), loss, etc.
-        :return: Python dictionary. Contains pickled model information.
-        """
-        serialized_model_info = {
-            key: pickle.dumps(value, protocol=4) for key, value in model_info.items()
-        }
-
-        return serialized_model_info

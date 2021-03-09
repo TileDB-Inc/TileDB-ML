@@ -17,7 +17,7 @@ from tensorflow.python.keras import optimizer_v1
 from tensorflow.python.keras.saving import saving_utils
 from tensorflow.python.keras.saving.saved_model import json_utils
 
-from .base_model import TileDBModel
+from .base import TileDBModel
 
 
 class TensorflowTileDB(TileDBModel):
@@ -46,8 +46,8 @@ class TensorflowTileDB(TileDBModel):
                 "model should be either Sequential or Functional."
             )
 
-        # Serialize models weights and optimizer (if needed)
-        model_weights = self._serialize_model_weights(model)
+        # Serialize model weights and optimizer (if needed)
+        model_weights = pickle.dumps(model.get_weights(), protocol=4)
 
         # Serialize model optimizer
         optimizer_weights = self._serialize_optimizer_weights(
@@ -76,64 +76,61 @@ class TensorflowTileDB(TileDBModel):
         custom classes or functions to be considered during deserialization.
         :return: Model. Tensorflow model.
         """
-        try:
-            model_array = tiledb.open(self.uri)
-            model_array_results = model_array[:]
-            model_weights = pickle.loads(model_array_results["model_weights"].item(0))
-            model_config = json.loads(model_array.meta["model_config"])
+        model_array = tiledb.open(self.uri)
+        model_array_results = model_array[:]
+        model_weights = pickle.loads(model_array_results["model_weights"].item(0))
+        model_config = json.loads(model_array.meta["model_config"])
 
-            architecture = model_config["config"]
-            model_class = model_config["class_name"]
+        architecture = model_config["config"]
+        model_class = model_config["class_name"]
 
-            if model_class == "Sequential":
-                model = tf.keras.Sequential.from_config(architecture)
-            elif model_class == "Functional":
-                model = tf.keras.Model.from_config(architecture)
-            else:
-                raise NotImplementedError(
-                    "No support for Subclassed models at the moment. Your "
-                    "model should be either Sequential or Functional."
+        if model_class == "Sequential":
+            model = tf.keras.Sequential.from_config(architecture)
+        elif model_class == "Functional":
+            model = tf.keras.Model.from_config(architecture)
+        else:
+            raise NotImplementedError(
+                "No support for Subclassed models at the moment. Your "
+                "model should be either Sequential or Functional."
+            )
+
+        model.set_weights(model_weights)
+
+        if compile_model:
+            optimizer_weights = pickle.loads(
+                model_array_results["optimizer_weights"].item(0)
+            )
+            training_config = json.loads(model_array.meta["training_config"])
+
+            # Compile model.
+            model.compile(
+                **saving_utils.compile_args_from_training_config(
+                    training_config, custom_objects
                 )
+            )
+            saving_utils.try_build_compiled_arguments(model)
 
-            model.set_weights(model_weights)
-
-            if compile_model:
-                optimizer_weights = pickle.loads(
-                    model_array_results["optimizer_weights"].item(0)
-                )
-                training_config = json.loads(model_array.meta["training_config"])
-
-                # Compile model.
-                model.compile(
-                    **saving_utils.compile_args_from_training_config(
-                        training_config, custom_objects
+            # Set optimizer weights.
+            if optimizer_weights:
+                try:
+                    model.optimizer._create_all_weights(model.trainable_variables)
+                except (NotImplementedError, AttributeError):
+                    logging.warning(
+                        "Error when creating the weights of optimizer {}, making it "
+                        "impossible to restore the saved optimizer state. As a result, "
+                        "your model is starting with a freshly initialized optimizer."
                     )
-                )
-                saving_utils.try_build_compiled_arguments(model)
 
-                # Set optimizer weights.
-                if optimizer_weights:
-                    try:
-                        model.optimizer._create_all_weights(model.trainable_variables)
-                    except (NotImplementedError, AttributeError):
-                        logging.warning(
-                            "Error when creating the weights of optimizer {}, making it "
-                            "impossible to restore the saved optimizer state. As a result, "
-                            "your model is starting with a freshly initialized optimizer."
-                        )
-
-                    try:
-                        model.optimizer.set_weights(optimizer_weights)
-                    except ValueError:
-                        logging.warning(
-                            "Error in loading the saved optimizer "
-                            "state. As a result, your model is "
-                            "starting with a freshly initialized "
-                            "optimizer."
-                        )
-            return model
-        except:
-            raise
+                try:
+                    model.optimizer.set_weights(optimizer_weights)
+                except ValueError:
+                    logging.warning(
+                        "Error in loading the saved optimizer "
+                        "state. As a result, your model is "
+                        "starting with a freshly initialized "
+                        "optimizer."
+                    )
+        return model
 
     def _create_array(self):
         """
@@ -159,7 +156,11 @@ class TensorflowTileDB(TileDBModel):
                 ),
             ]
 
-            schema = tiledb.ArraySchema(domain=dom, sparse=False, attrs=attrs,)
+            schema = tiledb.ArraySchema(
+                domain=dom,
+                sparse=False,
+                attrs=attrs,
+            )
 
             tiledb.Array.create(self.uri, schema)
         except tiledb.TileDBError as error:
@@ -177,8 +178,6 @@ class TensorflowTileDB(TileDBModel):
                     "Next time set update=True. Returning"
                 )
                 raise error
-        except:
-            raise
 
     def _write_array(
         self,
@@ -201,12 +200,14 @@ class TensorflowTileDB(TileDBModel):
             # Insert all model metadata
             model_metadata = saving_utils.model_metadata(model, include_optimizer)
             for key, value in model_metadata.items():
-                if isinstance(value, (dict, list, tuple)):
+                try:
                     tf_model_tiledb.meta[key] = json.dumps(
                         value, default=json_utils.get_json_type
                     ).encode("utf8")
-                else:
-                    tf_model_tiledb.meta[key] = value
+                except:
+                    logging.warning(
+                        "Exception occurred during Json serialization of metadata!"
+                    )
 
             # Add Python version to array's metadata
             tf_model_tiledb.meta["python_version"] = platform.python_version()

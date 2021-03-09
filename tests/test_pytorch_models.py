@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 
-from tiledb.ml.models.pytorch_models import PyTorchTileDB
+from tiledb.ml.models.pytorch import PyTorchTileDB
 
 
 class Net(nn.Module):
