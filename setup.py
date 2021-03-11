@@ -16,11 +16,11 @@ setuptools.setup(
     },
     test_suite="tests",
     install_requires=[
-        "tiledb==0.8.2",
-        "tensorflow==2.4.0",
-        "torch==1.7.1",
-        "torchvision==0.8.2",
-        "scikit-learn==0.24.1",
+        "tiledb>=0.8.0",
+        "tensorflow>=2.2.0",
+        "torch>=1.7.0",
+        "scikit-learn>=0.23.0",
+        "torchvision>=0.8.0",
     ],
     classifiers=[
         "Programming Language :: Python :: 3",
