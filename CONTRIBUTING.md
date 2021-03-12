@@ -1,6 +1,6 @@
 # Contributing
 
-Please follow the [Code of Conduct](https://github.com/TileDB-Inc/TileDB-ML/blob/develop/CODE_OF_CONDUCT.md)
+Please follow the [Code of Conduct](https://github.com/TileDB-Inc/TileDB-ML/blob/master/CODE_OF_CONDUCT.md)
 in all of your interactions with the project.
 
 ## Pull Request Process
