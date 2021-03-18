@@ -34,9 +34,9 @@ also read the contributing section below.
 We provide some detailed notebook examples on how to save and load machine learning models as TileDB arrays and explain why this is useful 
 in order to create simple and flexible model registries with TileDB.
 
-* [Example for Tensorflow Keras Models](https://github.com/TileDB-Inc/TileDB-ML/blob/develop/example_notebooks/models/tensorflow_keras_tiledb_models_example.ipynb)
-* [Example for PyTorch Models](https://github.com/TileDB-Inc/TileDB-ML/blob/develop/example_notebooks/models/pytorch_tiledb_models_example.ipynb)
-* [Example for Scikit-Learn Models](https://github.com/TileDB-Inc/TileDB-ML/blob/develop/example_notebooks/models/sklearn_tiledb_models_example.ipynb)
+* [Example for Tensorflow Keras Models](https://github.com/TileDB-Inc/TileDB-ML/blob/master/example_notebooks/models/tensorflow_keras_tiledb_models_example.ipynb)
+* [Example for PyTorch Models](https://github.com/TileDB-Inc/TileDB-ML/blob/master/example_notebooks/models/pytorch_tiledb_models_example.ipynb)
+* [Example for Scikit-Learn Models](https://github.com/TileDB-Inc/TileDB-ML/blob/master/example_notebooks/models/sklearn_tiledb_models_example.ipynb)
 
 
 ## Installation
