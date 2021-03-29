@@ -82,7 +82,7 @@ In any case, note that the TileDB-ML repository is under development, and **the 
 
 ## Contributing
 
-We welcome all contributions! Please read the [contributing guidelines](https://github.com/TileDB-Inc/TileDB-ML/blob/develop/CONTRIBUTING.md) 
+We welcome all contributions! Please read the [contributing guidelines](https://github.com/TileDB-Inc/TileDB-ML/blob/master/CONTRIBUTING.md) 
 before submitting pull requests.
 
 ## Copyright
