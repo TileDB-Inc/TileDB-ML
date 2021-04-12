@@ -61,9 +61,9 @@ TileDB-ML can be installed:
 
 We are already working on the following:
 
-* Integration of TileDB with [ONNX](https://onnx.ai/).
+* Integration of TileDB with the Tensorflow Data API through [tensorflow-io](https://github.com/tensorflow/io).
+* Readers from TileDB arrays to other popular machine learning framework Data APIs, as mentioned above.
 * Model save/load support for other popular machine learning frameworks like XGBoost and CatBoost.
-* Readers from TileDB arrays to popular machine learning framework Data APIs, as mentioned above.
 
 Our ultimate goal is ALL machine learning data, from raw data (text, images, audio), to features (Feature Store) and models (Model Registry), represented, stored and managed
 in one **Data Engine**, i.e, TileDB.
