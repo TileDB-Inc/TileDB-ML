@@ -5,13 +5,13 @@ import tensorflow as tf
 
 class TensorflowTileDBDataset(tf.data.Dataset):
     """
-    Class that implements all functionality needed to load data from TileDB arrays to the
-    Tensorflow Data API, by employing .
+    Class that implements all functionality needed to load data from TileDB directly to the
+    Tensorflow Data API, by employing generators.
     """
 
     def __new__(cls, x_uri: str, y_uri: str, batch_size: int):
         """
-        Returns a Tensorflow Dataset object which loads data by employing a generator.
+        Returns a Tensorflow Dataset object which loads data from TileDB arrays by employing a generator.
         :param x_uri: String. URI for a TileDB array that contains features.
         :param y_uri: String. URI for a TileDB array that contains labels.
         :param batch_size: Integer. The size of the batch that the implemented _generator method will return.
@@ -28,14 +28,21 @@ class TensorflowTileDBDataset(tf.data.Dataset):
         y = tiledb.open(y_uri, mode="r")
 
         # Get number of observations
-        rows = x.schema.domain.dim(0).domain[1] - y.schema.domain.dim(0).domain[0] + 1
+        rows = x.schema.domain.shape[0]
+
+        # Get x and y shapes
+        x_shape = (None,) + x.schema.domain.shape[1:]
+        y_shape = (None,) + y.schema.domain.shape[1:]
 
         x_dtype = x.schema.attr(0).dtype
         y_dtype = y.schema.attr(0).dtype
 
         return tf.data.Dataset.from_generator(
             generator=cls._generator,
-            output_types=(x_dtype, y_dtype),
+            output_signature=(
+                tf.TensorSpec(shape=x_shape, dtype=x_dtype),
+                tf.TensorSpec(shape=y_shape, dtype=y_dtype),
+            ),
             args=(x, y, rows, batch_size),
         )
 
