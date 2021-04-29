@@ -15,7 +15,7 @@ from tensorflow.keras.layers import (
 from tensorflow.python.keras import testing_utils
 from tensorflow.python.platform import test
 
-from tiledb.ml.data_apis.tensorflow import TensorflowTileDBDataset
+from tiledb.ml.data_apis.tensorflow import TensorflowTileDBDenseDataset
 
 # Suppress all Tensorflow messages
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
@@ -98,13 +98,17 @@ class TestTileDBTensorflowDataAPI(test.TestCase):
                     batch_size=BATCH_SIZE,
                 )
 
-                tiledb_dataset = TensorflowTileDBDataset(
-                    x_uri=tiledb_uri_x, y_uri=tiledb_uri_y, batch_size=BATCH_SIZE
-                )
+                with tiledb.DenseArray(tiledb_uri_x, mode="r") as x, tiledb.DenseArray(
+                    tiledb_uri_y, mode="r"
+                ) as y:
 
-                self.assertIsInstance(tiledb_dataset, tf.data.Dataset)
+                    tiledb_dataset = TensorflowTileDBDenseDataset(
+                        x_array=x, y_array=y, batch_size=BATCH_SIZE
+                    )
 
-                model.fit(tiledb_dataset, verbose=0, epochs=1)
+                    self.assertIsInstance(tiledb_dataset, tf.data.Dataset)
+
+                    model.fit(tiledb_dataset, verbose=0, epochs=1)
 
     @testing_utils.run_v2_only
     def test_except_with_diff_number_of_x_y_rows(self):
@@ -127,7 +131,10 @@ class TestTileDBTensorflowDataAPI(test.TestCase):
             batch_size=BATCH_SIZE,
         )
 
-        with self.assertRaises(Exception):
-            TensorflowTileDBDataset(
-                x_uri=tiledb_uri_x, y_uri=tiledb_uri_y, batch_size=BATCH_SIZE
-            )
+        with tiledb.DenseArray(tiledb_uri_x, mode="r") as x, tiledb.DenseArray(
+            tiledb_uri_y, mode="r"
+        ) as y:
+            with self.assertRaises(Exception):
+                TensorflowTileDBDenseDataset(
+                    x_array=x, y_array=y, batch_size=BATCH_SIZE
+                )
