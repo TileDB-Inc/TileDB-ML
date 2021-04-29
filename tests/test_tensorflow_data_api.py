@@ -74,7 +74,7 @@ def create_model(input_shape: tuple, num_of_classes: int):
 class TestTileDBTensorflowDataAPI(test.TestCase):
     @testing_utils.run_v2_only
     def test_tiledb_tf_data_api_with_multiple_dim_data(self):
-        for idx, input_shape in enumerate(INPUT_SHAPES):
+        for input_shape in INPUT_SHAPES:
             with self.subTest():
                 model = create_model(
                     input_shape=input_shape, num_of_classes=NUM_OF_CLASSES
