@@ -3,6 +3,7 @@
 import os
 import tiledb
 import numpy as np
+import uuid
 
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
@@ -21,29 +22,29 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
+# Test parameters
+NUM_OF_CLASSES = 5
+BATCH_SIZE = 32
+ROWS = 1000
+
+# We test for 2d, 3d, 4d and 5d data
+INPUT_SHAPES = [(10,), (10, 3), (10, 10, 3), (10, 10, 10, 3)]
+
 
 def ingest_in_tiledb(data: np.array, batch_size: int, uri: str):
-    # First dimension
     dims = [
         tiledb.Dim(
-            name="dim_1", domain=(0, data.shape[0] - 1), tile=batch_size, dtype=np.int32
+            name="dim_" + str(dim),
+            domain=(0, data.shape[dim] - 1),
+            tile=data.shape[dim] if dim > 0 else batch_size,
+            dtype=np.int32,
         )
+        for dim in range(data.ndim)
     ]
-
-    # Remaining dimensions
-    for dim in range(1, data.ndim):
-        dims.append(
-            tiledb.Dim(
-                name="dim" + str(dim),
-                domain=(0, data.shape[dim] - 1),
-                tile=data.shape[dim],
-                dtype=np.int32,
-            )
-        )
 
     # TileDB schema
     schema = tiledb.ArraySchema(
-        domain=tiledb.Domain(dims),
+        domain=tiledb.Domain(*dims),
         sparse=False,
         attrs=[tiledb.Attr(name="features", dtype=np.float32)],
     )
@@ -72,90 +73,61 @@ def create_model(input_shape: tuple, num_of_classes: int):
 
 class TestTileDBTensorflowDataAPI(test.TestCase):
     @testing_utils.run_v2_only
-    def test_tiledb_tf_data_api_with_2d_data(self):
-        num_of_classes = 5
-        input_shape = (64, 3)
-        batch_size = 32
+    def test_tiledb_tf_data_api_with_multiple_dim_data(self):
+        for idx, input_shape in enumerate(INPUT_SHAPES):
+            with self.subTest():
+                model = create_model(
+                    input_shape=input_shape, num_of_classes=NUM_OF_CLASSES
+                )
 
-        model = create_model(input_shape=input_shape, num_of_classes=num_of_classes)
+                array_uuid = str(uuid.uuid4())
+                tiledb_uri_x = os.path.join(self.get_temp_dir(), "x" + array_uuid)
+                tiledb_uri_y = os.path.join(self.get_temp_dir(), "y" + array_uuid)
 
-        tiledb_uri_x = os.path.join(self.get_temp_dir(), "x")
-        tiledb_uri_y = os.path.join(self.get_temp_dir(), "y")
+                dataset_shape_x = (ROWS,) + input_shape
+                dataset_shape_y = (ROWS, NUM_OF_CLASSES)
 
-        ingest_in_tiledb(
-            uri=tiledb_uri_x, data=np.random.rand(1000, 64, 3), batch_size=batch_size
-        )
-        ingest_in_tiledb(
-            uri=tiledb_uri_y, data=np.random.rand(1000, 5), batch_size=batch_size
-        )
+                ingest_in_tiledb(
+                    uri=tiledb_uri_x,
+                    data=np.random.rand(*dataset_shape_x),
+                    batch_size=BATCH_SIZE,
+                )
+                ingest_in_tiledb(
+                    uri=tiledb_uri_y,
+                    data=np.random.rand(*dataset_shape_y),
+                    batch_size=BATCH_SIZE,
+                )
 
-        tiledb_dataset = TensorflowTileDBDataset(
-            x_uri=tiledb_uri_x, y_uri=tiledb_uri_y, batch_size=batch_size
-        )
+                tiledb_dataset = TensorflowTileDBDataset(
+                    x_uri=tiledb_uri_x, y_uri=tiledb_uri_y, batch_size=BATCH_SIZE
+                )
 
-        # Assert that dataset is instance of Tensorflow dataset.
-        self.assertIsInstance(tiledb_dataset, tf.data.Dataset)
+                self.assertIsInstance(tiledb_dataset, tf.data.Dataset)
 
-        model.fit(tiledb_dataset, verbose=0, epochs=1)
+                model.fit(tiledb_dataset, verbose=0, epochs=1)
 
     @testing_utils.run_v2_only
-    def test_tiledb_tf_data_api_with_3d_data(self):
-        num_of_classes = 5
-        input_shape = (64, 64, 3)
-        batch_size = 32
+    def test_except_with_diff_number_of_x_y_rows(self):
+        array_uuid = str(uuid.uuid4())
+        tiledb_uri_x = os.path.join(self.get_temp_dir(), "x" + array_uuid)
+        tiledb_uri_y = os.path.join(self.get_temp_dir(), "y" + array_uuid)
 
-        model = create_model(input_shape=input_shape, num_of_classes=num_of_classes)
-
-        tiledb_uri_x = os.path.join(self.get_temp_dir(), "x")
-        tiledb_uri_y = os.path.join(self.get_temp_dir(), "y")
+        # Add one extra row on X
+        dataset_shape_x = (ROWS + 1,) + INPUT_SHAPES[0]
+        dataset_shape_y = (ROWS, NUM_OF_CLASSES)
 
         ingest_in_tiledb(
             uri=tiledb_uri_x,
-            data=np.random.rand(1000, 64, 64, 3),
-            batch_size=batch_size,
+            data=np.random.rand(*dataset_shape_x),
+            batch_size=BATCH_SIZE,
         )
         ingest_in_tiledb(
             uri=tiledb_uri_y,
-            data=np.random.rand(1000, num_of_classes),
-            batch_size=batch_size,
+            data=np.random.rand(*dataset_shape_y),
+            batch_size=BATCH_SIZE,
         )
 
-        tiledb_dataset = TensorflowTileDBDataset(
-            x_uri=tiledb_uri_x, y_uri=tiledb_uri_y, batch_size=batch_size
-        )
-
-        # Assert that dataset is instance of Tensorflow dataset.
-        self.assertIsInstance(tiledb_dataset, tf.data.Dataset)
-
-        model.fit(tiledb_dataset, verbose=0, epochs=1)
-
-    @testing_utils.run_v2_only
-    def test_tiledb_tf_data_api_with_4d_data(self):
-        num_of_classes = 5
-        input_shape = (10, 5, 5, 2)
-        batch_size = 32
-
-        model = create_model(input_shape=input_shape, num_of_classes=num_of_classes)
-
-        tiledb_uri_x = os.path.join(self.get_temp_dir(), "x")
-        tiledb_uri_y = os.path.join(self.get_temp_dir(), "y")
-
-        ingest_in_tiledb(
-            uri=tiledb_uri_x,
-            data=np.random.rand(1000, 10, 5, 5, 2),
-            batch_size=batch_size,
-        )
-        ingest_in_tiledb(
-            uri=tiledb_uri_y,
-            data=np.random.rand(1000, num_of_classes),
-            batch_size=batch_size,
-        )
-
-        tiledb_dataset = TensorflowTileDBDataset(
-            x_uri=tiledb_uri_x, y_uri=tiledb_uri_y, batch_size=batch_size
-        )
-
-        # Assert that dataset is instance of Tensorflow dataset.
-        self.assertIsInstance(tiledb_dataset, tf.data.Dataset)
-
-        model.fit(tiledb_dataset, verbose=0, epochs=1)
+        with self.assertRaises(Exception):
+            TensorflowTileDBDataset(
+                x_uri=tiledb_uri_x, y_uri=tiledb_uri_y, batch_size=BATCH_SIZE
+            )

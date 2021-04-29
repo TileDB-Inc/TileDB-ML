@@ -23,9 +23,16 @@ class TensorflowTileDBDataset(tf.data.Dataset):
         tile extent and indices in TileDB, please check here:
         https://docs.tiledb.com/main/solutions/tiledb-embedded/performance-tips/choosing-tiling-and-cell-layout#dense-arrays
         """
-        # Open TileDB train arrays
+        # Open TileDB x and y arrays
         x = tiledb.open(x_uri, mode="r")
         y = tiledb.open(y_uri, mode="r")
+
+        # Check that x and y have the same number of rows
+        if x.schema.domain.shape[0] != y.schema.domain.shape[0]:
+            raise Exception(
+                "X and Y should have the same number of rows, i.e., the 1st dimension "
+                "of TileDB arrays X, Y should be of equal domain extent."
+            )
 
         # Get number of observations
         rows = x.schema.domain.shape[0]
@@ -34,6 +41,7 @@ class TensorflowTileDBDataset(tf.data.Dataset):
         x_shape = (None,) + x.schema.domain.shape[1:]
         y_shape = (None,) + y.schema.domain.shape[1:]
 
+        # Get x and y data types
         x_dtype = x.schema.attr(0).dtype
         y_dtype = y.schema.attr(0).dtype
 
