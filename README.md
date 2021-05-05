@@ -19,15 +19,18 @@ can (or will be able to):
   
 * **Load** machine learning models from TileDB arrays.     
 
-* **Load** features in order to train machine learning models, from TileDB arrays directly to machine learning framework's data APIs. 
-  This feature is **NOT** supported at the moment, but we are already working on integrations with Tensorflow data API, PyTorch DataLoader API
-  and Scikit-Learn Pipelines and will be supported in our next release.
+* **Load** features, in order to train machine learning models, from TileDB arrays directly to machine learning framework's data APIs. 
+  We already [support](https://github.com/TileDB-Inc/TileDB-ML/blob/master/tiledb/ml/data_apis/tensorflow.py) (in Python) the Tensorflow 
+  data API with the use of Python generators for dense TileDB arrays, and we are similarly working on PyTorch DataLoader API
+  and Scikit-Learn Pipelines which will be out soon.
   
 ## Structure and examples
 
-At the moment we provide code for saving and loading models to and from TileDB arrays. 
-The corresponding implementations live in ``tiledb/ml/models`` folder. All implemented classes (``TensorflowTileDB``, ``PyTorchTileDB``, ``SklearnTileDB`` ) 
-inherit from base class (``TileDBModel``) and implement ``save()`` and ``load()`` functionality. In case you would like to contribute model save/load implementations
+At the moment we provide code for saving and loading models to and from TileDB arrays and for loading features from TileDB arrays 
+into Tensorflow Data API. The corresponding implementations for model save/load, live in ``tiledb/ml/models`` folder. 
+All implemented classes (``TensorflowTileDB``, ``PyTorchTileDB``, ``SklearnTileDB`` ) 
+inherit from base class (``TileDBModel``) and implement ``save()`` and ``load()`` functionality. 
+In case you would like to contribute model save/load implementations
 that support other machine learning frameworks, please take a look at the current implementations and commit code accordingly. Please
 also read the contributing section below.
 
@@ -61,7 +64,7 @@ TileDB-ML can be installed:
 
 We are already working on the following:
 
-* Integration of TileDB with the Tensorflow Data API through [tensorflow-io](https://github.com/tensorflow/io).
+* C++ integration of TileDB with the Tensorflow Data API through [tensorflow-io](https://github.com/tensorflow/io).
 * Readers from TileDB arrays to other popular machine learning framework Data APIs, as mentioned above.
 * Model save/load support for other popular machine learning frameworks like XGBoost and CatBoost.
 
