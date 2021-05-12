@@ -6,6 +6,7 @@ import numpy as np
 import uuid
 from scipy.sparse import random
 from scipy import stats
+import sparse
 
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
@@ -18,7 +19,6 @@ from tensorflow.python.keras import testing_utils
 from tensorflow.python.platform import test
 
 from tiledb.ml.data_apis.tensorflow_sparse import TensorflowTileDBSparseDataset
-# from tiledb.ml.utils import pprint_sparse_tensor
 
 
 # Suppress all Tensorflow messages
@@ -88,45 +88,16 @@ def ingest_in_tiledb_sparse(data: np.array, batch_size: int, uri: str):
 
     # Ingest
     with tiledb.open(uri, "w") as tiledb_array:
-        I,J = data.row, data.col
+        I, J = data.row, data.col
         data_elem = np.array(data.data)
         tiledb_array[I, J] = data_elem
 
-# def pprint_sparse_tensor(st):
-#   x = "<SparseTensor shape=%s \n values={" % (st[0].dense_shape.numpy().tolist(),)
-#   for (index, value) in zip(st[0].indices, st[0].values):
-#     x += f"\n  %s: %s" % (index.numpy().tolist(), value.numpy().tolist()) + "}>"
-#   x = x + "}>"
-#   y = "<SparseTensor shape=%s \n values={" % (st[1].dense_shape.numpy().tolist(),)
-#   for (index, value) in zip(st[1].indices, st[1].values):
-#       y += f"\n  %s: %s" % (index.numpy().tolist(), value.numpy().tolist()) + "}>"
-#   y = y + "}>"
-#   return print(x + "|--------------------|" + y)
 
 def create_model(input_shape: tuple, num_of_classes: int):
 
     model = Sequential()
     model.add(tf.keras.Input(shape=input_shape))
-    # model.add(Dense(num_of_classes))
-    # # model.add(Dropout(0.5))
-    # # model.add(Dense(num_of_classes))
-    #
-    # # model = Sequential()
-    # # model.add(tf.keras.Input(shape=input_shape, sparse=True))
-    # # # model.add(Dense(1))
-    model.compile(
-        # loss="sparse_categorical_crossentropy", optimizer="rmsprop", metrics=["sparse_binary_accuracy"],
-    )
-
-    # x = tf.keras.Input(shape=input_shape, name='x')
-    # y_pred = tf.keras.layers.Dense(1, name='y_pred')(x)
-    # model = tf.keras.Model(inputs=x, outputs=y_pred)
-    # loss = tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.NONE)
-    # model.compile('Adam', loss=loss)
-
-    # x = tf.keras.Input(shape=(10,), sparse=True)
-    # y = tf.keras.layers.Dense(10)(x)
-    # model = tf.keras.Model(x, y)
+    model.compile()
 
     return model
 

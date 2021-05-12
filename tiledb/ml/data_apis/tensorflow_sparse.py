@@ -54,7 +54,7 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
         return dataset_ops.Dataset.from_generator(
             generator=cls._generator,
             output_signature=(
-                tf.SparseTensorSpec(shape=cls.x_shape, dtype=tf.float32),
+                tf.SparseTensorSpec(shape=cls.x_shape, dtype=cls.x_dtype),
                 tf.SparseTensorSpec(shape=cls.y_shape, dtype=cls.y_dtype)
             ),
             args=(rows, batch_size)
@@ -73,20 +73,25 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
         # Loop over batches
         # https://github.com/tensorflow/tensorflow/issues/44565
         for offset in range(0, rows, batch_size):
-            val_y = list(cls.y[offset: offset + batch_size].items())
-            values_y = val_y[0][1]
-            val_x = list(cls.x[offset: offset + batch_size].items())
-            values_x = val_x[0][1]
-            y_data = np.array(values_y).flatten()
-            y_rows = np.array(cls.y[offset: offset + batch_size]["dim_0"])
-            y_cols = np.array(cls.y[offset: offset + batch_size]["dim_1"])
-            x_data = np.array(values_x).flatten()
-            x_rows = np.array(cls.x[offset: offset + batch_size]["dim_0"])
-            x_cols = np.array(cls.x[offset: offset + batch_size]["dim_1"])
+            values_y = list(cls.y[offset: offset + batch_size].items())[0][1]
+            values_x = list(cls.x[offset: offset + batch_size].items())[0][1]
 
-            yield tf.sparse.SparseTensor(indices=constant_op.constant(list(zip(x_rows, x_cols)), dtype=tf.int64),
+            y_data = np.array(values_y).flatten()
+            y_coords = []
+            for i in range(0, cls.y.schema.domain.ndim):
+                dim_name = cls.y.schema.domain.dim(i).name
+                y_coords.append(np.array(cls.y[offset: offset + batch_size][dim_name]))
+
+            x_coords = []
+            for i in range(0, cls.x.schema.domain.ndim):
+                dim_name = cls.x.schema.domain.dim(i).name
+                x_coords.append(np.array(cls.x[offset: offset + batch_size][dim_name]))
+
+            x_data = np.array(values_x).flatten()
+
+            yield tf.sparse.SparseTensor(indices=constant_op.constant(list(zip(*x_coords)), dtype=tf.int64),
                                          values=constant_op.constant(x_data, dtype=tf.float32),
                                          dense_shape=(batch_size, cls.x_shape[1])), \
-                  tf.sparse.SparseTensor(indices=constant_op.constant(list(zip(y_rows, y_cols)), dtype=tf.int64),
+                  tf.sparse.SparseTensor(indices=constant_op.constant(list(zip(*y_coords)), dtype=tf.int64),
                                          values=constant_op.constant(y_data, dtype=cls.y_dtype),
                                          dense_shape=(batch_size, cls.y_shape[1]))
