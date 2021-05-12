@@ -141,9 +141,6 @@ class TestTileDBTensorflowSparseDataAPI(test.TestCase):
 
                     self.assertIsInstance(tiledb_dataset, tf.data.Dataset)
 
-                    # for item in tiledb_dataset:
-                    #     pprint_sparse_tensor(item)
-                    # model.fit(tiledb_dataset, epochs=2)
 
                     model.fit(tiledb_dataset, verbose=0, epochs=1)
 
