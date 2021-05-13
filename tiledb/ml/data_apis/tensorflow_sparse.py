@@ -1,6 +1,4 @@
 """Functionality for loading data directly from TileDB arrays into the Tensorflow Data API."""
-import dataclasses
-
 import tiledb
 import tensorflow as tf
 import numpy as np
@@ -20,14 +18,8 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
         :param x_array: TileDB Sparse Array. Array that contains features.
         :param y_array: TileDB Dense/Sparse Array. Array that contains labels.
         :param batch_size: Integer. The size of the batch that the implemented _generator method will return.
-        For optimal reads from a TileDB array, it is recommended to set the batch size equal to the tile extent of the
-        dimension we query (here, we always query the first dimension of a TileDB array) in order to get a slice (batch)
-        of the data. For example, in case the tile extent of the first dimension of a TileDB array (x or y) is equal to
-        32, it's recommended to set batch_size=32. Any batch size will work, but in case it's not equal the tile extent
-        of the first dimension of the TileDB array, you won't achieve highest read speed. For more details on tiles,
-        tile extent and indices in TileDB, please check here:
-        https://docs.tiledb.com/main/solutions/tiledb-embedded/performance-tips/choosing-tiling-and-cell-layout#dense-arrays
         """
+
         cls.x = x_array
         cls.y = y_array
 
@@ -54,18 +46,18 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
                 generator=cls._generator_sparse_sparse,
                 output_signature=(
                     tf.SparseTensorSpec(shape=cls.x_shape, dtype=cls.x_dtype),
-                    tf.SparseTensorSpec(shape=cls.y_shape, dtype=cls.y_dtype)
+                    tf.SparseTensorSpec(shape=cls.y_shape, dtype=cls.y_dtype),
                 ),
-                args=(rows, batch_size)
+                args=(rows, batch_size),
             )
         else:
             return dataset_ops.Dataset.from_generator(
                 generator=cls._generator_sparse_dense,
                 output_signature=(
                     tf.SparseTensorSpec(shape=cls.x_shape, dtype=cls.x_dtype),
-                    tf.TensorSpec(shape=cls.y_shape, dtype=cls.y_dtype)
+                    tf.TensorSpec(shape=cls.y_shape, dtype=cls.y_dtype),
                 ),
-                args=(rows, batch_size)
+                args=(rows, batch_size),
             )
 
     @classmethod
@@ -81,10 +73,10 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
         # Loop over batches
         # https://github.com/tensorflow/tensorflow/issues/44565
         for offset in range(0, rows, batch_size):
-            y_batch = cls.y[offset: offset + batch_size]
-            x_batch = cls.x[offset: offset + batch_size]
+            y_batch = cls.y[offset : offset + batch_size]
+            x_batch = cls.x[offset : offset + batch_size]
 
-            #TODO: Both for dense case support multiple attributes
+            # TODO: Both for dense case support multiple attributes
             values_y = list(y_batch.items())[0][1]
             values_x = list(x_batch.items())[0][1]
 
@@ -109,12 +101,15 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
                     "of TileDB arrays X, Y should be of equal domain extent inside the batch"
                 )
 
-            yield tf.sparse.SparseTensor(indices=constant_op.constant(list(zip(*x_coords)), dtype=tf.int64),
-                                         values=constant_op.constant(x_data, dtype=tf.float32),
-                                         dense_shape=(batch_size, cls.x_shape[1])), \
-                  tf.sparse.SparseTensor(indices=constant_op.constant(list(zip(*y_coords)), dtype=tf.int64),
-                                         values=constant_op.constant(y_data, dtype=cls.y_dtype),
-                                         dense_shape=(batch_size, cls.y_shape[1]))
+            yield tf.sparse.SparseTensor(
+                indices=constant_op.constant(list(zip(*x_coords)), dtype=tf.int64),
+                values=constant_op.constant(x_data, dtype=tf.float32),
+                dense_shape=(batch_size, cls.x_shape[1]),
+            ), tf.sparse.SparseTensor(
+                indices=constant_op.constant(list(zip(*y_coords)), dtype=tf.int64),
+                values=constant_op.constant(y_data, dtype=cls.y_dtype),
+                dense_shape=(batch_size, cls.y_shape[1]),
+            )
 
     @classmethod
     def _generator_sparse_dense(cls, rows: int, batch_size: int) -> tuple:
@@ -130,10 +125,10 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
         # Loop over batches
         # https://github.com/tensorflow/tensorflow/issues/44565
         for offset in range(0, rows, batch_size):
-            y_batch = cls.y[offset: offset + batch_size]
-            x_batch = cls.x[offset: offset + batch_size]
+            y_batch = cls.y[offset : offset + batch_size]
+            x_batch = cls.x[offset : offset + batch_size]
 
-            #TODO: Both for dense case support multiple attributes
+            # TODO: Both for dense case support multiple attributes
             values_y = list(y_batch.items())[0][1]
             values_x = list(x_batch.items())[0][1]
 
@@ -152,7 +147,8 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
                     "of TileDB arrays X, Y should be of equal domain extent inside the batch"
                 )
 
-            yield tf.sparse.SparseTensor(indices=constant_op.constant(list(zip(*x_coords)), dtype=tf.int64),
-                                         values=constant_op.constant(x_data, dtype=tf.float32),
-                                         dense_shape=(batch_size, cls.x_shape[1])), \
-                  values_y
+            yield tf.sparse.SparseTensor(
+                indices=constant_op.constant(list(zip(*x_coords)), dtype=tf.int64),
+                values=constant_op.constant(x_data, dtype=tf.float32),
+                dense_shape=(batch_size, cls.x_shape[1]),
+            ), values_y

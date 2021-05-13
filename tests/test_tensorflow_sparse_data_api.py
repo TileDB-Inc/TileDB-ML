@@ -2,12 +2,10 @@
 
 import os
 
-import numpy
 import tiledb
 import numpy as np
 import uuid
-from scipy.sparse import random
-from scipy import stats
+
 
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
@@ -29,7 +27,9 @@ BATCH_SIZE = 32
 ROWS = 1000
 
 # We test for 2d
-INPUT_SHAPES = [(10,), ]
+INPUT_SHAPES = [
+    (10,),
+]
 
 
 def create_sparse_array_one_hot_2d(dims: tuple) -> np.ndarray:
@@ -131,9 +131,9 @@ class TestTileDBTensorflowSparseDataAPI(test.TestCase):
                     batch_size=BATCH_SIZE,
                 )
 
-                with tiledb.SparseArray(tiledb_uri_x, mode="r") as x, tiledb.SparseArray(
-                        tiledb_uri_y, mode="r"
-                ) as y:
+                with tiledb.SparseArray(
+                    tiledb_uri_x, mode="r"
+                ) as x, tiledb.SparseArray(tiledb_uri_y, mode="r") as y:
                     tiledb_dataset = TensorflowTileDBSparseDataset(
                         x_array=x, y_array=y, batch_size=BATCH_SIZE
                     )
@@ -168,7 +168,7 @@ class TestTileDBTensorflowSparseDataAPI(test.TestCase):
                 )
 
                 with tiledb.SparseArray(tiledb_uri_x, mode="r") as x, tiledb.DenseArray(
-                        tiledb_uri_y, mode="r"
+                    tiledb_uri_y, mode="r"
                 ) as y:
                     tiledb_dataset = TensorflowTileDBSparseDataset(
                         x_array=x, y_array=y, batch_size=BATCH_SIZE
@@ -178,7 +178,9 @@ class TestTileDBTensorflowSparseDataAPI(test.TestCase):
                     model.fit(tiledb_dataset, verbose=0, epochs=2)
 
     @testing_utils.run_v2_only
-    def test_tiledb_tf_sparse_data_api_with_sparse_data_diff_number_of_batch_x_y_rows(self):
+    def test_tiledb_tf_sparse_data_api_with_sparse_data_diff_number_of_batch_x_y_rows(
+        self,
+    ):
         for input_shape in INPUT_SHAPES:
             with self.subTest():
                 array_uuid = str(uuid.uuid4())
@@ -204,11 +206,11 @@ class TestTileDBTensorflowSparseDataAPI(test.TestCase):
                 )
 
                 with tiledb.SparseArray(tiledb_uri_x, mode="r") as x, tiledb.DenseArray(
-                        tiledb_uri_y, mode="r"
+                    tiledb_uri_y, mode="r"
                 ) as y:
                     _ = TensorflowTileDBSparseDataset(
-                            x_array=x, y_array=y, batch_size=BATCH_SIZE
-                        )
+                        x_array=x, y_array=y, batch_size=BATCH_SIZE
+                    )
                     self.assertRaises(Exception)
 
     @testing_utils.run_v2_only
@@ -233,7 +235,7 @@ class TestTileDBTensorflowSparseDataAPI(test.TestCase):
         )
 
         with tiledb.SparseArray(tiledb_uri_x, mode="r") as x, tiledb.SparseArray(
-                tiledb_uri_y, mode="r"
+            tiledb_uri_y, mode="r"
         ) as y:
             with self.assertRaises(Exception):
                 TensorflowTileDBSparseDataset(
