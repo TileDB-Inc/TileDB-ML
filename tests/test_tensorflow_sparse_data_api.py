@@ -218,10 +218,10 @@ class TestTileDBTensorflowSparseDataAPI(test.TestCase):
                 with tiledb.SparseArray(tiledb_uri_x, mode="r") as x, tiledb.DenseArray(
                         tiledb_uri_y, mode="r"
                 ) as y:
-                    with self.assertRaises(Exception):
-                        TensorflowTileDBSparseDataset(
+                    _ = TensorflowTileDBSparseDataset(
                             x_array=x, y_array=y, batch_size=BATCH_SIZE
                         )
+                    self.assertRaises(Exception)
 
     @testing_utils.run_v2_only
     def test_sparse_except_with_diff_number_of_x_y_rows(self):
