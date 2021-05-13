@@ -10,7 +10,7 @@ from tensorflow.python.data.ops import dataset_ops
 
 class TensorflowTileDBSparseDataset(tf.data.Dataset):
     """
-    Class that implements all functionality needed to load data from TileDB directly to the
+    Class that implements all functionality needed to load sparse data from TileDB directly to the
     Tensorflow Data API, by employing generators.
     """
 
@@ -83,15 +83,19 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
         for offset in range(0, rows, batch_size):
             y_batch = cls.y[offset: offset + batch_size]
             x_batch = cls.x[offset: offset + batch_size]
+
+            #TODO: Both for dense case support multiple attributes
             values_y = list(y_batch.items())[0][1]
             values_x = list(x_batch.items())[0][1]
 
+            # Transform to TF COO format y data
             y_data = np.array(values_y).flatten()
             y_coords = []
             for i in range(0, cls.y.schema.domain.ndim):
                 dim_name = cls.y.schema.domain.dim(i).name
                 y_coords.append(np.array(y_batch[dim_name]))
 
+            # Transform to TF COO format x data
             x_coords = []
             for i in range(0, cls.x.schema.domain.ndim):
                 dim_name = cls.x.schema.domain.dim(i).name
@@ -122,6 +126,7 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
         :param batch_size: Integer. Size of batch, i.e., number of rows returned per call.
         :return: Tuple. Tuple that contains x and y batches.
         """
+
         # Loop over batches
         # https://github.com/tensorflow/tensorflow/issues/44565
         for offset in range(0, rows, batch_size):
@@ -139,6 +144,7 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
 
             x_data = np.array(values_x).flatten()
 
+            # Detects empty lines due to sparsity inside the batch
             x_sparse_real_batch_size = x_coords[0].max(axis=0) - x_coords[0].min(axis=0)
             if values_y.shape[0] - x_sparse_real_batch_size != 1:
                 raise Exception(
