@@ -15,7 +15,8 @@ class PyTorchTileDBDenseDataset(torch.utils.data.IterableDataset):
         Initialises a PyTorchTileDBDenseDataset that inherits from PyTorch IterableDataset.
         :param x_array: TileDB Dense Array. Array that contains features.
         :param y_array: TileDB Dense Array. Array that contains labels.
-        :param batch_size: Integer. The size of the batch that the implemented _generator method will return.
+        :param batch_size: Integer. The size of the batch that the generator will return. Remember to set batch_size=None
+        when calling the PyTorch Dataloader API, because batching is taking place inside the TileDB IterableDataset.
         For optimal reads from a TileDB array, it is recommended to set the batch size equal to the tile extent of the
         dimension we query (here, we always query the first dimension of a TileDB array) in order to get a slice (batch)
         of the data. For example, in case the tile extent of the first dimension of a TileDB array (x or y) is equal to
