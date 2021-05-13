@@ -42,12 +42,12 @@ class PyTorchTileDBDenseDataset(torch.utils.data.IterableDataset):
     def __iter__(self):
         worker_info = torch.utils.data.get_worker_info()
 
-        # single-process data loading, return the full iterator
+        # Single worker - return full iterator
         if worker_info is None:
             iter_start = 0
             iter_end = self.rows
 
-        # in a worker process split workload
+        # Multiple workers - split workload
         else:
             per_worker = int(math.ceil(self.rows / float(worker_info.num_workers)))
             worker_id = worker_info.id
