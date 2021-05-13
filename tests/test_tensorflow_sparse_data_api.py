@@ -41,18 +41,6 @@ def create_sparse_array_one_hot_2d(dims: tuple) -> np.ndarray:
     return b
 
 
-# def create_sparse_array_one_hot_nd(size: tuple, axis=-1, dtype=bool):
-#     a = x = np.random.randint(5, size=(3, 2))
-#     pos = axis if axis >= 0 else a.ndim + axis + 1
-#     shape = list(a.shape)
-#     shape.insert(pos, a.max() + 1)
-#     out = np.zeros(shape, dtype)
-#     ind = list(np.indices(a.shape, sparse=True))
-#     ind.insert(pos, a)
-#     out[tuple(ind)] = True
-#     return out
-
-
 def ingest_in_tiledb(data: np.array, batch_size: int, uri: str):
     dims = [
         tiledb.Dim(
