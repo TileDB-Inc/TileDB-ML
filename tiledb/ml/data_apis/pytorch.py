@@ -28,7 +28,7 @@ class PyTorchTileDBDenseDataset(torch.utils.data.IterableDataset):
 
         # Check that x and y have the same number of rows
         if x_array.schema.domain.shape[0] != y_array.schema.domain.shape[0]:
-            raise Exception(
+            raise ValueError(
                 "X and Y should have the same number of rows, i.e., the 1st dimension "
                 "of TileDB arrays X, Y should be of equal domain extent."
             )
@@ -37,27 +37,30 @@ class PyTorchTileDBDenseDataset(torch.utils.data.IterableDataset):
         self.y = y_array
         self.batch_size = batch_size
 
-        # Get number of observations
-        self.rows = x_array.schema.domain.shape[0]
-
     def __iter__(self):
         worker_info = torch.utils.data.get_worker_info()
+
+        # Get number of observations
+        rows = self.x.schema.domain.shape[0]
 
         # Single worker - return full iterator
         if worker_info is None:
             iter_start = 0
-            iter_end = self.rows
+            iter_end = rows
 
         # Multiple workers - split workload
         else:
-            per_worker = int(math.ceil(self.rows / float(worker_info.num_workers)))
+            per_worker = int(math.ceil(rows / worker_info.num_workers))
             worker_id = worker_info.id
             iter_start = worker_id * per_worker
-            iter_end = min(iter_start + per_worker, self.rows)
+            iter_end = min(iter_start + per_worker, rows)
+
+        x_attr_name = self.x.schema.attr(0).name
+        y_attr_name = self.y.schema.attr(0).name
 
         # Loop over batches
         for offset in range(iter_start, iter_end, self.batch_size):
             # Yield the next training batch
-            yield self.x[offset : offset + self.batch_size][
-                self.x.schema.attr(0).name
-            ], self.y[offset : offset + self.batch_size][self.y.schema.attr(0).name]
+            yield self.x[offset : offset + self.batch_size][x_attr_name], self.y[
+                offset : offset + self.batch_size
+            ][y_attr_name]

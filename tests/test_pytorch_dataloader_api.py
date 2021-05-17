@@ -90,9 +90,9 @@ class TestTileDBDensePyTorchDataloaderAPI(unittest.TestCase):
                             batch_size=BATCH_SIZE,
                         )
 
-                        with tiledb.DenseArray(
-                            tiledb_uri_x, mode="r"
-                        ) as x, tiledb.DenseArray(tiledb_uri_y, mode="r") as y:
+                        with tiledb.open(tiledb_uri_x) as x, tiledb.open(
+                            tiledb_uri_y
+                        ) as y:
 
                             tiledb_dataset = PyTorchTileDBDenseDataset(
                                 x_array=x, y_array=y, batch_size=BATCH_SIZE
@@ -144,9 +144,7 @@ class TestTileDBDensePyTorchDataloaderAPI(unittest.TestCase):
                 batch_size=BATCH_SIZE,
             )
 
-            with tiledb.DenseArray(tiledb_uri_x, mode="r") as x, tiledb.DenseArray(
-                tiledb_uri_y, mode="r"
-            ) as y:
+            with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
                 with self.assertRaises(Exception):
                     PyTorchTileDBDenseDataset(
                         x_array=x, y_array=y, batch_size=BATCH_SIZE
@@ -173,9 +171,7 @@ class TestTileDBDensePyTorchDataloaderAPI(unittest.TestCase):
                         batch_size=BATCH_SIZE,
                     )
 
-                    with tiledb.DenseArray(
-                        tiledb_uri_x, mode="r"
-                    ) as x, tiledb.DenseArray(tiledb_uri_y, mode="r") as y:
+                    with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
 
                         tiledb_dataset = PyTorchTileDBDenseDataset(
                             x_array=x, y_array=y, batch_size=BATCH_SIZE
@@ -207,6 +203,5 @@ class TestTileDBDensePyTorchDataloaderAPI(unittest.TestCase):
                             ):
                                 unique_labels.append(data[1].numpy())
 
-                        self.assertEqual(len(unique_labels), len(unique_inputs))
                         self.assertEqual(len(unique_inputs) - 1, batchindx)
                         self.assertEqual(len(unique_labels) - 1, batchindx)
