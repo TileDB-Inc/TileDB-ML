@@ -81,6 +81,8 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
     ) -> tuple:
         """
         A generator function that yields the next training batch.
+        :param x: TileDB Sparse array. An opened TileDB array which contains features.
+        :param y: TileDB Sparse array. An opened TileDB array which contains labels.
         :param rows: Integer. The number of observations in x, y datasets.
         :param batch_size: Integer. Size of batch, i.e., number of rows returned per call.
         :return: Tuple. Tuple that contains x and y batches.
@@ -89,6 +91,7 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
         x_shape = x.schema.domain.shape[1:]
         y_shape = y.schema.domain.shape[1:]
 
+        x_dtype = x.schema.attr(0).dtype
         y_dtype = y.schema.attr(0).dtype
 
         # Loop over batches
@@ -123,7 +126,7 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
 
             yield tf.sparse.SparseTensor(
                 indices=constant_op.constant(list(zip(*x_coords)), dtype=tf.int64),
-                values=constant_op.constant(x_data, dtype=tf.float32),
+                values=constant_op.constant(x_data, dtype=x_dtype),
                 dense_shape=(batch_size, x_shape[0]),
             ), tf.sparse.SparseTensor(
                 indices=constant_op.constant(list(zip(*y_coords)), dtype=tf.int64),
@@ -137,11 +140,14 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
     ) -> tuple:
         """
         A generator function that yields the next training batch.
+        :param x: TileDB Sparse array. An opened TileDB array which contains features.
+        :param y: TileDB Dense array. An opened TileDB array which contains labels.
         :param rows: Integer. The number of observations in x, y datasets.
         :param batch_size: Integer. Size of batch, i.e., number of rows returned per call.
         :return: Tuple. Tuple that contains x and y batches.
         """
         x_shape = x.schema.domain.shape[1:]
+        x_dtype = x.schema.attr(0).dtype
 
         # Loop over batches
         # https://github.com/tensorflow/tensorflow/issues/44565
@@ -170,6 +176,6 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
 
             yield tf.sparse.SparseTensor(
                 indices=constant_op.constant(list(zip(*x_coords)), dtype=tf.int64),
-                values=constant_op.constant(x_data, dtype=tf.float32),
+                values=constant_op.constant(x_data, dtype=x_dtype),
                 dense_shape=(batch_size, x_shape[0]),
             ), values_y
