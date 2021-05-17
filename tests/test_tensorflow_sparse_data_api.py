@@ -31,9 +31,9 @@ INPUT_SHAPES = [
 ]
 
 
-def create_sparse_array_one_hot_2d(dims: tuple) -> np.ndarray:
-    seed = np.random.randint(low=0, high=dims[1][0], size=(dims[0],))
-    seed[-1] = dims[1][0] - 1
+def create_sparse_array_one_hot_2d(rows: int, cols: tuple) -> np.ndarray:
+    seed = np.random.randint(low=0, high=cols[0], size=(rows,))
+    seed[-1] = cols[0] - 1
     b = np.zeros((seed.size, seed.max() + 1))
     b[np.arange(seed.size), seed] = 1
     return b
@@ -81,7 +81,7 @@ def ingest_in_tiledb_sparse(data: np.array, batch_size: int, uri: str):
     with tiledb.open(uri, "w") as tiledb_array:
         idx = np.nonzero(data)
         I, J = idx[0], idx[1]
-        tiledb_array[I, J] = {"features": data[np.nonzero(data)]}
+        tiledb_array[I, J] = {"features": data[idx]}
 
 
 def create_model(input_shape: tuple, num_of_classes: int) -> object:
@@ -112,12 +112,16 @@ class TestTileDBTensorflowSparseDataAPI(test.TestCase):
 
                 ingest_in_tiledb_sparse(
                     uri=tiledb_uri_x,
-                    data=create_sparse_array_one_hot_2d(dataset_shape_x),
+                    data=create_sparse_array_one_hot_2d(
+                        dataset_shape_x[0], dataset_shape_x[1]
+                    ),
                     batch_size=BATCH_SIZE,
                 )
                 ingest_in_tiledb_sparse(
                     uri=tiledb_uri_y,
-                    data=create_sparse_array_one_hot_2d(dataset_shape_y),
+                    data=create_sparse_array_one_hot_2d(
+                        dataset_shape_y[0], dataset_shape_y[1]
+                    ),
                     batch_size=BATCH_SIZE,
                 )
 
@@ -146,7 +150,9 @@ class TestTileDBTensorflowSparseDataAPI(test.TestCase):
 
                 ingest_in_tiledb_sparse(
                     uri=tiledb_uri_x,
-                    data=create_sparse_array_one_hot_2d(dataset_shape_x),
+                    data=create_sparse_array_one_hot_2d(
+                        dataset_shape_x[0], dataset_shape_x[1]
+                    ),
                     batch_size=BATCH_SIZE,
                 )
                 ingest_in_tiledb(
@@ -180,7 +186,9 @@ class TestTileDBTensorflowSparseDataAPI(test.TestCase):
                 dataset_shape_y = (ROWS, NUM_OF_CLASSES)
 
                 # Empty one random row
-                spoiled_data = create_sparse_array_one_hot_2d(dataset_shape_x)
+                spoiled_data = create_sparse_array_one_hot_2d(
+                    dataset_shape_x[0], dataset_shape_x[1]
+                )
                 spoiled_data[np.nonzero(spoiled_data[0])] = 0
 
                 ingest_in_tiledb_sparse(
@@ -213,12 +221,12 @@ class TestTileDBTensorflowSparseDataAPI(test.TestCase):
 
         ingest_in_tiledb_sparse(
             uri=tiledb_uri_x,
-            data=create_sparse_array_one_hot_2d(dataset_shape_x),
+            data=create_sparse_array_one_hot_2d(dataset_shape_x[0], dataset_shape_x[1]),
             batch_size=BATCH_SIZE,
         )
         ingest_in_tiledb_sparse(
             uri=tiledb_uri_y,
-            data=create_sparse_array_one_hot_2d(dataset_shape_y),
+            data=create_sparse_array_one_hot_2d(dataset_shape_y[0], dataset_shape_y[1]),
             batch_size=BATCH_SIZE,
         )
 
