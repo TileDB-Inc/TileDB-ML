@@ -2,6 +2,7 @@
 import tiledb
 import tensorflow as tf
 import numpy as np
+from functools import partial
 from tensorflow.python.framework import constant_op
 from tensorflow.python.data.ops import dataset_ops
 
@@ -25,9 +26,6 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
                 "TensorflowTileDBSparseDataset class should be used with tiledb.SparseArray representation"
             )
 
-        cls.x = x_array
-        cls.y = y_array
-
         # Check that x and y have the same number of rows
         if x_array.schema.domain.shape[0] != y_array.schema.domain.shape[0]:
             raise Exception(
@@ -39,45 +37,65 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
         rows = x_array.schema.domain.shape[0]
 
         # Get x and y shapes
-        cls.x_shape = (None,) + x_array.schema.domain.shape[1:]
-        cls.y_shape = (None,) + y_array.schema.domain.shape[1:]
+        x_shape = (None,) + x_array.schema.domain.shape[1:]
+        y_shape = (None,) + y_array.schema.domain.shape[1:]
 
         # Get x and y data types
-        cls.x_dtype = x_array.schema.attr(0).dtype
-        cls.y_dtype = y_array.schema.attr(0).dtype
+        x_dtype = x_array.schema.attr(0).dtype
+        y_dtype = y_array.schema.attr(0).dtype
 
         if isinstance(y_array, tiledb.SparseArray):
+            generator_ = partial(
+                cls._generator_sparse_sparse,
+                x=x_array,
+                y=y_array,
+                rows=rows,
+                batch_size=batch_size,
+            )
             return dataset_ops.Dataset.from_generator(
-                generator=cls._generator_sparse_sparse,
+                generator=generator_,
                 output_signature=(
-                    tf.SparseTensorSpec(shape=cls.x_shape, dtype=cls.x_dtype),
-                    tf.SparseTensorSpec(shape=cls.y_shape, dtype=cls.y_dtype),
+                    tf.SparseTensorSpec(shape=x_shape, dtype=x_dtype),
+                    tf.SparseTensorSpec(shape=y_shape, dtype=y_dtype),
                 ),
-                args=(rows, batch_size),
             )
         else:
+            generator_ = partial(
+                cls._generator_sparse_dense,
+                x=x_array,
+                y=y_array,
+                rows=rows,
+                batch_size=batch_size,
+            )
             return dataset_ops.Dataset.from_generator(
-                generator=cls._generator_sparse_dense,
+                generator=generator_,
                 output_signature=(
-                    tf.SparseTensorSpec(shape=cls.x_shape, dtype=cls.x_dtype),
-                    tf.TensorSpec(shape=cls.y_shape, dtype=cls.y_dtype),
+                    tf.SparseTensorSpec(shape=x_shape, dtype=x_dtype),
+                    tf.TensorSpec(shape=y_shape, dtype=y_dtype),
                 ),
-                args=(rows, batch_size),
             )
 
     @classmethod
-    def _generator_sparse_sparse(cls, rows: int, batch_size: int) -> tuple:
+    def _generator_sparse_sparse(
+        cls, x: tiledb.Array, y: tiledb.Array, rows: int, batch_size: int
+    ) -> tuple:
         """
         A generator function that yields the next training batch.
         :param rows: Integer. The number of observations in x, y datasets.
         :param batch_size: Integer. Size of batch, i.e., number of rows returned per call.
         :return: Tuple. Tuple that contains x and y batches.
         """
+
+        x_shape = x.schema.domain.shape[1:]
+        y_shape = y.schema.domain.shape[1:]
+
+        y_dtype = y.schema.attr(0).dtype
+
         # Loop over batches
         # https://github.com/tensorflow/tensorflow/issues/44565
         for offset in range(0, rows, batch_size):
-            y_batch = cls.y[offset : offset + batch_size]
-            x_batch = cls.x[offset : offset + batch_size]
+            y_batch = y[offset : offset + batch_size]
+            x_batch = x[offset : offset + batch_size]
 
             # TODO: Both for dense case support multiple attributes
             values_y = list(y_batch.items())[0][1]
@@ -93,48 +111,51 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
                 )
 
             y_coords = []
-            for i in range(0, cls.y.schema.domain.ndim):
-                dim_name = cls.y.schema.domain.dim(i).name
+            for i in range(0, y.schema.domain.ndim):
+                dim_name = y.schema.domain.dim(i).name
                 y_coords.append(np.array(y_batch[dim_name]))
 
             # Transform to TF COO format x data
             x_coords = []
-            for i in range(0, cls.x.schema.domain.ndim):
-                dim_name = cls.x.schema.domain.dim(i).name
+            for i in range(0, x.schema.domain.ndim):
+                dim_name = x.schema.domain.dim(i).name
                 x_coords.append(np.array(x_batch[dim_name]))
 
             yield tf.sparse.SparseTensor(
                 indices=constant_op.constant(list(zip(*x_coords)), dtype=tf.int64),
                 values=constant_op.constant(x_data, dtype=tf.float32),
-                dense_shape=(batch_size, cls.x_shape[1]),
+                dense_shape=(batch_size, x_shape[0]),
             ), tf.sparse.SparseTensor(
                 indices=constant_op.constant(list(zip(*y_coords)), dtype=tf.int64),
-                values=constant_op.constant(y_data, dtype=cls.y_dtype),
-                dense_shape=(batch_size, cls.y_shape[1]),
+                values=constant_op.constant(y_data, dtype=y_dtype),
+                dense_shape=(batch_size, y_shape[0]),
             )
 
     @classmethod
-    def _generator_sparse_dense(cls, rows: int, batch_size: int) -> tuple:
+    def _generator_sparse_dense(
+        cls, x: tiledb.Array, y: tiledb.Array, rows: int, batch_size: int
+    ) -> tuple:
         """
         A generator function that yields the next training batch.
         :param rows: Integer. The number of observations in x, y datasets.
         :param batch_size: Integer. Size of batch, i.e., number of rows returned per call.
         :return: Tuple. Tuple that contains x and y batches.
         """
+        x_shape = x.schema.domain.shape[1:]
 
         # Loop over batches
         # https://github.com/tensorflow/tensorflow/issues/44565
         for offset in range(0, rows, batch_size):
-            y_batch = cls.y[offset : offset + batch_size]
-            x_batch = cls.x[offset : offset + batch_size]
+            y_batch = y[offset : offset + batch_size]
+            x_batch = x[offset : offset + batch_size]
 
             # TODO: Both for dense case support multiple attributes
             values_y = list(y_batch.items())[0][1]
             values_x = list(x_batch.items())[0][1]
 
             x_coords = []
-            for i in range(0, cls.x.schema.domain.ndim):
-                dim_name = cls.x.schema.domain.dim(i).name
+            for i in range(0, x.schema.domain.ndim):
+                dim_name = x.schema.domain.dim(i).name
                 x_coords.append(np.array(x_batch[dim_name]))
 
             x_data = np.array(values_x).flatten()
@@ -150,5 +171,5 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
             yield tf.sparse.SparseTensor(
                 indices=constant_op.constant(list(zip(*x_coords)), dtype=tf.int64),
                 values=constant_op.constant(x_data, dtype=tf.float32),
-                dense_shape=(batch_size, cls.x_shape[1]),
+                dense_shape=(batch_size, x_shape[0]),
             ), values_y

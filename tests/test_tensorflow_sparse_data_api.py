@@ -121,9 +121,7 @@ class TestTileDBTensorflowSparseDataAPI(test.TestCase):
                     batch_size=BATCH_SIZE,
                 )
 
-                with tiledb.open(tiledb_uri_x, mode="r") as x, tiledb.open(
-                    tiledb_uri_y, mode="r"
-                ) as y:
+                with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
                     tiledb_dataset = TensorflowTileDBSparseDataset(
                         x_array=x, y_array=y, batch_size=BATCH_SIZE
                     )
@@ -157,9 +155,7 @@ class TestTileDBTensorflowSparseDataAPI(test.TestCase):
                     batch_size=BATCH_SIZE,
                 )
 
-                with tiledb.open(tiledb_uri_x, mode="r") as x, tiledb.open(
-                    tiledb_uri_y, mode="r"
-                ) as y:
+                with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
                     tiledb_dataset = TensorflowTileDBSparseDataset(
                         x_array=x, y_array=y, batch_size=BATCH_SIZE
                     )
@@ -198,9 +194,7 @@ class TestTileDBTensorflowSparseDataAPI(test.TestCase):
                     batch_size=BATCH_SIZE,
                 )
 
-                with tiledb.open(tiledb_uri_x, mode="r") as x, tiledb.open(
-                    tiledb_uri_y, mode="r"
-                ) as y:
+                with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
                     tiledb_dataset = TensorflowTileDBSparseDataset(
                         x_array=x, y_array=y, batch_size=BATCH_SIZE
                     )
@@ -228,9 +222,7 @@ class TestTileDBTensorflowSparseDataAPI(test.TestCase):
             batch_size=BATCH_SIZE,
         )
 
-        with tiledb.open(tiledb_uri_x, mode="r") as x, tiledb.open(
-            tiledb_uri_y, mode="r"
-        ) as y:
+        with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
             with self.assertRaises(Exception):
                 TensorflowTileDBSparseDataset(
                     x_array=x, y_array=y, batch_size=BATCH_SIZE
