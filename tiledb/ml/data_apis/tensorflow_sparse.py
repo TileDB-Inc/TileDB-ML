@@ -20,6 +20,11 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
         :param batch_size: Integer. The size of the batch that the implemented _generator method will return.
         """
 
+        if type(x_array) is tiledb.DenseArray:
+            raise TypeError(
+                "TensorflowTileDBSparseDataset class should be used with tiledb.SparseArray representation"
+            )
+
         cls.x = x_array
         cls.y = y_array
 
@@ -64,8 +69,6 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
     def _generator_sparse_sparse(cls, rows: int, batch_size: int) -> tuple:
         """
         A generator function that yields the next training batch.
-        :param x: TileDB array. An opened TileDB array which contains features.
-        :param y: TileDB array. An opened TileDB array which contains labels.
         :param rows: Integer. The number of observations in x, y datasets.
         :param batch_size: Integer. Size of batch, i.e., number of rows returned per call.
         :return: Tuple. Tuple that contains x and y batches.
@@ -81,7 +84,14 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
             values_x = list(x_batch.items())[0][1]
 
             # Transform to TF COO format y data
-            y_data = np.array(values_y).flatten()
+            y_data = np.array(values_y).ravel()
+            x_data = np.array(values_x).ravel()
+            if x_data.shape[0] != y_data.shape[0]:
+                raise ValueError(
+                    "X and Y should have the same number of rows, i.e., the 1st dimension "
+                    "of TileDB arrays X, Y should be of equal domain extent inside the batch"
+                )
+
             y_coords = []
             for i in range(0, cls.y.schema.domain.ndim):
                 dim_name = cls.y.schema.domain.dim(i).name
@@ -92,14 +102,6 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
             for i in range(0, cls.x.schema.domain.ndim):
                 dim_name = cls.x.schema.domain.dim(i).name
                 x_coords.append(np.array(x_batch[dim_name]))
-
-            x_data = np.array(values_x).flatten()
-
-            if x_data.shape[0] != y_data.shape[0]:
-                raise Exception(
-                    "X and Y should have the same number of rows, i.e., the 1st dimension "
-                    "of TileDB arrays X, Y should be of equal domain extent inside the batch"
-                )
 
             yield tf.sparse.SparseTensor(
                 indices=constant_op.constant(list(zip(*x_coords)), dtype=tf.int64),
@@ -115,8 +117,6 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
     def _generator_sparse_dense(cls, rows: int, batch_size: int) -> tuple:
         """
         A generator function that yields the next training batch.
-        :param x: TileDB array. An opened TileDB array which contains features.
-        :param y: TileDB array. An opened TileDB array which contains labels.
         :param rows: Integer. The number of observations in x, y datasets.
         :param batch_size: Integer. Size of batch, i.e., number of rows returned per call.
         :return: Tuple. Tuple that contains x and y batches.
@@ -142,7 +142,7 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
             # Detects empty lines due to sparsity inside the batch
             x_sparse_real_batch_size = x_coords[0].max(axis=0) - x_coords[0].min(axis=0)
             if values_y.shape[0] - x_sparse_real_batch_size != 1:
-                raise Exception(
+                raise ValueError(
                     "X and Y should have the same number of rows, i.e., the 1st dimension "
                     "of TileDB arrays X, Y should be of equal domain extent inside the batch"
                 )
