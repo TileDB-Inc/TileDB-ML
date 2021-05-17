@@ -28,7 +28,7 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
 
         # Check that x and y have the same number of rows
         if x_array.schema.domain.shape[0] != y_array.schema.domain.shape[0]:
-            raise Exception(
+            raise ValueError(
                 "X and Y should have the same number of rows, i.e., the 1st dimension "
                 "of TileDB arrays X, Y should be of equal domain extent."
             )
