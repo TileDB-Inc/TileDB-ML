@@ -121,9 +121,9 @@ class TestTileDBTensorflowSparseDataAPI(test.TestCase):
                     batch_size=BATCH_SIZE,
                 )
 
-                with tiledb.SparseArray(
-                    tiledb_uri_x, mode="r"
-                ) as x, tiledb.SparseArray(tiledb_uri_y, mode="r") as y:
+                with tiledb.open(tiledb_uri_x, mode="r") as x, tiledb.open(
+                    tiledb_uri_y, mode="r"
+                ) as y:
                     tiledb_dataset = TensorflowTileDBSparseDataset(
                         x_array=x, y_array=y, batch_size=BATCH_SIZE
                     )
@@ -157,7 +157,7 @@ class TestTileDBTensorflowSparseDataAPI(test.TestCase):
                     batch_size=BATCH_SIZE,
                 )
 
-                with tiledb.SparseArray(tiledb_uri_x, mode="r") as x, tiledb.DenseArray(
+                with tiledb.open(tiledb_uri_x, mode="r") as x, tiledb.open(
                     tiledb_uri_y, mode="r"
                 ) as y:
                     tiledb_dataset = TensorflowTileDBSparseDataset(
@@ -198,7 +198,7 @@ class TestTileDBTensorflowSparseDataAPI(test.TestCase):
                     batch_size=BATCH_SIZE,
                 )
 
-                with tiledb.SparseArray(tiledb_uri_x, mode="r") as x, tiledb.DenseArray(
+                with tiledb.open(tiledb_uri_x, mode="r") as x, tiledb.open(
                     tiledb_uri_y, mode="r"
                 ) as y:
                     tiledb_dataset = TensorflowTileDBSparseDataset(
@@ -228,7 +228,7 @@ class TestTileDBTensorflowSparseDataAPI(test.TestCase):
             batch_size=BATCH_SIZE,
         )
 
-        with tiledb.SparseArray(tiledb_uri_x, mode="r") as x, tiledb.SparseArray(
+        with tiledb.open(tiledb_uri_x, mode="r") as x, tiledb.open(
             tiledb_uri_y, mode="r"
         ) as y:
             with self.assertRaises(Exception):
