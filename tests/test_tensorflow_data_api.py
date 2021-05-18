@@ -98,9 +98,7 @@ class TestTileDBTensorflowDataAPI(test.TestCase):
                     batch_size=BATCH_SIZE,
                 )
 
-                with tiledb.DenseArray(tiledb_uri_x, mode="r") as x, tiledb.DenseArray(
-                    tiledb_uri_y, mode="r"
-                ) as y:
+                with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
 
                     tiledb_dataset = TensorflowTileDBDenseDataset(
                         x_array=x, y_array=y, batch_size=BATCH_SIZE
@@ -131,9 +129,7 @@ class TestTileDBTensorflowDataAPI(test.TestCase):
             batch_size=BATCH_SIZE,
         )
 
-        with tiledb.DenseArray(tiledb_uri_x, mode="r") as x, tiledb.DenseArray(
-            tiledb_uri_y, mode="r"
-        ) as y:
+        with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
             with self.assertRaises(Exception):
                 TensorflowTileDBDenseDataset(
                     x_array=x, y_array=y, batch_size=BATCH_SIZE
