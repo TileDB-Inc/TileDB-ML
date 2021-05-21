@@ -8,7 +8,7 @@ import numpy as np
 class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset):
     """
     Class that implements all functionality needed to load data from TileDB directly to the
-    PyTorch Dataloader API.
+    PyTorch Sparse Dataloader API.
     """
 
     def __init__(self, x_array: tiledb.Array, y_array: tiledb.Array, batch_size: int):
@@ -17,7 +17,7 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset):
         :param x_array: TileDB Dense Array. Array that contains features.
         :param y_array: TileDB Dense Array. Array that contains labels.
         :param batch_size: Integer. The size of the batch that the generator will return. Remember to set batch_size=None
-        when calling the PyTorch Dataloader API, because batching is taking place inside the TileDB IterableDataset.
+        when calling the PyTorch Sparse Dataloader API, because batching is taking place inside the TileDB IterableDataset.
         """
 
         # Check that x and y have the same number of rows
@@ -78,12 +78,12 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset):
                     "of TileDB arrays X, Y should be of equal domain extent inside the batch"
                 )
 
-            # Transform to TF COO format x data
             x_coords = []
             for i in range(0, self.x.schema.domain.ndim):
                 dim_name = self.x.schema.domain.dim(i).name
                 x_coords.append(np.array(x_batch[dim_name]))
 
+            # Normalise indices for torch.sparse.Tensor are batched with 0-index
             x_coords[0] = np.vectorize(
                 lambda x: x - np.max(x_coords[0]) + self.batch_size - 1
             )(x_coords[0])
@@ -96,6 +96,8 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset):
                 for i in range(0, self.y.schema.domain.ndim):
                     dim_name = self.y.schema.domain.dim(i).name
                     y_coords.append(np.array(y_batch[dim_name]))
+
+                # Normalise indices for torch.sparse.Tensor are batched with 0-index
                 y_coords[0] = np.vectorize(
                     lambda y: y - np.max(y_coords[0]) + self.batch_size - 1
                 )(y_coords[0])
