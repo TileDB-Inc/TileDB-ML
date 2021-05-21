@@ -88,6 +88,9 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset):
                 lambda x: x - np.max(x_coords[0]) + self.batch_size - 1
             )(x_coords[0])
 
+            # TODO: Sparse labels are not supported by Pytorch during this iteration for completeness
+            # we support the ingestion of sparseArray in labels, but loss and backward will fail due to
+            # SparseCPU backend
             if self.iter_sparse_label:
                 y_coords = []
                 for i in range(0, self.y.schema.domain.ndim):

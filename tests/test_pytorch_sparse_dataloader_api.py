@@ -16,12 +16,12 @@ NUM_OF_CLASSES = 5
 BATCH_SIZE = 20
 ROWS = 1000
 
-# We test for 2d, 3d, 4d and 5d data
-# INPUT_SHAPES = [(10,), (10, 3), (10, 10, 3), (10, 10, 10, 3)]
+# We test for 2d
 INPUT_SHAPES = [
     (10,),
 ]
 # We test for single and multiple workers
+# TODO#1: Multiple workers require tiledb.SparseArray to be pickled hence serializable as well
 NUM_OF_WORKERS = [0]
 
 
@@ -189,6 +189,7 @@ class TestTileDBSparsePyTorchDataloaderAPI(unittest.TestCase):
                         x_array=x, y_array=y, batch_size=BATCH_SIZE
                     )
 
+    # This test is practically skipped but is linked to the TODO#1
     def test_sparse_no_duplicates_with_multiple_workers(self):
         for workers in NUM_OF_WORKERS[2:]:
             with self.subTest():
