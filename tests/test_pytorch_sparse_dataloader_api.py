@@ -97,8 +97,8 @@ class Net(nn.Module):
         return logits
 
 
-class TestTileDBDensePyTorchDataloaderAPI(unittest.TestCase):
-    def test_tiledb_pytorch_data_api_train_with_multiple_dim_data(self):
+class TestTileDBSparsePyTorchDataloaderAPI(unittest.TestCase):
+    def test_tiledb_pytorch_sparse_data_api_train_with_multiple_dim_data(self):
         for input_shape in INPUT_SHAPES:
             for workers in NUM_OF_WORKERS:
                 with self.subTest():
@@ -162,7 +162,7 @@ class TestTileDBDensePyTorchDataloaderAPI(unittest.TestCase):
                                     loss.backward()
                                     optimizer.step()
 
-    def test_except_with_diff_number_of_x_y_rows(self):
+    def test_except_with_diff_number_of_x_y_sparse_rows(self):
         with tempfile.TemporaryDirectory() as tiledb_uri_x, tempfile.TemporaryDirectory() as tiledb_uri_y:
             # Add one extra row on X
             dataset_shape_x = (ROWS + 1, INPUT_SHAPES[0])
@@ -189,7 +189,7 @@ class TestTileDBDensePyTorchDataloaderAPI(unittest.TestCase):
                         x_array=x, y_array=y, batch_size=BATCH_SIZE
                     )
 
-    def test_no_duplicates_with_multiple_workers(self):
+    def test_sparse_no_duplicates_with_multiple_workers(self):
         for workers in NUM_OF_WORKERS[2:]:
             with self.subTest():
                 with tempfile.TemporaryDirectory() as tiledb_uri_x, tempfile.TemporaryDirectory() as tiledb_uri_y:
