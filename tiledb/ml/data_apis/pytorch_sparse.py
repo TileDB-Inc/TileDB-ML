@@ -31,6 +31,11 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset):
         self.y = y_array
         self.batch_size = batch_size
 
+        if isinstance(y_array, tiledb.SparseArray):
+            self.iter_sparse_label = True
+        else:
+            self.iter_sparse_label = False
+
     def __iter__(self):
         worker_info = torch.utils.data.get_worker_info()
 
@@ -49,8 +54,7 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset):
             iter_start = worker_id * per_worker
             iter_end = min(iter_start + per_worker, rows)
 
-        # x_attr_name = self.x.schema.attr(0).name
-        # y_attr_name = self.y.schema.attr(0).name
+        y_attr_name = self.y.schema.attr(0).name
 
         x_shape = self.x.schema.domain.shape[1:]
         y_shape = self.y.schema.domain.shape[1:]
@@ -74,11 +78,6 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset):
                     "of TileDB arrays X, Y should be of equal domain extent inside the batch"
                 )
 
-            y_coords = []
-            for i in range(0, self.y.schema.domain.ndim):
-                dim_name = self.y.schema.domain.dim(i).name
-                y_coords.append(np.array(y_batch[dim_name]))
-
             # Transform to TF COO format x data
             x_coords = []
             for i in range(0, self.x.schema.domain.ndim):
@@ -88,18 +87,31 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset):
             x_coords[0] = np.vectorize(
                 lambda x: x - np.max(x_coords[0]) + self.batch_size - 1
             )(x_coords[0])
-            y_coords[0] = np.vectorize(
-                lambda y: y - np.max(y_coords[0]) + self.batch_size - 1
-            )(y_coords[0])
 
-            yield torch.sparse_coo_tensor(
-                torch.tensor(list(zip(*x_coords))).t(),
-                x_data,
-                (self.batch_size, x_shape[0]),
-                requires_grad=False,
-            ), torch.sparse_coo_tensor(
-                torch.tensor(list(zip(*y_coords))).t(),
-                y_data,
-                (self.batch_size, y_shape[0]),
-                requires_grad=True,
-            )
+            if self.iter_sparse_label:
+                y_coords = []
+                for i in range(0, self.y.schema.domain.ndim):
+                    dim_name = self.y.schema.domain.dim(i).name
+                    y_coords.append(np.array(y_batch[dim_name]))
+                y_coords[0] = np.vectorize(
+                    lambda y: y - np.max(y_coords[0]) + self.batch_size - 1
+                )(y_coords[0])
+
+                yield torch.sparse_coo_tensor(
+                    torch.tensor(list(zip(*x_coords))).t(),
+                    x_data,
+                    (self.batch_size, x_shape[0]),
+                    requires_grad=False,
+                ), torch.sparse_coo_tensor(
+                    torch.tensor(list(zip(*y_coords))).t(),
+                    y_data,
+                    (self.batch_size, y_shape[0]),
+                    requires_grad=False,
+                )
+            else:
+                yield torch.sparse_coo_tensor(
+                    torch.tensor(list(zip(*x_coords))).t(),
+                    x_data,
+                    (self.batch_size, x_shape[0]),
+                    requires_grad=False,
+                ), self.y[offset : offset + self.batch_size][y_attr_name]

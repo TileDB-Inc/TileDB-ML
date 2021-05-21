@@ -105,7 +105,7 @@ class TestTileDBDensePyTorchDataloaderAPI(unittest.TestCase):
                     with tempfile.TemporaryDirectory() as tiledb_uri_x, tempfile.TemporaryDirectory() as tiledb_uri_y:
 
                         dataset_shape_x = (ROWS, input_shape)
-                        dataset_shape_y = (ROWS, (NUM_OF_CLASSES,))
+                        dataset_shape_y = (ROWS,)
 
                         ingest_in_tiledb_sparse(
                             uri=tiledb_uri_x,
@@ -114,10 +114,10 @@ class TestTileDBDensePyTorchDataloaderAPI(unittest.TestCase):
                             ),
                             batch_size=BATCH_SIZE,
                         )
-                        ingest_in_tiledb_sparse(
+                        ingest_in_tiledb(
                             uri=tiledb_uri_y,
-                            data=create_sparse_array_one_hot_2d(
-                                dataset_shape_y[0], dataset_shape_y[1]
+                            data=np.random.randint(
+                                low=0, high=NUM_OF_CLASSES, size=dataset_shape_y
                             ),
                             batch_size=BATCH_SIZE,
                         )
@@ -140,8 +140,8 @@ class TestTileDBDensePyTorchDataloaderAPI(unittest.TestCase):
 
                             # Train network
                             net = Net(shape=dataset_shape_x[1:])
-                            # criterion = torch.nn.BCEWithLogitsLoss(pos_weight=torch.tensor(10.))
-                            optimizer = optim.SparseAdam(
+                            criterion = torch.nn.CrossEntropyLoss()
+                            optimizer = optim.Adam(
                                 net.parameters(),
                                 lr=0.001,
                                 betas=(0.9, 0.999),
@@ -155,7 +155,11 @@ class TestTileDBDensePyTorchDataloaderAPI(unittest.TestCase):
                                     # zero the parameter gradients
                                     optimizer.zero_grad()
                                     # forward + backward + optimize
-                                    # outputs = net(inputs)
+                                    outputs = net(inputs)
+                                    loss = criterion(
+                                        outputs, labels.type(torch.LongTensor)
+                                    )
+                                    loss.backward()
                                     optimizer.step()
 
     def test_except_with_diff_number_of_x_y_rows(self):
