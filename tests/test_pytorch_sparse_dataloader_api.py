@@ -1,4 +1,5 @@
-"""Tests for TileDB integration with Pytorch Data API."""
+"""Tests for TileDB integration with Pytorch sparse Data API."""
+import itertools
 
 import torch
 import tiledb
@@ -21,7 +22,7 @@ INPUT_SHAPES = [
     (10,),
 ]
 # We test for single and multiple workers
-# TODO#1: Multiple workers require tiledb.SparseArray to be pickled hence serializable as well
+# TODO: Multiple workers require tiledb.SparseArray to be pickled hence serializable as well
 NUM_OF_WORKERS = [0]
 
 
@@ -54,28 +55,16 @@ def get_schema(data: np.array, batch_size: int, sparse: bool) -> tiledb.ArraySch
     return schema
 
 
-def ingest_in_tiledb(data: np.array, batch_size: int, uri: str):
-    schema = get_schema(data, batch_size, False)
-
-    # Create array
-    tiledb.Array.create(uri, schema)
-
-    # Ingest
-    with tiledb.open(uri, "w") as tiledb_array:
-        tiledb_array[:] = {"features": data}
-
-
-def ingest_in_tiledb_sparse(data: np.array, batch_size: int, uri: str):
-    schema = get_schema(data, batch_size, True)
+def ingest_in_tiledb(data: np.array, batch_size: int, uri: str, sparse: bool):
+    schema = get_schema(data, batch_size, sparse)
 
     # Create the (empty) array on disk.
     tiledb.Array.create(uri, schema)
 
     # Ingest
     with tiledb.open(uri, "w") as tiledb_array:
-        idx = np.nonzero(data)
-        I, J = idx[0], idx[1]
-        tiledb_array[I, J] = {"features": data[idx]}
+        idx = np.nonzero(data) if sparse else slice(None)
+        tiledb_array[idx] = {"features": data[idx]}
 
 
 class Net(nn.Module):
@@ -99,118 +88,26 @@ class Net(nn.Module):
 
 class TestTileDBSparsePyTorchDataloaderAPI(unittest.TestCase):
     def test_tiledb_pytorch_sparse_data_api_train_with_multiple_dim_data(self):
-        for input_shape in INPUT_SHAPES:
-            for workers in NUM_OF_WORKERS:
-                with self.subTest():
-                    with tempfile.TemporaryDirectory() as tiledb_uri_x, tempfile.TemporaryDirectory() as tiledb_uri_y:
-
-                        dataset_shape_x = (ROWS, input_shape)
-                        dataset_shape_y = (ROWS,)
-
-                        ingest_in_tiledb_sparse(
-                            uri=tiledb_uri_x,
-                            data=create_sparse_array_one_hot_2d(
-                                dataset_shape_x[0], dataset_shape_x[1]
-                            ),
-                            batch_size=BATCH_SIZE,
-                        )
-                        ingest_in_tiledb(
-                            uri=tiledb_uri_y,
-                            data=np.random.randint(
-                                low=0, high=NUM_OF_CLASSES, size=dataset_shape_y
-                            ),
-                            batch_size=BATCH_SIZE,
-                        )
-
-                        with tiledb.open(tiledb_uri_x) as x, tiledb.open(
-                            tiledb_uri_y
-                        ) as y:
-
-                            tiledb_dataset = PyTorchTileDBSparseDataset(
-                                x_array=x, y_array=y, batch_size=BATCH_SIZE
-                            )
-
-                            self.assertIsInstance(
-                                tiledb_dataset, torch.utils.data.IterableDataset
-                            )
-
-                            train_loader = torch.utils.data.DataLoader(
-                                tiledb_dataset, batch_size=None, num_workers=workers
-                            )
-
-                            # Train network
-                            net = Net(shape=dataset_shape_x[1:])
-                            criterion = torch.nn.CrossEntropyLoss()
-                            optimizer = optim.Adam(
-                                net.parameters(),
-                                lr=0.001,
-                                betas=(0.9, 0.999),
-                                eps=1e-08,
-                            )
-
-                            for epoch in range(
-                                1
-                            ):  # loop over the dataset multiple times
-                                for inputs, labels in train_loader:
-                                    # zero the parameter gradients
-                                    optimizer.zero_grad()
-                                    # forward + backward + optimize
-                                    outputs = net(inputs)
-                                    loss = criterion(
-                                        outputs, labels.type(torch.LongTensor)
-                                    )
-                                    loss.backward()
-                                    optimizer.step()
-
-    def test_except_with_diff_number_of_x_y_sparse_rows(self):
-        with tempfile.TemporaryDirectory() as tiledb_uri_x, tempfile.TemporaryDirectory() as tiledb_uri_y:
-            # Add one extra row on X
-            dataset_shape_x = (ROWS + 1, INPUT_SHAPES[0])
-            dataset_shape_y = (ROWS, (NUM_OF_CLASSES,))
-
-            ingest_in_tiledb_sparse(
-                uri=tiledb_uri_x,
-                data=create_sparse_array_one_hot_2d(
-                    dataset_shape_x[0], dataset_shape_x[1]
-                ),
-                batch_size=BATCH_SIZE,
-            )
-            ingest_in_tiledb_sparse(
-                uri=tiledb_uri_y,
-                data=create_sparse_array_one_hot_2d(
-                    dataset_shape_y[0], dataset_shape_y[1]
-                ),
-                batch_size=BATCH_SIZE,
-            )
-
-            with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
-                with self.assertRaises(Exception):
-                    PyTorchTileDBSparseDataset(
-                        x_array=x, y_array=y, batch_size=BATCH_SIZE
-                    )
-
-    # This test is practically skipped but is linked to the TODO#1
-    def test_sparse_no_duplicates_with_multiple_workers(self):
-        for workers in NUM_OF_WORKERS[2:]:
+        for input_shape, workers in itertools.product(INPUT_SHAPES, NUM_OF_WORKERS):
             with self.subTest():
                 with tempfile.TemporaryDirectory() as tiledb_uri_x, tempfile.TemporaryDirectory() as tiledb_uri_y:
 
-                    dataset_shape_x = (ROWS,) + INPUT_SHAPES[1]
-                    dataset_shape_y = (ROWS, (NUM_OF_CLASSES,))
+                    dataset_shape_x = (ROWS, input_shape)
+                    dataset_shape_y = (ROWS,)
 
-                    ingest_in_tiledb_sparse(
+                    ingest_in_tiledb(
                         uri=tiledb_uri_x,
-                        data=create_sparse_array_one_hot_2d(
-                            dataset_shape_x[0], dataset_shape_x[1]
-                        ),
+                        data=create_sparse_array_one_hot_2d(*dataset_shape_x),
                         batch_size=BATCH_SIZE,
+                        sparse=True,
                     )
-                    ingest_in_tiledb_sparse(
+                    ingest_in_tiledb(
                         uri=tiledb_uri_y,
-                        data=create_sparse_array_one_hot_2d(
-                            dataset_shape_y[0], dataset_shape_y[1]
+                        data=np.random.randint(
+                            low=0, high=NUM_OF_CLASSES, size=dataset_shape_y
                         ),
                         batch_size=BATCH_SIZE,
+                        sparse=False,
                     )
 
                     with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
@@ -227,23 +124,48 @@ class TestTileDBSparsePyTorchDataloaderAPI(unittest.TestCase):
                             tiledb_dataset, batch_size=None, num_workers=workers
                         )
 
-                        unique_inputs = []
-                        unique_labels = []
+                        # Train network
+                        net = Net(shape=dataset_shape_x[1:])
+                        criterion = torch.nn.CrossEntropyLoss()
+                        optimizer = optim.Adam(
+                            net.parameters(),
+                            lr=0.001,
+                            betas=(0.9, 0.999),
+                            eps=1e-08,
+                        )
 
-                        for batchindx, data in enumerate(train_loader):
-                            # Keep unique X tensors
-                            if not any(
-                                np.array_equal(data[0].numpy(), unique_input)
-                                for unique_input in unique_inputs
-                            ):
-                                unique_inputs.append(data[0].numpy())
+                        # loop over the dataset multiple times
+                        for epoch in range(1):
+                            for inputs, labels in train_loader:
+                                # zero the parameter gradients
+                                optimizer.zero_grad()
+                                # forward + backward + optimize
+                                outputs = net(inputs)
+                                loss = criterion(outputs, labels.type(torch.LongTensor))
+                                loss.backward()
+                                optimizer.step()
 
-                            # Keep unique Y tensors
-                            if not any(
-                                np.array_equal(data[1].numpy(), unique_label)
-                                for unique_label in unique_labels
-                            ):
-                                unique_labels.append(data[1].numpy())
+    def test_except_with_diff_number_of_x_y_sparse_rows(self):
+        with tempfile.TemporaryDirectory() as tiledb_uri_x, tempfile.TemporaryDirectory() as tiledb_uri_y:
+            # Add one extra row on X
+            dataset_shape_x = (ROWS + 1, INPUT_SHAPES[0])
+            dataset_shape_y = (ROWS, (NUM_OF_CLASSES,))
 
-                        self.assertEqual(len(unique_inputs) - 1, batchindx)
-                        self.assertEqual(len(unique_labels) - 1, batchindx)
+            ingest_in_tiledb(
+                uri=tiledb_uri_x,
+                data=create_sparse_array_one_hot_2d(*dataset_shape_x),
+                batch_size=BATCH_SIZE,
+                sparse=True,
+            )
+            ingest_in_tiledb(
+                uri=tiledb_uri_y,
+                data=create_sparse_array_one_hot_2d(*dataset_shape_y),
+                batch_size=BATCH_SIZE,
+                sparse=True,
+            )
+
+            with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
+                with self.assertRaises(Exception):
+                    PyTorchTileDBSparseDataset(
+                        x_array=x, y_array=y, batch_size=BATCH_SIZE
+                    )
