@@ -81,7 +81,7 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset):
             # to be in the range of [0, self.batch_size] so the torch.sparse.Tensors can be created batch-wise.
             # If we do not normalise the sparse tensor is being created but with a dimension [0, max(coord_index)],
             # which is overkill
-            x_coords[0] -= x_coords[0].max() - self.batch_size + 1
+            x_coords[0] -= x_coords[0].min()
 
             # TODO: Sparse labels are not supported by Pytorch during this iteration for completeness
             # we support the ingestion of sparseArray in labels, but loss and backward will fail due to
@@ -106,7 +106,7 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset):
                 # to be in the range of [0, self.batch_size] so the torch.sparse.Tensors can be created batch-wise.
                 # If we do not normalise the sparse tensor is being created but with a dimension [0, max(coord_index)],
                 # which is overkill
-                y_coords[0] -= y_coords[0].max() - self.batch_size + 1
+                y_coords[0] -= y_coords[0].min()
 
                 y_tensor = torch.sparse_coo_tensor(
                     torch.tensor(list(zip(*y_coords))).t(),
