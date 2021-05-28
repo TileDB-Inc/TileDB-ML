@@ -1,4 +1,5 @@
 """Functionality for loading data directly from sparse TileDB arrays into the PyTorch Dataloader API."""
+import numpy as np
 import tiledb
 import torch
 import math
@@ -30,6 +31,34 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset):
         self.x = x_array
         self.y = y_array
         self.batch_size = batch_size
+
+    def __check_row_dims(self, x_row_idx: np.array, y_row_idx: np.array):
+        """
+        Check the row dimensionality of x,y in case y is sparse or not
+
+        Parameters:
+            x_row_idx (list): Expects the row indexes x_coords of x Sparse Array of the
+            dimension that is being batched
+
+            y_row_idx (list): if y Sparse Array -> Expects the row indexes y_coords of the
+            dimension that is being batched else if y is Dense Array -> data of y
+
+        Raises:
+            ValueError: If unique coords idx of x and y mismatch (both-sparse) or
+            when unique coords idx of x mismatch y elements when y is Dense
+        """
+        if isinstance(self.y, tiledb.SparseArray):
+            if set(x_row_idx) != set(y_row_idx):
+                raise ValueError(
+                    "X and Y should have the same number of rows, i.e., the 1st dimension "
+                    "of TileDB arrays X, Y should be of equal domain extent inside the batch"
+                )
+        else:
+            if np.unique(x_row_idx).size != y_row_idx.size:
+                raise ValueError(
+                    "X and Y should have the same number of rows, i.e., the 1st dimension "
+                    "of TileDB arrays X, Y should be of equal domain extent inside the batch"
+                )
 
     def __iter__(self):
         worker_info = torch.utils.data.get_worker_info()
@@ -66,11 +95,6 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset):
             # Transform to TF COO format y data
             x_data = values_x.ravel()
             y_data = values_y.ravel()
-            if x_data.shape[0] != y_data.shape[0]:
-                raise ValueError(
-                    "X and Y should have the same number of rows, i.e., the 1st dimension "
-                    "of TileDB arrays X, Y should be of equal domain extent inside the batch"
-                )
 
             x_coords = []
             for i in range(0, self.x.schema.domain.ndim):
@@ -108,6 +132,8 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset):
                 # which is overkill
                 y_coords[0] -= y_coords[0].min()
 
+                self.__check_row_dims(x_coords[0], y_coords[0])
+
                 y_tensor = torch.sparse_coo_tensor(
                     torch.tensor(list(zip(*y_coords))).t(),
                     y_data,
@@ -115,6 +141,7 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset):
                     requires_grad=False,
                 )
             else:
+                self.__check_row_dims(x_coords[0], y_data)
                 y_tensor = self.y[offset : offset + self.batch_size][y_attr_name]
 
             yield x_tensor, y_tensor
