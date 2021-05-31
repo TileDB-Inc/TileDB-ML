@@ -205,3 +205,28 @@ class TestTileDBDensePyTorchDataloaderAPI(unittest.TestCase):
 
                         self.assertEqual(len(unique_inputs) - 1, batchindx)
                         self.assertEqual(len(unique_labels) - 1, batchindx)
+
+    def test_dataset_length(self):
+        with tempfile.TemporaryDirectory() as tiledb_uri_x, tempfile.TemporaryDirectory() as tiledb_uri_y:
+            dataset_shape_x = (ROWS,) + INPUT_SHAPES[1]
+            dataset_shape_y = (ROWS,)
+
+            ingest_in_tiledb(
+                uri=tiledb_uri_x,
+                data=np.random.rand(*dataset_shape_x),
+                batch_size=BATCH_SIZE,
+            )
+            ingest_in_tiledb(
+                uri=tiledb_uri_y,
+                data=np.random.randint(
+                    low=0, high=NUM_OF_CLASSES, size=dataset_shape_y
+                ),
+                batch_size=BATCH_SIZE,
+            )
+
+            with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
+                tiledb_dataset = PyTorchTileDBDenseDataset(
+                    x_array=x, y_array=y, batch_size=BATCH_SIZE
+                )
+
+                self.assertEqual(len(tiledb_dataset), ROWS)

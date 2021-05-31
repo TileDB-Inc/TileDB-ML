@@ -64,3 +64,6 @@ class PyTorchTileDBDenseDataset(torch.utils.data.IterableDataset):
             yield self.x[offset : offset + self.batch_size][x_attr_name], self.y[
                 offset : offset + self.batch_size
             ][y_attr_name]
+
+    def __len__(self):
+        return self.x.shape[0]
