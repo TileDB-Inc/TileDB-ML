@@ -20,7 +20,7 @@ setuptools.setup(
         "torch>=1.8.1",
         "scikit-learn>=0.23.0",
         "torchvision>=0.9.1",
-        "tensorflow>=2.2.0,<=2.4.0",
+        "tensorflow>=2.5.0",
     ],
     classifiers=[
         "Programming Language :: Python :: 3",
