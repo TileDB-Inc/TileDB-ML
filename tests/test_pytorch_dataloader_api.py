@@ -1,4 +1,4 @@
-"""Tests for TileDB integration with Tensorflow Data API."""
+"""Tests for TileDB integration with PyTorch Data API for Dense Arrays."""
 
 import torch
 import tiledb
