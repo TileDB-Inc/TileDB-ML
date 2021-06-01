@@ -37,10 +37,10 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset):
         Check the row dimensionality of x,y in case y is sparse or not
 
         Parameters:
-            x_row_idx (np.array): Expects the row indexes x_coords of x Sparse Array of the
+            x_row_idx (np.array): Expects the row indices x_coords of x Sparse Array of the
             dimension that is being batched
 
-            y_row_idx (np.array): if y Sparse Array -> Expects the row indexes y_coords of the
+            y_row_idx (np.array): if y Sparse Array -> Expects the row indices y_coords of the
             dimension that is being batched else if y is Dense Array -> data of y
 
         Raises:
@@ -54,7 +54,7 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset):
         ):
             raise ValueError(
                 "X and Y should have the same number of rows, i.e., the 1st dimension "
-                "of TileDB arrays X, Y should be of equal domain extent inside the batch"
+                "of TileDB arrays X, Y should be of equal domain extent inside the batch."
             )
 
     def __iter__(self):
