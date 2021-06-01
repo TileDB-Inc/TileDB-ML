@@ -37,10 +37,10 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset):
         Check the row dimensionality of x,y in case y is sparse or not
 
         Parameters:
-            x_row_idx (list): Expects the row indexes x_coords of x Sparse Array of the
+            x_row_idx (np.array): Expects the row indexes x_coords of x Sparse Array of the
             dimension that is being batched
 
-            y_row_idx (list): if y Sparse Array -> Expects the row indexes y_coords of the
+            y_row_idx (np.array): if y Sparse Array -> Expects the row indexes y_coords of the
             dimension that is being batched else if y is Dense Array -> data of y
 
         Raises:
