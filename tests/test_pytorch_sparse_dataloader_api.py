@@ -169,3 +169,104 @@ class TestTileDBSparsePyTorchDataloaderAPI(unittest.TestCase):
                     PyTorchTileDBSparseDataset(
                         x_array=x, y_array=y, batch_size=BATCH_SIZE
                     )
+
+    def test_except_with_diff_number_of_batch_x_y_rows_empty_record(self):
+        with tempfile.TemporaryDirectory() as tiledb_uri_x, tempfile.TemporaryDirectory() as tiledb_uri_y:
+            # Add one extra row on X
+            dataset_shape_x = (ROWS, INPUT_SHAPES[0])
+            dataset_shape_y = (ROWS, (NUM_OF_CLASSES,))
+
+            spoiled_data = create_sparse_array_one_hot_2d(*dataset_shape_x)
+            spoiled_data[np.nonzero(spoiled_data[0])] = 0
+
+            ingest_in_tiledb(
+                uri=tiledb_uri_x,
+                data=spoiled_data,
+                batch_size=BATCH_SIZE,
+                sparse=True,
+            )
+            ingest_in_tiledb(
+                uri=tiledb_uri_y,
+                data=create_sparse_array_one_hot_2d(*dataset_shape_y),
+                batch_size=BATCH_SIZE,
+                sparse=False,
+            )
+
+            with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
+                with self.assertRaises(Exception):
+                    tiledb_dataset = PyTorchTileDBSparseDataset(
+                        x_array=x, y_array=y, batch_size=BATCH_SIZE
+                    )
+
+                    train_loader = torch.utils.data.DataLoader(
+                        tiledb_dataset, batch_size=None, num_workers=0
+                    )
+
+                    # Train network
+                    net = Net(shape=dataset_shape_x[1:])
+                    criterion = torch.nn.CrossEntropyLoss()
+                    optimizer = optim.Adam(
+                        net.parameters(),
+                        lr=0.001,
+                        betas=(0.9, 0.999),
+                        eps=1e-08,
+                    )
+
+                    # loop over the dataset multiple times
+                    for epoch in range(1):
+                        for inputs, labels in train_loader:
+                            # zero the parameter gradients
+                            optimizer.zero_grad()
+                            # forward + backward + optimize
+                            outputs = net(inputs)
+                            loss = criterion(outputs, labels.type(torch.LongTensor))
+                            loss.backward()
+                            optimizer.step()
+
+    def test_except_with_multiple_nz_value_record_of_batch_x_y_rows(self):
+        with tempfile.TemporaryDirectory() as tiledb_uri_x, tempfile.TemporaryDirectory() as tiledb_uri_y:
+            # Add one extra row on X
+            dataset_shape_x = (ROWS, INPUT_SHAPES[0])
+            dataset_shape_y = (ROWS, (NUM_OF_CLASSES,))
+
+            spoiled_data = create_sparse_array_one_hot_2d(*dataset_shape_x)
+            spoiled_data[0] += 1
+
+            ingest_in_tiledb(
+                uri=tiledb_uri_x,
+                data=spoiled_data,
+                batch_size=BATCH_SIZE,
+                sparse=True,
+            )
+            ingest_in_tiledb(
+                uri=tiledb_uri_y,
+                data=create_sparse_array_one_hot_2d(*dataset_shape_y),
+                batch_size=BATCH_SIZE,
+                sparse=False,
+            )
+
+            with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
+                tiledb_dataset = PyTorchTileDBSparseDataset(
+                    x_array=x, y_array=y, batch_size=BATCH_SIZE
+                )
+
+                train_loader = torch.utils.data.DataLoader(
+                    tiledb_dataset, batch_size=None, num_workers=0
+                )
+
+                # Train network
+                net = Net(shape=dataset_shape_x[1:])
+                optimizer = optim.Adam(
+                    net.parameters(),
+                    lr=0.001,
+                    betas=(0.9, 0.999),
+                    eps=1e-08,
+                )
+
+                # loop over the dataset multiple times
+                for epoch in range(1):
+                    for inputs, labels in train_loader:
+                        # zero the parameter gradients
+                        optimizer.zero_grad()
+                        # forward + backward + optimize
+                        net(inputs)

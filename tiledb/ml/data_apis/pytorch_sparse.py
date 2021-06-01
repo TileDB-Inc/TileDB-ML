@@ -47,18 +47,15 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset):
             ValueError: If unique coords idx of x and y mismatch (both-sparse) or
             when unique coords idx of x mismatch y elements when y is Dense
         """
-        if isinstance(self.y, tiledb.SparseArray):
-            if set(x_row_idx) != set(y_row_idx):
-                raise ValueError(
-                    "X and Y should have the same number of rows, i.e., the 1st dimension "
-                    "of TileDB arrays X, Y should be of equal domain extent inside the batch"
-                )
-        else:
-            if np.unique(x_row_idx).size != y_row_idx.size:
-                raise ValueError(
-                    "X and Y should have the same number of rows, i.e., the 1st dimension "
-                    "of TileDB arrays X, Y should be of equal domain extent inside the batch"
-                )
+        if np.unique(x_row_idx).size != (
+            np.unique(y_row_idx).size
+            if isinstance(self.y, tiledb.SparseArray)
+            else y_row_idx.shape[0]
+        ):
+            raise ValueError(
+                "X and Y should have the same number of rows, i.e., the 1st dimension "
+                "of TileDB arrays X, Y should be of equal domain extent inside the batch"
+            )
 
     def __iter__(self):
         worker_info = torch.utils.data.get_worker_info()
@@ -141,7 +138,8 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset):
                     requires_grad=False,
                 )
             else:
-                self.__check_row_dims(x_coords[0], y_data)
+                # for the check slice the row dimension of y dense array
+                self.__check_row_dims(x_coords[0], values_y)
                 y_tensor = self.y[offset : offset + self.batch_size][y_attr_name]
 
             yield x_tensor, y_tensor
