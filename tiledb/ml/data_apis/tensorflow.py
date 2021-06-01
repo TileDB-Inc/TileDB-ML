@@ -1,9 +1,10 @@
 """Functionality for loading data directly from TileDB arrays into the Tensorflow Data API."""
 import tiledb
 import tensorflow as tf
+from tensorflow.python.data.ops.dataset_ops import FlatMapDataset
 
 
-class TensorflowTileDBDenseDataset(tf.data.Dataset):
+class TensorflowTileDBDenseDataset(FlatMapDataset):
     """
     Class that implements all functionality needed to load data from TileDB directly to the
     Tensorflow Data API, by employing generators.
@@ -42,7 +43,7 @@ class TensorflowTileDBDenseDataset(tf.data.Dataset):
         x_dtype = x_array.schema.attr(0).dtype
         y_dtype = y_array.schema.attr(0).dtype
 
-        return tf.data.Dataset.from_generator(
+        obj = tf.data.Dataset.from_generator(
             generator=cls._generator,
             output_signature=(
                 tf.TensorSpec(shape=x_shape, dtype=x_dtype),
@@ -50,6 +51,16 @@ class TensorflowTileDBDenseDataset(tf.data.Dataset):
             ),
             args=(x_array, y_array, rows, batch_size),
         )
+
+        # Class reassignment in order to be able to override __len__().
+        obj.__class__ = cls
+
+        return obj
+
+    # We also have to define __init__, in order to be able to override __len__().  We also need the same
+    # signature with __new__()
+    def __init__(self, x_array: tiledb.Array, y_array: tiledb.Array, batch_size: int):
+        self.length = x_array.schema.domain.shape[0]
 
     @staticmethod
     def _generator(
@@ -67,3 +78,6 @@ class TensorflowTileDBDenseDataset(tf.data.Dataset):
         for offset in range(0, rows, batch_size):
             # Yield the next training batch
             yield x[offset : offset + batch_size], y[offset : offset + batch_size]
+
+    def __len__(self):
+        return self.length

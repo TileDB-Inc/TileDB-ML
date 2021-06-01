@@ -134,3 +134,31 @@ class TestTileDBTensorflowDataAPI(test.TestCase):
                 TensorflowTileDBDenseDataset(
                     x_array=x, y_array=y, batch_size=BATCH_SIZE
                 )
+
+    @testing_utils.run_v2_only
+    def test_dataset_length(self):
+        array_uuid = str(uuid.uuid4())
+        tiledb_uri_x = os.path.join(self.get_temp_dir(), "x" + array_uuid)
+        tiledb_uri_y = os.path.join(self.get_temp_dir(), "y" + array_uuid)
+
+        # Add one extra row on X
+        dataset_shape_x = (ROWS,) + INPUT_SHAPES[0]
+        dataset_shape_y = (ROWS, NUM_OF_CLASSES)
+
+        ingest_in_tiledb(
+            uri=tiledb_uri_x,
+            data=np.random.rand(*dataset_shape_x),
+            batch_size=BATCH_SIZE,
+        )
+        ingest_in_tiledb(
+            uri=tiledb_uri_y,
+            data=np.random.rand(*dataset_shape_y),
+            batch_size=BATCH_SIZE,
+        )
+
+        with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
+            tiledb_dataset = TensorflowTileDBDenseDataset(
+                x_array=x, y_array=y, batch_size=BATCH_SIZE
+            )
+
+            self.assertEqual(len(tiledb_dataset), ROWS)
