@@ -45,9 +45,6 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
         y_dtype = y_array.schema.attr(0).dtype
 
         if isinstance(y_array, tiledb.SparseArray):
-            # Function pointer to avoid setting y_array argument when used
-            cls._check_row_dims = partial(cls.__check_row_dims, y_array)
-
             generator_ = partial(
                 cls._generator_sparse_sparse,
                 x=x_array,
@@ -63,9 +60,6 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
                 ),
             )
         else:
-            # Function pointer to avoid setting y_array argument when used
-            cls._check_row_dims = partial(cls.__check_row_dims, y_array)
-
             generator_ = partial(
                 cls._generator_sparse_dense,
                 x=x_array,
@@ -81,16 +75,12 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
                 ),
             )
 
-    @classmethod
-    def __check_row_dims(
-        cls, y_array: tiledb.Array, x_row_idx: np.array, y_row_idx: np.array
-    ):
+    @staticmethod
+    def __check_row_dims(x_row_idx: np.array, y_row_idx: np.array, sparse: bool):
         """
         Check the row dimensionality of x,y in case y is sparse or not
 
         Parameters:
-            y_array (tiledb.Array): Expects the instance of y [Sparse/Dense] to branch the check of
-            rows dimension's execution path
 
             x_row_idx (np.array): Expects the row indices x_coords of x Sparse Array of the
             dimension that is being batched
@@ -103,9 +93,7 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
             when unique coords idx of x mismatch y elements when y is Dense
         """
         if np.unique(x_row_idx).size != (
-            np.unique(y_row_idx).size
-            if isinstance(y_array, tiledb.SparseArray)
-            else y_row_idx.shape[0]
+            np.unique(y_row_idx).size if sparse else y_row_idx.shape[0]
         ):
             raise ValueError(
                 "X and Y should have the same number of rows, i.e., the 1st dimension "
@@ -163,7 +151,7 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
             x_coords[0] -= x_coords[0].min()
             y_coords[0] -= y_coords[0].min()
 
-            cls._check_row_dims(x_coords[0], y_coords[0])
+            cls.__check_row_dims(x_coords[0], y_coords[0], sparse=True)
 
             yield tf.sparse.SparseTensor(
                 indices=constant_op.constant(list(zip(*x_coords)), dtype=tf.int64),
@@ -212,7 +200,7 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
             x_coords[0] -= x_coords[0].min()
 
             # for the check slice the row dimension of y dense array
-            cls._check_row_dims(x_coords[0], values_y)
+            cls.__check_row_dims(x_coords[0], values_y, sparse=False)
 
             x_data = np.array(values_x).flatten()
 
