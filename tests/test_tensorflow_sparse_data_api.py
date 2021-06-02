@@ -151,6 +151,7 @@ class TestTileDBTensorflowSparseDataAPI(test.TestCase):
                     uri=tiledb_uri_y,
                     data=np.random.rand(*dataset_shape_y),
                     batch_size=BATCH_SIZE,
+                    sparse=False,
                 )
 
                 with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
