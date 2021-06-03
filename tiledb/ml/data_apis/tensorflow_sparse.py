@@ -75,6 +75,31 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
                 ),
             )
 
+    @staticmethod
+    def __check_row_dims(x_row_idx: np.array, y_row_idx: np.array, sparse: bool):
+        """
+        Check the row dimensionality of x,y in case y is sparse or not
+
+        Parameters:
+
+            x_row_idx (np.array): Expects the row indices x_coords of x Sparse Array of the
+            dimension that is being batched
+
+            y_row_idx (np.array): if y Sparse Array -> Expects the row indices y_coords of the
+            dimension that is being batched else if y is Dense Array -> data of y
+
+        Raises:
+            ValueError: If unique coords idx of x and y mismatch (both-sparse) or
+            when unique coords idx of x mismatch y elements when y is Dense
+        """
+        if np.unique(x_row_idx).size != (
+            np.unique(y_row_idx).size if sparse else y_row_idx.shape[0]
+        ):
+            raise ValueError(
+                "X and Y should have the same number of rows, i.e., the 1st dimension "
+                "of TileDB arrays X, Y should be of equal domain extent inside the batch."
+            )
+
     @classmethod
     def _generator_sparse_sparse(
         cls, x: tiledb.Array, y: tiledb.Array, rows: int, batch_size: int
@@ -107,11 +132,6 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
             # Transform to TF COO format y data
             y_data = np.array(values_y).ravel()
             x_data = np.array(values_x).ravel()
-            if x_data.shape[0] != y_data.shape[0]:
-                raise ValueError(
-                    "X and Y should have the same number of rows, i.e., the 1st dimension "
-                    "of TileDB arrays X, Y should be of equal domain extent inside the batch"
-                )
 
             y_coords = []
             for i in range(0, y.schema.domain.ndim):
@@ -123,6 +143,15 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
             for i in range(0, x.schema.domain.ndim):
                 dim_name = x.schema.domain.dim(i).name
                 x_coords.append(np.array(x_batch[dim_name]))
+
+            # Normalise indices for torch.sparse.Tensor We want the coords indices in every iteration
+            # to be in the range of [0, self.batch_size] so the torch.sparse.Tensors can be created batch-wise.
+            # If we do not normalise the sparse tensor is being created but with a dimension [0, max(coord_index)],
+            # which is overkill
+            x_coords[0] -= x_coords[0].min()
+            y_coords[0] -= y_coords[0].min()
+
+            cls.__check_row_dims(x_coords[0], y_coords[0], sparse=True)
 
             yield tf.sparse.SparseTensor(
                 indices=constant_op.constant(list(zip(*x_coords)), dtype=tf.int64),
@@ -164,15 +193,16 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
                 dim_name = x.schema.domain.dim(i).name
                 x_coords.append(np.array(x_batch[dim_name]))
 
-            x_data = np.array(values_x).flatten()
+            # Normalise indices for torch.sparse.Tensor We want the coords indices in every iteration
+            # to be in the range of [0, self.batch_size] so the torch.sparse.Tensors can be created batch-wise.
+            # If we do not normalise the sparse tensor is being created but with a dimension [0, max(coord_index)],
+            # which is overkill
+            x_coords[0] -= x_coords[0].min()
 
-            # Detects empty lines due to sparsity inside the batch
-            x_sparse_real_batch_size = x_coords[0].max(axis=0) - x_coords[0].min(axis=0)
-            if values_y.shape[0] - x_sparse_real_batch_size != 1:
-                raise ValueError(
-                    "X and Y should have the same number of rows, i.e., the 1st dimension "
-                    "of TileDB arrays X, Y should be of equal domain extent inside the batch"
-                )
+            # for the check slice the row dimension of y dense array
+            cls.__check_row_dims(x_coords[0], values_y, sparse=False)
+
+            x_data = np.array(values_x).flatten()
 
             yield tf.sparse.SparseTensor(
                 indices=constant_op.constant(list(zip(*x_coords)), dtype=tf.int64),
