@@ -7,7 +7,7 @@ setuptools.setup(
     name="tiledb-ml",
     version="0.1.0",
     author="George Skoumas",
-    description="Package that allows saving machine learning models to and from TileDB arrays",
+    description="Package supports all machine learning functionality for TileDB Embedded and TileDB Cloud",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/TileDB-Inc/TileDB-ML",
@@ -17,11 +17,14 @@ setuptools.setup(
     test_suite="tests",
     install_requires=[
         "tiledb>=0.8.5",
-        "torch>=1.8.1",
-        "scikit-learn>=0.23.0",
-        "torchvision>=0.9.1",
-        "tensorflow>=2.5.0",
+        "tiledb-cloud>=0.7.11",
+        "matplotlib>=3.4.2",
     ],
+    extras_require={
+        "tensorflow": ["tensorflow>=2.5.0"],
+        "pytorch": ["torch>=1.8.1", "torchvision>=0.9.1"],
+        "sklearn": ["scikit-learn>=0.23.0"],
+    },
     classifiers=[
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.6",
