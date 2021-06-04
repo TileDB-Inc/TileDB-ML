@@ -9,7 +9,7 @@ from sklearn.utils import check_random_state
 
 from tiledb.ml.models.sklearn import SklearnTileDB
 
-################################################################################
+
 train_samples = 5000
 
 # Load data from https://www.openml.org/d/554
@@ -30,7 +30,6 @@ scaler = StandardScaler()
 X_train = scaler.fit_transform(X_train)
 X_test = scaler.transform(X_test)
 
-################################################################################
 clf = LogisticRegression(
     C=50. / train_samples, penalty='l1', solver='saga', tol=0.1
 )
@@ -45,9 +44,7 @@ score = clf.score(X_test, y_test)
 print("Sparsity with L1 penalty: %.2f%%" % sparsity)
 print("Test score with L1 penalty: %.4f" % score)
 
-################################################################################
-# tiledb_model_1 = SklearnTileDB(uri='tiledb-sklearn-mnist-6')
-tiledb_model_1 = SklearnTileDB(uri='tiledb-sklearn-mnist-6', ctx=tiledb.cloud.Ctx(), namespace="demo")
+tiledb_model_1 = SklearnTileDB(uri='tiledb-sklearn-mnist', ctx=tiledb.cloud.Ctx(), namespace="demo")
 
 tiledb_model_1.save(model=clf,
                     meta={'Sparsity_with_L1_penalty': sparsity,

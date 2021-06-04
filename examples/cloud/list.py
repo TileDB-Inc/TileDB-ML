@@ -1,6 +1,5 @@
-from tiledb.ml.models.model_list import ModelList
+from tiledb.ml.models.cloud_utils import get_model_list
 
-al = ModelList("owned", "demo")
-print(al.models())
+print(get_model_list("owned", "demo"))
 
 

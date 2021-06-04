@@ -2,11 +2,13 @@
 
 import abc
 import os
+import tiledb
 import tiledb.cloud
-from urllib.error import HTTPError
+
+from .cloud_utils import get_s3_prefix
+from .cloud_utils import get_s3_credentials
 
 FILETYPE_ML_MODEL = "ml_model"
-CLOUD_MODELS = "ml_models"
 
 
 class TileDBModel(abc.ABC):
@@ -15,124 +17,65 @@ class TileDBModel(abc.ABC):
     store machine learning models (Tensorflow, PyTorch, ect) as TileDB arrays.
     """
 
-    def __init__(self, uri: str, ctx=None, namespace=None):
+    def __init__(self, uri: str, ctx: tiledb.cloud.Ctx = None, namespace: str = None):
         """
         Base class for saving machine learning models as TileDB arrays
         and loading machine learning models from TileDB arrays.
         :param uri: str
+        :ctx:
+        :namespace: str
         """
-        self.uri = uri
-        self.tiledb_uri = None
         self.ctx = ctx
-        self.namespace = namespace
 
-        if self.namespace and self.ctx:
-            s3_prefix = self.get_s3_prefix()
+        if namespace and self.ctx:
+            s3_prefix = get_s3_prefix(namespace)
             if s3_prefix is None:
-                raise HTTPError(
-                    403,
-                    "You must set the default s3 prefix path for ML models in {} profile settings".format(
-                        namespace
-                    ),
+                raise Exception(
+                    "You must set the default s3 prefix path for ML models in {} profile settings".format(namespace)
                 )
 
             self.uri = "tiledb://{}/{}".format(
                 namespace, os.path.join(s3_prefix, uri)
             )
 
+            # Retrieving credentials is optional
+            # If None, default credentials will be used
+            self.s3_credentials = get_s3_credentials(namespace)
+
             self.tiledb_uri = "tiledb://{}/{}".format(namespace, uri)
         else:
             self.uri = uri
 
-    def get_s3_prefix(self):
-        """
-        Get S3 path from the user profile or organization profile
-        :return: s3 path or error
-        """
-        try:
-            profile = tiledb.cloud.client.user_profile()
-
-            if self.namespace == profile.username:
-                if profile.default_s3_path is not None:
-                    return os.path.join(profile.default_s3_path, CLOUD_MODELS)
-            else:
-                organization = tiledb.cloud.client.organization(self.namespace)
-                if organization.default_s3_path is not None:
-                    return os.path.join(organization.default_s3_path, CLOUD_MODELS)
-        except tiledb.cloud.tiledb_cloud_error.TileDBCloudError as e:
-            raise HTTPError(
-                400,
-                "Error fetching user default s3 path for new ML models {}".format(str(e)),
-            )
-
-        return None
-
-    def get_s3_credentials(self):
-        """
-        Get credentials for default S3 path from the user profile or organization profile
-        :return: s3 credentials or error
-        """
-        try:
-            profile = tiledb.cloud.client.user_profile()
-
-            if self.namespace == profile.username:
-                if profile.default_s3_path_credentials_name is not None:
-                    return profile.default_s3_path_credentials_name
-            else:
-                organization = tiledb.cloud.client.organization(self.namespace)
-                if organization.default_s3_path_credentials_name is not None:
-                    return organization.default_s3_path_credentials_name
-        except tiledb.cloud.tiledb_cloud_error.TileDBCloudError as e:
-            raise HTTPError(
-                400,
-                "Error fetching default credentials for {} default s3 path for new ML models {}".format(
-                    self.namespace, str(e)
-                ),
-            )
-
-        return None
-
-    def _model_exists(self):
+    def get_model_info(self) -> tiledb.cloud.rest_api.models.array_info.ArrayInfo:
         """
         Check if an model exists in TileDB Cloud
-        :return:
-        """
-        try:
-            tiledb.cloud.array.info(self.tiledb_uri)
-            return True
-        except tiledb.cloud.tiledb_cloud_error.TileDBCloudError as e:
-            if str(e) == "Array or Namespace Not found":
-                return False
-
-        return False
-
-    def get_model_info(self):
-        """
-        Check if an model exists in TileDB Cloud
-        :return:
+        :return: ArrayInfo
         """
         try:
             model_info = tiledb.cloud.array.info(self.tiledb_uri)
             return model_info
         except tiledb.cloud.tiledb_cloud_error.TileDBCloudError as e:
-            if str(e) == "Array or Namespace Not found":
+            if str(e) == "Model or Namespace Not found":
                 return None
+            else:
+                raise Exception(e)
+        except tiledb.TileDBError as e:
+            raise Exception(e)
 
         return None
 
     def delete_model(self):
         """Delete the file or directory at path."""
         try:
-            return tiledb.cloud.array.delete_array(self.tiledb_uri, "application/x-ipynb+json")
+            if self.tiledb_uri and self.ctx:
+                return tiledb.cloud.array.delete_array(self.tiledb_uri, "application/octet-stream")
+            else:
+                return tiledb.Array.remove(self.uri)
         except tiledb.cloud.tiledb_cloud_error.TileDBCloudError as e:
-            raise HTTPError(
-                500, "Error deregistering {}: ".format(self.tiledb_uri, str(e))
+            raise Exception("Error deregistering {}: ".format(self.tiledb_uri, str(e))
             )
         except tiledb.TileDBError as e:
-            raise HTTPError(
-                500,
-                str(e),
-            )
+            raise Exception(e)
 
 
     @abc.abstractmethod

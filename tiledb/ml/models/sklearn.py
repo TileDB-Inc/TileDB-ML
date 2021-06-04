@@ -9,7 +9,6 @@ import time
 import tiledb
 import tiledb.cloud
 
-from urllib.error import HTTPError
 from typing import Optional
 
 import sklearn
@@ -19,7 +18,7 @@ from .base import FILETYPE_ML_MODEL
 from .base import TileDBModel
 
 FilePropertyName_ML_FRAMEWORK = "ML_FRAMEWORK"
-FilePropertyName_ML_STAGE = "ML_STAGE"
+FilePropertyName_STAGE = "STAGE"
 
 
 class SklearnTileDB(TileDBModel):
@@ -72,13 +71,9 @@ class SklearnTileDB(TileDBModel):
             tiledb_create_context = self.ctx
 
             if tiledb_create_context is not None:
-                # Retrieving credentials is optional
-                # If None, default credentials will be used
-                s3_credentials = self.get_s3_credentials()
-
-                if s3_credentials is not None:
+                if self.s3_credentials is not None:
                     cfg_dict = {}
-                    cfg_dict["rest.creation_access_credentials_name"] = s3_credentials
+                    cfg_dict["rest.creation_access_credentials_name"] = self.s3_credentials
                     # update context with config having header set
                     tiledb_create_context = tiledb.cloud.Ctx(cfg_dict)
 
@@ -105,32 +100,17 @@ class SklearnTileDB(TileDBModel):
             tiledb.Array.create(self.uri, schema)
 
             if self.tiledb_uri:
+                # We are updating the model with additional file properties. Operation happens serially after the
+                # creation and tests show that a delay is needed in some cases since the array must exist before
+                # updating otherwise an error can be returned
                 time.sleep(0.25)
+                self._update_array_properties()
 
-                file_properties = {}
-
-                file_properties[
-                    FilePropertyName_ML_FRAMEWORK
-                ] = "SKLEARN"
-
-                # This should be an argument to this function
-                file_properties[
-                    FilePropertyName_ML_STAGE
-                ] = "STAGING"
-
-                tiledb.cloud.array.update_file_properties(
-                    uri=self.tiledb_uri,
-                    file_type=FILETYPE_ML_MODEL,
-                    file_properties=file_properties,
-                )
         except tiledb.TileDBError as error:
             if "Error while listing with prefix" in str(error):
                 # It is possible to land here if user sets wrong default s3 credentials
                 # with respect to default s3 path
-                raise HTTPError(
-                    code=400,
-                    msg=f"Error creating file, {error} Are your S3 credentials valid?",
-                )
+                raise Exception(f"Error creating file, {error} Are your S3 credentials valid?")
 
             if "already exists" in str(error):
                 logging.warning(
@@ -138,6 +118,24 @@ class SklearnTileDB(TileDBModel):
                     "Next time set update=True. Returning"
                 )
                 raise error
+
+    def _update_array_properties(self):
+        file_properties = {}
+
+        file_properties[
+            FilePropertyName_ML_FRAMEWORK
+        ] = "SKLEARN"
+
+        # This should be an argument to this function
+        file_properties[
+            FilePropertyName_STAGE
+        ] = "STAGING"
+
+        tiledb.cloud.array.update_file_properties(
+            uri=self.tiledb_uri,
+            file_type=FILETYPE_ML_MODEL,
+            file_properties=file_properties,
+        )
 
     def _write_array(self, uri: str, serialized_model: bytes, meta: Optional[dict]):
         """
