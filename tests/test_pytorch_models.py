@@ -1,9 +1,11 @@
 import torch
-import unittest
+import pytest
 import tempfile
+import inspect
+import sys
 
 import torch.nn as nn
-import torch.optim as optim
+import torch.optim as optimizers
 import torch.nn.functional as F
 
 from tiledb.ml.models.pytorch import PyTorchTileDB
@@ -45,11 +47,11 @@ class SeqNeuralNetwork(nn.Module):
         super(SeqNeuralNetwork, self).__init__()
         self.flatten = nn.Flatten()
         self.linear_relu_stack = nn.Sequential(
-            nn.Linear(28 * 28, 512),
+            nn.Linear(14 * 14, 256),
             nn.ReLU(),
-            nn.Linear(512, 512),
+            nn.Linear(256, 256),
             nn.ReLU(),
-            nn.Linear(512, 10),
+            nn.Linear(256, 10),
             nn.ReLU(),
         )
 
@@ -79,129 +81,60 @@ class ConvNet(nn.Module):
         return x
 
 
-class TestSaveLoadTileDBModel(unittest.TestCase):
-    def test_save_and_load_snn(self):
-        with tempfile.TemporaryDirectory() as tiledb_array:
-            net = SeqNeuralNetwork()
-            optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
-            EPOCH = 5
-            LOSS = 0.4
-
-            tiledb_obj = PyTorchTileDB(uri=tiledb_array)
-            tiledb_obj.save(
-                model_info={
-                    "epoch": EPOCH,
-                    "model_state_dict": net.state_dict(),
-                    "optimizer_state_dict": optimizer.state_dict(),
-                    "loss": LOSS,
-                }
-            )
-
-            loaded_net = SeqNeuralNetwork()
-            loaded_optimizer = optim.SGD(
-                loaded_net.parameters(), lr=0.001, momentum=0.9
-            )
-            model_out_dict = tiledb_obj.load(
-                model=loaded_net, optimizer=loaded_optimizer
-            )
-
-            self.assertEqual(EPOCH, model_out_dict["epoch"])
-            self.assertEqual(LOSS, model_out_dict["loss"])
-
-            # Check model parameters
-            for key_item_1, key_item_2 in zip(
-                net.state_dict().items(), loaded_net.state_dict().items()
-            ):
-                self.assertTrue(torch.equal(key_item_1[1], key_item_2[1]))
-
-            # Check optimizer parameters
-            for key_item_1, key_item_2 in zip(
-                optimizer.state_dict().items(), loaded_optimizer.state_dict().items()
-            ):
-                self.assertEqual(key_item_1[1], key_item_2[1])
-
-    def test_save_and_load_cnn(self):
-        with tempfile.TemporaryDirectory() as tiledb_array:
-            net = ConvNet()
-            optimizer = optim.Adagrad(net.parameters(), lr=0.001)
-            EPOCH = 5
-            LOSS = 0.4
-
-            tiledb_obj = PyTorchTileDB(uri=tiledb_array)
-            tiledb_obj.save(
-                model_info={
-                    "epoch": EPOCH,
-                    "model_state_dict": net.state_dict(),
-                    "optimizer_state_dict": optimizer.state_dict(),
-                    "loss": LOSS,
-                }
-            )
-
-            loaded_net = ConvNet()
-            loaded_optimizer = optim.Adagrad(loaded_net.parameters(), lr=0.001)
-            model_out_dict = tiledb_obj.load(
-                model=loaded_net, optimizer=loaded_optimizer
-            )
-
-            self.assertEqual(EPOCH, model_out_dict["epoch"])
-            self.assertEqual(LOSS, model_out_dict["loss"])
-
-            # Check model parameters
-            for key_item_1, key_item_2 in zip(
-                net.state_dict().items(), loaded_net.state_dict().items()
-            ):
-                self.assertTrue(torch.equal(key_item_1[1], key_item_2[1]))
-
-            # Check optimizer parameters
-            optimizer_state = optimizer.state
-            loaded_optimizer_state = loaded_optimizer.state
-
-            for key_item_1, key_item_2 in zip(
-                optimizer_state.items(), loaded_optimizer_state.items()
-            ):
-                self.assertTrue(torch.equal(key_item_1[1]["sum"], key_item_2[1]["sum"]))
-
-    def test_save_and_load_nn(self):
-        with tempfile.TemporaryDirectory() as tiledb_array:
-            net = Net()
-            optimizer = optim.Adam(net.parameters(), lr=0.001)
-            EPOCH = 5
-            LOSS = 0.4
-
-            tiledb_obj = PyTorchTileDB(uri=tiledb_array)
-            tiledb_obj.save(
-                model_info={
-                    "epoch": EPOCH,
-                    "model_state_dict": net.state_dict(),
-                    "optimizer_state_dict": optimizer.state_dict(),
-                    "loss": LOSS,
-                }
-            )
-
-            loaded_net = Net()
-            loaded_optimizer = optim.Adam(loaded_net.parameters(), lr=0.001)
-            model_out_dict = tiledb_obj.load(
-                model=loaded_net, optimizer=loaded_optimizer
-            )
-
-            self.assertEqual(EPOCH, model_out_dict["epoch"])
-            self.assertEqual(LOSS, model_out_dict["loss"])
-
-            # Check model parameters
-            for key_item_1, key_item_2 in zip(
-                net.state_dict().items(), loaded_net.state_dict().items()
-            ):
-                self.assertTrue(torch.equal(key_item_1[1], key_item_2[1]))
-
-            # Check optimizer parameters
-            optimizer_state = optimizer.state
-            loaded_optimizer_state = loaded_optimizer.state
-
-            for key_item_1, key_item_2 in zip(
-                optimizer_state.items(), loaded_optimizer_state.items()
-            ):
-                self.assertTrue(torch.equal(key_item_1[1]["sum"], key_item_2[1]["sum"]))
+@pytest.fixture
+def temp_uri():
+    """
+    Returns a temporary directory instance
+    """
+    return tempfile.TemporaryDirectory()
 
 
-if __name__ == "__main__":
-    unittest.main()
+@pytest.mark.parametrize(
+    "optimizer",
+    [
+        getattr(optimizers, name)
+        for name, obj in inspect.getmembers(optimizers)
+        if inspect.isclass(obj) and name != "Optimizer"
+    ],
+)
+@pytest.mark.parametrize(
+    "net",
+    [
+        getattr(sys.modules[__name__], name)
+        for name, obj in inspect.getmembers(sys.modules[__name__])
+        if inspect.isclass(obj) and obj.__module__ == __name__
+    ],
+)
+def test_save(temp_uri, net, optimizer):
+    EPOCH = 5
+    LOSS = 0.4
+    with temp_uri as tiledb_array:
+        tiledb_obj = PyTorchTileDB(uri=tiledb_array)
+        saved_net = net()
+        saved_optimizer = optimizer(saved_net.parameters(), lr=0.001)
+        tiledb_obj.save(
+            model_info={
+                "epoch": EPOCH,
+                "model_state_dict": saved_net.state_dict(),
+                "optimizer_state_dict": saved_optimizer.state_dict(),
+                "loss": LOSS,
+            }
+        )
+        loaded_net = net()
+        loaded_optimizer = optimizer(loaded_net.parameters(), lr=0.001)
+        model_out_dict = tiledb_obj.load(model=loaded_net, optimizer=loaded_optimizer)
+
+        assert model_out_dict["epoch"] == EPOCH
+        assert model_out_dict["loss"] == LOSS
+
+        # Check model parameters
+        for key_item_1, key_item_2 in zip(
+            saved_net.state_dict().items(), loaded_net.state_dict().items()
+        ):
+            assert torch.equal(key_item_1[1], key_item_2[1])
+
+        # Check optimizer parameters
+        for key_item_1, key_item_2 in zip(
+            saved_optimizer.state_dict().items(), loaded_optimizer.state_dict().items()
+        ):
+            assert all([a == b for a, b in zip(key_item_1[1], key_item_2[1])])
