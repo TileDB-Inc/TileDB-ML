@@ -24,6 +24,12 @@ setuptools.setup(
         "tensorflow": ["tensorflow>=2.5.0"],
         "pytorch": ["torch>=1.8.1", "torchvision>=0.9.1"],
         "sklearn": ["scikit-learn>=0.23.0"],
+        "full": [
+            "tensorflow>=2.5.0",
+            "torch>=1.8.1",
+            "torchvision>=0.9.1",
+            "scikit-learn>=0.23.0",
+        ],
     },
     classifiers=[
         "Programming Language :: Python :: 3",
