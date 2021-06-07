@@ -83,8 +83,14 @@ TileDB-ML can be installed:
 
       # In case you want to install and check Scikit-Learn only. If you
       # use zsh replace .[sklearn] with .\[sklearn\]
-      pip install -e .[sklearn]      
+      pip install -e .[sklearn]   
 
+      # In case you also want to run the example notebooks for Tensorflow, PyTorch and Sklearn 
+      # respectively
+      pip install -e .[tensorflow_with_examples]
+      pip install -e .[pytorch_with_examples]
+      pip install -e .[sklearn_with_examples]
+  
 - You may run the test suite with:
       
       # You will need the .[full] installation in case you want to run all tests
