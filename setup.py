@@ -22,13 +22,6 @@ setuptools.setup(
         "tensorflow": ["tensorflow>=2.5.0"],
         "pytorch": ["torch>=1.8.1", "torchvision>=0.9.1"],
         "sklearn": ["scikit-learn>=0.23.0"],
-        "tensorflow_with_examples": ["tensorflow>=2.5.0", "matplotlib>=3.4.2"],
-        "pytorch_with_examples": [
-            "torch>=1.8.1",
-            "torchvision>=0.9.1",
-            "matplotlib>=3.4.2",
-        ],
-        "sklearn_with_examples": ["scikit-learn>=0.23.0", "matplotlib>=3.4.2"],
         "full": [
             "tensorflow>=2.5.0",
             "torch>=1.8.1",
