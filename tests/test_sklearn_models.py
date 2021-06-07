@@ -6,7 +6,6 @@ import sklearn.svm as svms
 import sklearn.naive_bayes as nb
 import sklearn.linear_model as lm
 import sklearn.tree as tree
-
 from tiledb.ml.models.sklearn import SklearnTileDB
 
 
@@ -56,14 +55,12 @@ def temp_uri():
     ],
 )
 def test_save_load(temp_uri, net):
+    """"""
     with temp_uri as tiledb_array:
         model = net()
-
         tiledb_sklearn_obj = SklearnTileDB(uri=tiledb_array)
         tiledb_sklearn_obj.save(model=model)
-
         loaded_model = tiledb_sklearn_obj.load()
-
         assert all(
             [a == b for a, b in zip(model.get_params(), loaded_model.get_params())]
         )
