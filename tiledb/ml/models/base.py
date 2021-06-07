@@ -44,6 +44,7 @@ class TileDBModel(abc.ABC):
 
             self.tiledb_uri = "tiledb://{}/{}".format(namespace, uri)
         else:
+            self.tiledb_uri = None
             self.uri = uri
 
     def get_model_info(self) -> tiledb.cloud.rest_api.models.array_info.ArrayInfo:
