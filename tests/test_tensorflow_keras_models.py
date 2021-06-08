@@ -377,63 +377,62 @@ def test_functional_model_save_load_with_custom_loss_and_metric(
         )
 
 
-# class TestSaveLoadTileDBModel(test.TestCase):
-#
-#
-#
-#     @testing_utils.run_v2_only
-#     def test_save_load_for_rnn_layers(self):
-#         inputs = keras.Input([10, 10], name="train_input")
-#         rnn_layers = [
-#             keras.layers.LSTMCell(size, recurrent_dropout=0, name="rnn_cell%d" % i)
-#             for i, size in enumerate([32, 32])
-#         ]
-#         rnn_output = keras.layers.RNN(
-#             rnn_layers, return_sequences=True, name="rnn_layer"
-#         )(inputs)
-#         pred_feat = keras.layers.Dense(10, name="prediction_features")(rnn_output)
-#         pred = keras.layers.Softmax()(pred_feat)
-#         model = keras.Model(inputs=[inputs], outputs=[pred, pred_feat])
-#
-#         tiledb_uri = os.path.join(self.get_temp_dir(), "model_array")
-#         tiledb_model_obj = TensorflowTileDB(uri=tiledb_uri)
-#         tiledb_model_obj.save(model=model, include_optimizer=False)
-#         loaded_model = tiledb_model_obj.load(compile_model=False)
-#
-#         data = np.random.rand(50, 10, 10)
-#
-#         # Assert model predictions are equal
-#         np.testing.assert_array_equal(loaded_model.predict(data), model.predict(data))
-#
-#     @testing_utils.run_v2_only
-#     def test_sequential_model_save_load_without_input_shape(self):
-#         model = keras.models.Sequential()
-#         model.add(keras.layers.Dense(2))
-#         model.add(keras.layers.RepeatVector(3))
-#         model.add(keras.layers.TimeDistributed(keras.layers.Dense(3)))
-#         model.compile(
-#             loss=keras.losses.MSE,
-#             optimizer="rmsprop",
-#             metrics=[
-#                 keras.metrics.categorical_accuracy,
-#                 keras.metrics.CategoricalAccuracy(name="cat_acc"),
-#             ],
-#             weighted_metrics=[
-#                 keras.metrics.categorical_accuracy,
-#                 keras.metrics.CategoricalAccuracy(name="cat_acc2"),
-#             ],
-#             sample_weight_mode="temporal",
-#         )
-#         data_x = np.random.random((1, 3))
-#         data_y = np.random.random((1, 3, 3))
-#         model.train_on_batch(data_x, data_y)
-#
-#         tiledb_uri = os.path.join(self.get_temp_dir(), "model_array")
-#         tiledb_model_obj = TensorflowTileDB(uri=tiledb_uri)
-#         tiledb_model_obj.save(model=model, include_optimizer=True)
-#         loaded_model = tiledb_model_obj.load(compile_model=True)
-#
-#         # Assert model predictions are equal
-#         np.testing.assert_array_equal(
-#             loaded_model.predict(data_x), model.predict(data_x)
-#         )
+def test_save_load_for_rnn_layers(temp_uri):
+    with temp_uri as temp_dir:
+        inputs = keras.Input([10, 10], name="train_input")
+        rnn_layers = [
+            keras.layers.LSTMCell(size, recurrent_dropout=0, name="rnn_cell%d" % i)
+            for i, size in enumerate([32, 32])
+        ]
+        rnn_output = keras.layers.RNN(
+            rnn_layers, return_sequences=True, name="rnn_layer"
+        )(inputs)
+        pred_feat = keras.layers.Dense(10, name="prediction_features")(rnn_output)
+        pred = keras.layers.Softmax()(pred_feat)
+        model = keras.Model(inputs=[inputs], outputs=[pred, pred_feat])
+
+        tiledb_uri = os.path.join(temp_dir, "model_array")
+        tiledb_model_obj = TensorflowTileDB(uri=tiledb_uri)
+        tiledb_model_obj.save(model=model, include_optimizer=False)
+        loaded_model = tiledb_model_obj.load(compile_model=False)
+
+        data = np.random.rand(50, 10, 10)
+
+        # Assert model predictions are equal
+        np.testing.assert_array_equal(loaded_model.predict(data), model.predict(data))
+
+
+@pytest.mark.parametrize(
+    "loss,optimizer,metrics",
+    [
+        (keras.losses.MSE, "rmsprop", keras.metrics.categorical_accuracy),
+    ],
+)
+def test_sequential_model_save_load_without_input_shape(
+    temp_uri, loss, optimizer, metrics
+):
+    with temp_uri as temp_dir:
+        model = keras.models.Sequential()
+        model.add(keras.layers.Dense(2))
+        model.add(keras.layers.RepeatVector(3))
+        model.add(keras.layers.TimeDistributed(keras.layers.Dense(3)))
+        model.compile(
+            loss=loss,
+            optimizer=optimizer,
+            metrics=metrics,
+            weighted_metrics=metrics,
+            sample_weight_mode="temporal",
+        )
+        data_x = np.random.random((1, 3))
+        data_y = np.random.random((1, 3, 3))
+        model.train_on_batch(data_x, data_y)
+
+        tiledb_uri = os.path.join(temp_dir, "model_array")
+        tiledb_model_obj = TensorflowTileDB(uri=tiledb_uri)
+        tiledb_model_obj.save(model=model, include_optimizer=True)
+        loaded_model = tiledb_model_obj.load(compile_model=True)
+
+        # Assert model predictions are equal
+        np.testing.assert_array_equal(
+            loaded_model.predict(data_x), model.predict(data_x)
+        )
