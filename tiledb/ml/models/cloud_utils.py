@@ -50,7 +50,10 @@ def get_s3_credentials(namespace: str) -> str:
 
     return None
 
-def get_model_list(category: str, namespace: str) -> List[tiledb.cloud.rest_api.models.array_info.ArrayInfo]:
+
+def get_model_list(
+    category: str, namespace: str
+) -> List[tiledb.cloud.rest_api.models.array_info.ArrayInfo]:
     if category == "owned":
         model_listing_future = tiledb.cloud.client.list_arrays(
             file_type=[FILETYPE_ML_NODEL],

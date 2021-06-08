@@ -46,9 +46,13 @@ class SklearnTileDB(TileDBModel):
             self._create_array()
 
         if self.tiledb_uri and self.ctx:
-            self._write_array(uri=self.tiledb_uri, serialized_model=serialized_model, meta=meta)
+            self._write_array(
+                uri=self.tiledb_uri, serialized_model=serialized_model, meta=meta
+            )
         else:
-            self._write_array(uri=self.uri, serialized_model=serialized_model, meta=meta)
+            self._write_array(
+                uri=self.uri, serialized_model=serialized_model, meta=meta
+            )
 
     def load(self) -> BaseEstimator:
         """
@@ -73,13 +77,21 @@ class SklearnTileDB(TileDBModel):
             if tiledb_create_context is not None:
                 if self.s3_credentials is not None:
                     cfg_dict = {}
-                    cfg_dict["rest.creation_access_credentials_name"] = self.s3_credentials
+                    cfg_dict[
+                        "rest.creation_access_credentials_name"
+                    ] = self.s3_credentials
                     # update context with config having header set
                     tiledb_create_context = tiledb.cloud.Ctx(cfg_dict)
 
             dom = tiledb.Domain(
-                tiledb.Dim(name="model", domain=(1, 1), tile=1, dtype=np.int32, ctx=tiledb_create_context),
-                    ctx=tiledb_create_context
+                tiledb.Dim(
+                    name="model",
+                    domain=(1, 1),
+                    tile=1,
+                    dtype=np.int32,
+                    ctx=tiledb_create_context,
+                ),
+                ctx=tiledb_create_context,
             )
 
             attrs = [
@@ -92,9 +104,7 @@ class SklearnTileDB(TileDBModel):
             ]
 
             schema = tiledb.ArraySchema(
-                domain=dom,
-                sparse=False,
-                attrs=attrs, ctx=tiledb_create_context
+                domain=dom, sparse=False, attrs=attrs, ctx=tiledb_create_context
             )
 
             tiledb.Array.create(self.uri, schema)
@@ -110,7 +120,9 @@ class SklearnTileDB(TileDBModel):
             if "Error while listing with prefix" in str(error):
                 # It is possible to land here if user sets wrong default s3 credentials
                 # with respect to default s3 path
-                raise Exception(f"Error creating file, {error} Are your S3 credentials valid?")
+                raise Exception(
+                    f"Error creating file, {error} Are your S3 credentials valid?"
+                )
 
             if "already exists" in str(error):
                 logging.warning(
@@ -122,14 +134,10 @@ class SklearnTileDB(TileDBModel):
     def _update_array_properties(self):
         file_properties = {}
 
-        file_properties[
-            FilePropertyName_ML_FRAMEWORK
-        ] = "SKLEARN"
+        file_properties[FilePropertyName_ML_FRAMEWORK] = "SKLEARN"
 
         # This should be an argument to this function
-        file_properties[
-            FilePropertyName_STAGE
-        ] = "STAGING"
+        file_properties[FilePropertyName_STAGE] = "STAGING"
 
         tiledb.cloud.array.update_file_properties(
             uri=self.tiledb_uri,
@@ -154,12 +162,7 @@ class SklearnTileDB(TileDBModel):
             # Add extra metadata given by the user to array's metadata
             if meta:
                 for key, value in meta.items():
-                    try:
-                        tf_model_tiledb.meta[key] = json.dumps(value).encode("utf8")
-                    except:
-                        logging.warning(
-                            "Exception occurred during Json serialization of metadata!"
-                        )
+                    tf_model_tiledb.meta[key] = json.dumps(value).encode("utf8")
 
     @staticmethod
     def _serialize_model(model: BaseEstimator) -> bytes:

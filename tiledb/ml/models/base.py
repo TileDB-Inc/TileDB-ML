@@ -31,12 +31,12 @@ class TileDBModel(abc.ABC):
             s3_prefix = get_s3_prefix(namespace)
             if s3_prefix is None:
                 raise Exception(
-                    "You must set the default s3 prefix path for ML models in {} profile settings".format(namespace)
+                    "You must set the default s3 prefix path for ML models in {} profile settings".format(
+                        namespace
+                    )
                 )
 
-            self.uri = "tiledb://{}/{}".format(
-                namespace, os.path.join(s3_prefix, uri)
-            )
+            self.uri = "tiledb://{}/{}".format(namespace, os.path.join(s3_prefix, uri))
 
             # Retrieving credentials is optional
             # If None, default credentials will be used
@@ -69,15 +69,19 @@ class TileDBModel(abc.ABC):
         """Delete the file or directory at path."""
         try:
             if self.tiledb_uri and self.ctx:
-                return tiledb.cloud.array.delete_array(self.tiledb_uri, "application/octet-stream")
+                return tiledb.cloud.array.delete_array(
+                    self.tiledb_uri, "application/octet-stream"
+                )
             else:
                 return tiledb.Array.remove(self.uri)
         except tiledb.cloud.tiledb_cloud_error.TileDBCloudError as e:
-            raise Exception("Error deregistering {}: ".format(self.tiledb_uri, str(e))
+            raise Exception(
+                "Problem when deregistering {}. Error {}".format(
+                    self.tiledb_uri, str(e)
+                )
             )
         except tiledb.TileDBError as e:
             raise Exception(e)
-
 
     @abc.abstractmethod
     def save(self, **kwargs):
