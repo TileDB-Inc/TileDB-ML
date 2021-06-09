@@ -13,12 +13,8 @@ from typing import Optional
 import sklearn
 from sklearn.base import BaseEstimator
 
+from . import FILETYPE_ML_MODEL, FilePropertyName_ML_FRAMEWORK, FilePropertyName_STAGE
 from .base import TileDBModel
-from .base import (
-    FILETYPE_ML_MODEL,
-    FilePropertyName_ML_FRAMEWORK,
-    FilePropertyName_STAGE,
-)
 
 
 class SklearnTileDB(TileDBModel):
