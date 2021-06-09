@@ -35,7 +35,7 @@ class Net(nn.Module):
 
 
 @pytest.fixture
-def temp_uris():
+def temp_uri():
     """
     Returns a temporary directory instance
     """
@@ -57,9 +57,9 @@ def temp_uris():
 )
 class TestPytorchDenseDataloader:
     def test_tiledb_pytorch_data_api_train_with_multiple_dim_data(
-        self, temp_uris, input_shape, workers
+        self, temp_uri, input_shape, workers
     ):
-        with temp_uris as tiledb_dir:
+        with temp_uri as tiledb_dir:
             dataset_shape_x = (ROWS,) + input_shape
             dataset_shape_y = (ROWS,)
 
@@ -108,8 +108,8 @@ class TestPytorchDenseDataloader:
                         loss.backward()
                         optimizer.step()
 
-    def test_except_with_diff_number_of_x_y_rows(self, temp_uris, input_shape, workers):
-        with temp_uris as tiledb_dir:
+    def test_except_with_diff_number_of_x_y_rows(self, temp_uri, input_shape, workers):
+        with temp_uri as tiledb_dir:
             tiledb_uri_x = os.path.join(tiledb_dir, "x")
             tiledb_uri_y = os.path.join(tiledb_dir, "y")
 
@@ -136,10 +136,10 @@ class TestPytorchDenseDataloader:
                         x_array=x, y_array=y, batch_size=BATCH_SIZE
                     )
 
-    def test_no_duplicates_with_multiple_workers(self, temp_uris, input_shape, workers):
+    def test_no_duplicates_with_multiple_workers(self, temp_uri, input_shape, workers):
         if workers == 1 or len(input_shape) != 2:
             pytest.skip()
-        with temp_uris as tiledb_dir:
+        with temp_uri as tiledb_dir:
 
             tiledb_uri_x = os.path.join(tiledb_dir, "x")
             tiledb_uri_y = os.path.join(tiledb_dir, "y")
@@ -195,8 +195,8 @@ class TestPytorchDenseDataloader:
                 assert len(unique_inputs) - 1 == batchindx
                 assert len(unique_labels) - 1 == batchindx
 
-    def test_dataset_length(self, temp_uris, input_shape, workers):
-        with temp_uris as tiledb_dir:
+    def test_dataset_length(self, temp_uri, input_shape, workers):
+        with temp_uri as tiledb_dir:
             tiledb_uri_x = os.path.join(tiledb_dir, "x")
             tiledb_uri_y = os.path.join(tiledb_dir, "y")
 

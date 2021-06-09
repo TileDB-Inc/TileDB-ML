@@ -31,7 +31,7 @@ ROWS = 1000
 
 
 @pytest.fixture
-def temp_uris():
+def temp_uri():
     """
     Returns a temporary directory instance
     """
@@ -72,8 +72,8 @@ def create_model(request):
 
 
 class TestTileDBTensorflowDataAPI:
-    def test_tiledb_tf_data_api_with_multiple_dim_data(self, temp_uris, create_model):
-        with temp_uris as temp_dir:
+    def test_tiledb_tf_data_api_with_multiple_dim_data(self, temp_uri, create_model):
+        with temp_uri as temp_dir:
             model = create_model
             array_uuid = str(uuid.uuid4())
             tiledb_uri_x = os.path.join(temp_dir, "x" + array_uuid)
@@ -105,8 +105,8 @@ class TestTileDBTensorflowDataAPI:
 
                 model.fit(tiledb_dataset, verbose=0, epochs=1)
 
-    def test_except_with_diff_number_of_x_y_rows(self, temp_uris, create_model):
-        with temp_uris as temp_dir:
+    def test_except_with_diff_number_of_x_y_rows(self, temp_uri, create_model):
+        with temp_uri as temp_dir:
             array_uuid = str(uuid.uuid4())
             tiledb_uri_x = os.path.join(temp_dir, "x" + array_uuid)
             tiledb_uri_y = os.path.join(temp_dir, "y" + array_uuid)
@@ -134,8 +134,8 @@ class TestTileDBTensorflowDataAPI:
                         x_array=x, y_array=y, batch_size=BATCH_SIZE
                     )
 
-    def test_dataset_length(self, temp_uris, create_model):
-        with temp_uris as temp_dir:
+    def test_dataset_length(self, temp_uri, create_model):
+        with temp_uri as temp_dir:
             array_uuid = str(uuid.uuid4())
             tiledb_uri_x = os.path.join(temp_dir, "x" + array_uuid)
             tiledb_uri_y = os.path.join(temp_dir, "y" + array_uuid)
