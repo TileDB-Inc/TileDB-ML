@@ -68,10 +68,26 @@ TileDB-ML can be installed:
 
       git clone https://github.com/TileDB-Inc/TileDB-ML.git
       cd TileDB-ML
-      pip install .
+  
+      # In case you want to install and check all frameworks. If you
+      # use zsh replace .[full] with .\[full\]
+      pip install -e .[full]
 
+      # In case you want to install and check Tensorflow only. If you
+      # use zsh replace .[tensorflow] with .\[tensorflow\]
+      pip install -e .[tensorflow]
+
+      # In case you want to install and check PyTorch only. If you
+      # use zsh replace .[pytorch] with .\[pytorch\]
+      pip install -e .[pytorch]
+
+      # In case you want to install and check Scikit-Learn only. If you
+      # use zsh replace .[sklearn] with .\[sklearn\]
+      pip install -e .[sklearn]  
+  
 - You may run the test suite with:
-
+      
+      # You will need the .[full] installation in case you want to run all tests
       python -m unittest discover tests
 
 ## Roadmap
