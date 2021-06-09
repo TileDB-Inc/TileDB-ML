@@ -4,9 +4,7 @@ import tiledb.cloud
 
 from typing import List, Union
 
-from . import FILETYPE_ML_MODEL
-
-CLOUD_MODELS = "ml_models"
+from . import FILETYPE_ML_MODEL, CLOUD_MODELS
 
 
 def get_s3_prefix(namespace: str) -> Union[str, None]:
