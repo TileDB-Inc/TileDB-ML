@@ -2,7 +2,6 @@
 
 import abc
 import os
-import tiledb.cloud as tldbc
 
 from .cloud_utils import get_s3_prefix
 
@@ -57,15 +56,3 @@ class TileDBModel(abc.ABC):
         Abstract method that loads a machine learning model from a model TileDB array.
         Must be implemented per machine learning framework.
         """
-
-    def update_model_array_file_properties(self, framework: str, stage: str):
-        file_properties = {
-            FilePropertyName_ML_FRAMEWORK: framework,
-            FilePropertyName_STAGE: stage,
-        }
-
-        tldbc.array.update_file_properties(
-            uri=self.uri,
-            file_type=FILETYPE_ML_MODEL,
-            file_properties=file_properties,
-        )

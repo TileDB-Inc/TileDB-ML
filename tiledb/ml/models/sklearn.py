@@ -14,6 +14,11 @@ import sklearn
 from sklearn.base import BaseEstimator
 
 from .base import TileDBModel
+from .base import (
+    FILETYPE_ML_MODEL,
+    FilePropertyName_ML_FRAMEWORK,
+    FilePropertyName_STAGE,
+)
 
 
 class SklearnTileDB(TileDBModel):
@@ -80,10 +85,14 @@ class SklearnTileDB(TileDBModel):
 
             # In case we are on TileDB-Cloud we have to update model array's file properties
             if self.namespace:
-                self.update_model_array_file_properties(
-                    framework="SKLEARN", stage="STAGING"
+                tiledb.cloud.array.update_file_properties(
+                    uri=self.uri,
+                    file_type=FILETYPE_ML_MODEL,
+                    file_properties={
+                        FilePropertyName_ML_FRAMEWORK: "SKLEARN",
+                        FilePropertyName_STAGE: "STAGING",
+                    },
                 )
-
         except tiledb.TileDBError as error:
             if "Error while listing with prefix" in str(error):
                 # It is possible to land here if user sets wrong default s3 credentials

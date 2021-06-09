@@ -1,17 +1,19 @@
 import os
 import tiledb
 import tiledb.cloud
+
 from typing import List, Optional
 
+from .base import FILETYPE_ML_MODEL
+
 CLOUD_MODELS = "ml_models"
-FILETYPE_ML_MODEL = "ml_model"
 
 
 def get_s3_prefix(namespace: str) -> Optional[str, None]:
     """
-    Get S3 path from the user profile or organization profile
-    :return: s3 path or error
-    :namespace: str
+    Get S3 path from the user profile or organization profile.
+    :param namespace: str. User's namespace
+    :return: str or None. A S3 prefix
     """
     profile = tiledb.cloud.client.user_profile()
 
@@ -31,6 +33,13 @@ def get_s3_prefix(namespace: str) -> Optional[str, None]:
 def get_model_list(
     category: str, namespace: str
 ) -> Optional[List[tiledb.cloud.rest_api.models.array_info.ArrayInfo], None]:
+    """
+    Returns a list of model TileDB arrays depending on the specified category.
+    :param category: str. Array category. Could be "owned", "shared" or "public"
+    :param namespace: str. User's namespace
+    :return: List or None. A List of ArrayInfo objects that contain information on
+    all our model arrays on TileDB-Cloud.
+    """
     if category == "owned":
         return tiledb.cloud.client.list_arrays(
             file_type=[FILETYPE_ML_MODEL],
