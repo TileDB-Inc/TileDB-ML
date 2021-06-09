@@ -33,3 +33,11 @@ def ingest_in_tiledb(data: np.array, batch_size: int, uri: str, sparse: bool):
     with tiledb.open(uri, "w") as tiledb_array:
         idx = np.nonzero(data) if sparse else slice(None)
         tiledb_array[idx] = {"features": data[idx]}
+
+
+def create_sparse_array_one_hot_2d(rows: int, cols: tuple) -> np.ndarray:
+    seed = np.random.randint(low=0, high=cols[0], size=(rows,))
+    seed[-1] = cols[0] - 1
+    b = np.zeros((seed.size, seed.max() + 1))
+    b[np.arange(seed.size), seed] = 1
+    return b

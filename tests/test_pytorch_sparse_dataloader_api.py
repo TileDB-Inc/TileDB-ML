@@ -11,7 +11,7 @@ import torch.nn as nn
 import torch.optim as optim
 
 from tiledb.ml.data_apis.pytorch_sparse import PyTorchTileDBSparseDataset
-from tiledb.ml.utils.helpers import ingest_in_tiledb
+from tiledb.ml.utils.helpers import ingest_in_tiledb, create_sparse_array_one_hot_2d
 
 # Test parameters
 NUM_OF_CLASSES = 5
@@ -25,14 +25,6 @@ def temp_uri():
     Returns a temporary directory instance
     """
     return tempfile.TemporaryDirectory()
-
-
-def create_sparse_array_one_hot_2d(rows: int, cols: tuple) -> np.ndarray:
-    seed = np.random.randint(low=0, high=cols[0], size=(rows,))
-    seed[-1] = cols[0] - 1
-    b = np.zeros((seed.size, seed.max() + 1))
-    b[np.arange(seed.size), seed] = 1
-    return b
 
 
 class Net(nn.Module):
