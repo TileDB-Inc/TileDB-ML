@@ -27,7 +27,7 @@ class TileDBModel(abc.ABC):
         self.namespace = namespace
         self.ctx = ctx
 
-        # In case we work on TileDB-Cloud we need both namespace and TileDB context.
+        # In case we work on TileDB-Cloud we need user's namespace.
         if self.namespace:
             s3_prefix = get_s3_prefix(self.namespace)
             if s3_prefix is None:
