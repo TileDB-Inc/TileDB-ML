@@ -13,8 +13,8 @@ from typing import Optional
 import sklearn
 from sklearn.base import BaseEstimator
 
-from . import FILETYPE_ML_MODEL, FilePropertyName_ML_FRAMEWORK, FilePropertyName_STAGE
 from .base import TileDBModel
+from . import FILETYPE_ML_MODEL, FilePropertyName_ML_FRAMEWORK, FilePropertyName_STAGE
 
 
 class SklearnTileDB(TileDBModel):
@@ -47,7 +47,7 @@ class SklearnTileDB(TileDBModel):
         """
         Loads a Sklearn model from a TileDB array.
         """
-        model_array = tiledb.open(self.uri)
+        model_array = tiledb.open(self.uri, ctx=self.ctx)
         model_array_results = model_array[:]
         model = pickle.loads(model_array_results["model_params"].item(0))
         return model
@@ -77,7 +77,7 @@ class SklearnTileDB(TileDBModel):
 
             schema = tiledb.ArraySchema(domain=dom, sparse=False, attrs=attrs)
 
-            tiledb.Array.create(self.uri, schema)
+            tiledb.Array.create(self.uri, schema, ctx=self.ctx)
 
             # In case we are on TileDB-Cloud we have to update model array's file properties
             if self.namespace:
@@ -108,7 +108,7 @@ class SklearnTileDB(TileDBModel):
         """
         Writes a Sklearn model to a TileDB array.
         """
-        with tiledb.open(self.uri, "w") as tf_model_tiledb:
+        with tiledb.open(self.uri, "w", ctx=self.ctx) as tf_model_tiledb:
             # Insertion in TileDB array
             tf_model_tiledb[:] = {"model_params": np.array([serialized_model])}
 

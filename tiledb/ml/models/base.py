@@ -2,6 +2,7 @@
 
 import abc
 import os
+import tiledb.cloud
 
 from .cloud_utils import get_s3_prefix
 
@@ -12,22 +13,26 @@ class TileDBModel(abc.ABC):
     store machine learning models (Tensorflow, PyTorch, etc) as TileDB arrays.
     """
 
-    def __init__(self, uri: str, namespace: str = None):
+    def __init__(self, uri: str, namespace: str = None, ctx: tiledb.Ctx = None):
         """
         Base class for saving machine learning models as TileDB arrays
-        and loading machine learning models from TileDB arrays.
+        and loading machine learning models from TileDB arrays. In case we need to interact
+        with TileDB-Cloud we have to pass user's TileDB-Cloud namespace and TileDB Context. If we don't
+        models will be saved locally.
         :param uri: str. TileDB array uri
         :param namespace: str. In case we want to interact (save, load, update, check) with models on
         TileDB-Cloud we need the user's namespace on TileDB-Cloud. Moreover, array's uri must have an s3 prefix.
+        :param ctx: tiledb.Ctx. TileDB Context needed when we want to interact with TileDB-Cloud.
         """
         self.namespace = namespace
+        self.ctx = ctx
 
-        # In case we work on TileDB-Cloud
-        if self.namespace:
+        # In case we work on TileDB-Cloud we need both namespace and TileDB context.
+        if self.namespace and ctx:
             s3_prefix = get_s3_prefix(self.namespace)
             if s3_prefix is None:
-                raise Exception(
-                    "You must set the default s3 prefix path for ML models in {} profile settings".format(
+                raise ValueError(
+                    "You must set the default s3 prefix path for ML models in {} profile settings on TileDB-Cloud".format(
                         self.namespace
                     )
                 )
