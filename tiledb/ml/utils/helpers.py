@@ -2,7 +2,7 @@ import numpy as np
 import tiledb
 
 
-def get_schema(data: np.array, batch_size: int, sparse: bool) -> tiledb.ArraySchema:
+def ingest_in_tiledb(data: np.array, batch_size: int, uri: str, sparse: bool):
     dims = [
         tiledb.Dim(
             name="dim_" + str(dim),
@@ -19,12 +19,6 @@ def get_schema(data: np.array, batch_size: int, sparse: bool) -> tiledb.ArraySch
         sparse=sparse,
         attrs=[tiledb.Attr(name="features", dtype=np.float32)],
     )
-
-    return schema
-
-
-def ingest_in_tiledb(data: np.array, batch_size: int, uri: str, sparse: bool):
-    schema = get_schema(data, batch_size, sparse)
 
     # Create the (empty) array on disk.
     tiledb.Array.create(uri, schema)

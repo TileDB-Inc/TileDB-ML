@@ -1,8 +1,8 @@
 import torch
 import pytest
-import tempfile
 import inspect
 import sys
+import os
 
 import torch.nn as nn
 import torch.optim as optimizers
@@ -81,14 +81,6 @@ class ConvNet(nn.Module):
         return x
 
 
-@pytest.fixture
-def temp_uri():
-    """
-    Returns a temporary directory instance
-    """
-    return tempfile.TemporaryDirectory()
-
-
 @pytest.mark.parametrize(
     "optimizer",
     [
@@ -105,36 +97,36 @@ def temp_uri():
         if inspect.isclass(obj) and obj.__module__ == __name__
     ],
 )
-def test_save(temp_uri, net, optimizer):
+def test_save(tmpdir, net, optimizer):
     EPOCH = 5
     LOSS = 0.4
-    with temp_uri as tiledb_array:
-        tiledb_obj = PyTorchTileDB(uri=tiledb_array)
-        saved_net = net()
-        saved_optimizer = optimizer(saved_net.parameters(), lr=0.001)
-        tiledb_obj.save(
-            model_info={
-                "epoch": EPOCH,
-                "model_state_dict": saved_net.state_dict(),
-                "optimizer_state_dict": saved_optimizer.state_dict(),
-                "loss": LOSS,
-            }
-        )
-        loaded_net = net()
-        loaded_optimizer = optimizer(loaded_net.parameters(), lr=0.001)
-        model_out_dict = tiledb_obj.load(model=loaded_net, optimizer=loaded_optimizer)
+    tiledb_array = os.path.join(tmpdir, "model_array")
+    tiledb_obj = PyTorchTileDB(uri=tiledb_array)
+    saved_net = net()
+    saved_optimizer = optimizer(saved_net.parameters(), lr=0.001)
+    tiledb_obj.save(
+        model_info={
+            "epoch": EPOCH,
+            "model_state_dict": saved_net.state_dict(),
+            "optimizer_state_dict": saved_optimizer.state_dict(),
+            "loss": LOSS,
+        }
+    )
+    loaded_net = net()
+    loaded_optimizer = optimizer(loaded_net.parameters(), lr=0.001)
+    model_out_dict = tiledb_obj.load(model=loaded_net, optimizer=loaded_optimizer)
 
-        assert model_out_dict["epoch"] == EPOCH
-        assert model_out_dict["loss"] == LOSS
+    assert model_out_dict["epoch"] == EPOCH
+    assert model_out_dict["loss"] == LOSS
 
-        # Check model parameters
-        for key_item_1, key_item_2 in zip(
-            saved_net.state_dict().items(), loaded_net.state_dict().items()
-        ):
-            assert torch.equal(key_item_1[1], key_item_2[1])
+    # Check model parameters
+    for key_item_1, key_item_2 in zip(
+        saved_net.state_dict().items(), loaded_net.state_dict().items()
+    ):
+        assert torch.equal(key_item_1[1], key_item_2[1])
 
-        # Check optimizer parameters
-        for key_item_1, key_item_2 in zip(
-            saved_optimizer.state_dict().items(), loaded_optimizer.state_dict().items()
-        ):
-            assert all([a == b for a, b in zip(key_item_1[1], key_item_2[1])])
+    # Check optimizer parameters
+    for key_item_1, key_item_2 in zip(
+        saved_optimizer.state_dict().items(), loaded_optimizer.state_dict().items()
+    ):
+        assert all([a == b for a, b in zip(key_item_1[1], key_item_2[1])])
