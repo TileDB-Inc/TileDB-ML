@@ -84,6 +84,12 @@ TileDB-ML can be installed:
       # In case you want to install and check Scikit-Learn only. If you
       # use zsh replace .[sklearn] with .\[sklearn\]
       pip install -e .[sklearn]  
+
+      # In case you want to try any of the aforementioned machine learning framework
+      # on TileDB-Cloud try one of the follwoing.
+      pip install -e .[tensorflow_cloud]
+      pip install -e .[pytorch_cloud]
+      pip install -e .[pytorch_cloud]
   
 - You may run the test suite with:
       

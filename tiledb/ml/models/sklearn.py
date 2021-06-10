@@ -14,7 +14,13 @@ import sklearn
 from sklearn.base import BaseEstimator
 
 from .base import TileDBModel
-from . import FILETYPE_ML_MODEL, FilePropertyName_ML_FRAMEWORK, FilePropertyName_STAGE
+from . import (
+    FILETYPE_ML_MODEL,
+    FilePropertyName_ML_FRAMEWORK,
+    FilePropertyName_STAGE,
+    FilePropertyName_PYTHON_VERSION,
+    FilePropertyName_ML_FRAMEWORK_VERSION,
+)
 
 
 class SklearnTileDB(TileDBModel):
@@ -87,6 +93,8 @@ class SklearnTileDB(TileDBModel):
                     file_properties={
                         FilePropertyName_ML_FRAMEWORK: "SKLEARN",
                         FilePropertyName_STAGE: "STAGING",
+                        FilePropertyName_PYTHON_VERSION: platform.python_version(),
+                        FilePropertyName_ML_FRAMEWORK_VERSION: sklearn.__version__,
                     },
                 )
         except tiledb.TileDBError as error:
@@ -107,16 +115,12 @@ class SklearnTileDB(TileDBModel):
     def _write_array(self, serialized_model: bytes, meta: Optional[dict]):
         """
         Writes a Sklearn model to a TileDB array.
+        :param serialized_model: Bytes. A pickled sklearn model.
+        :param meta: Dict. A dictionary that can contain any kind of metadata in a (key, value) form.
         """
         with tiledb.open(self.uri, "w", ctx=self.ctx) as tf_model_tiledb:
             # Insertion in TileDB array
             tf_model_tiledb[:] = {"model_params": np.array([serialized_model])}
-
-            # Add Python version to metadata
-            tf_model_tiledb.meta["python_version"] = platform.python_version()
-
-            # Add Sklearn version to metadata
-            tf_model_tiledb.meta["sklearn_version"] = sklearn.__version__
 
             # Add extra metadata given by the user to array's metadata
             if meta:
