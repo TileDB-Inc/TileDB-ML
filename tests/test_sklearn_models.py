@@ -5,23 +5,16 @@ import sklearn.base
 
 from tiledb.ml.models.sklearn import SklearnTileDB
 
-tested_modules = ["svm", "linear_model", "naive_bayes", "tree"]
 
-
-def model_explorer():
-    model_list = []
-    all_estim = sklearn.utils.all_estimators()
-    for estim_name, estim_class in all_estim:
-        if str(estim_class).split(".")[1] in tested_modules:
-            model_list.append(estim_class)
-    return model_list
+def iter_models(*modules):
+    for estim_name, estim_class in sklearn.utils.all_estimators():
+        if str(estim_class).split(".")[1] in modules:
+            yield estim_class
 
 
 @pytest.mark.parametrize(
     "net",
-    [
-        *model_explorer(),
-    ],
+    list(iter_models("svm", "linear_model", "naive_bayes", "tree")),
 )
 def test_save_load(tmpdir, net):
     tiledb_array = os.path.join(tmpdir, "test_array")
