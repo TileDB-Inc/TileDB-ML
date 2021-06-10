@@ -1,37 +1,26 @@
-# import tempfile
-import inspect
 import pytest
-import re
 import os
 
-import sklearn.svm as svms
-import sklearn.naive_bayes as nb
-import sklearn.linear_model as lm
-import sklearn.tree as tree
+import sklearn.base
 
 from tiledb.ml.models.sklearn import SklearnTileDB
 
+tested_modules = ["svm", "linear_model", "naive_bayes", "tree"]
 
-def model_explorer(package_name):
+
+def model_explorer():
     model_list = []
-    for name, obj in inspect.getmembers(package_name):
-        if (
-            inspect.isclass(obj)
-            and hasattr(obj, "get_params")
-            and callable(getattr(obj, "get_params"))
-            and not re.search("Base", name)
-        ):
-            model_list.append(getattr(package_name, name))
+    all_estim = sklearn.utils.all_estimators()
+    for estim_name, estim_class in all_estim:
+        if str(estim_class).split(".")[1] in tested_modules:
+            model_list.append(estim_class)
     return model_list
 
 
 @pytest.mark.parametrize(
     "net",
     [
-        *model_explorer(svms),
-        *model_explorer(lm),
-        *model_explorer(nb),
-        *model_explorer(tree),
+        *model_explorer(),
     ],
 )
 def test_save_load(tmpdir, net):

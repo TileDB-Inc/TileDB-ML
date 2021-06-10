@@ -10,7 +10,7 @@ import tensorflow as tf
 from tensorflow.keras.models import Sequential
 
 from tiledb.ml.data_apis.tensorflow_sparse import TensorflowTileDBSparseDataset
-from tiledb.ml.utils.helpers import ingest_in_tiledb, create_sparse_array_one_hot_2d
+from tiledb.ml._utils import ingest_in_tiledb, create_sparse_array_one_hot_2d
 
 # Suppress all Tensorflow messages
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"

@@ -10,7 +10,7 @@ import torch.nn as nn
 import torch.optim as optim
 
 from tiledb.ml.data_apis.pytorch import PyTorchTileDBDenseDataset
-from tiledb.ml.utils.helpers import ingest_in_tiledb
+from tiledb.ml._utils import ingest_in_tiledb
 
 # Test parameters
 NUM_OF_CLASSES = 5

@@ -15,7 +15,7 @@ from tensorflow.keras.layers import (
 )
 
 from tiledb.ml.data_apis.tensorflow import TensorflowTileDBDenseDataset
-from tiledb.ml.utils.helpers import ingest_in_tiledb
+from tiledb.ml._utils import ingest_in_tiledb
 
 # Suppress all Tensorflow messages
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
