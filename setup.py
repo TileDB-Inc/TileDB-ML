@@ -27,6 +27,7 @@ setuptools.setup(
             "torch>=1.8.1",
             "torchvision>=0.9.1",
             "scikit-learn>=0.23.0",
+            "pytest==6.2.4",
         ],
     },
     classifiers=[
