@@ -17,12 +17,12 @@ class TileDBModel(abc.ABC):
         """
         Base class for saving machine learning models as TileDB arrays
         and loading machine learning models from TileDB arrays. In case we need to interact
-        with TileDB-Cloud we have to pass user's TileDB-Cloud namespace and TileDB Context. If we don't
+        with TileDB-Cloud we have to pass user's TileDB-Cloud namespace. If we don't
         models will be saved locally.
         :param uri: str. TileDB array uri
         :param namespace: str. In case we want to interact (save, load, update, check) with models on
         TileDB-Cloud we need the user's namespace on TileDB-Cloud. Moreover, array's uri must have an s3 prefix.
-        :param ctx: tiledb.Ctx. TileDB Context needed when we want to interact with TileDB-Cloud.
+        :param ctx: tiledb.Ctx. TileDB Context.
         """
         self.namespace = namespace
         self.ctx = ctx
