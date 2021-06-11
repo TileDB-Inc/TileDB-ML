@@ -1,5 +1,8 @@
 <a href="https://tiledb.com"><img src="https://github.com/TileDB-Inc/TileDB/raw/dev/doc/source/_static/tiledb-logo_color_no_margin_@4x.png" alt="TileDB logo" width="400"></a>
 
+[![TileDB-ML CI](https://github.com/TileDB-Inc/TileDB-ML/actions/workflows/ci.yml/badge.svg)](https://github.com/TileDB-Inc/TileDB-ML/actions/workflows/ci.yml)
+![Coverage Badge](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ktsitsi/2506f6c9d3375e2d636cf594340d11bf/raw/gistfile.json)
+
 # TileDB-ML
 
 TileDB-ML is the repository that contains all machine learning oriented functionality TileDB supports. In this repo, we explain how someone can employ 
