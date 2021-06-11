@@ -22,16 +22,12 @@ setuptools.setup(
         "tensorflow": ["tensorflow>=2.5.0"],
         "pytorch": ["torch>=1.8.1", "torchvision>=0.9.1"],
         "sklearn": ["scikit-learn>=0.23.0"],
-        "tensorflow_cloud": ["tensorflow>=2.5.0", "tiledb-cloud>=0.7.11"],
-        "pytorch_cloud": ["torch>=1.8.1", "torchvision>=0.9.1", "tiledb-cloud>=0.7.11"],
-        "sklearn_cloud": ["scikit-learn>=0.23.0", "tiledb-cloud>=0.7.11"],
         "full": [
             "tensorflow>=2.5.0",
             "torch>=1.8.1",
             "torchvision>=0.9.1",
             "scikit-learn>=0.23.0",
             "pytest>=6.2.4",
-            "tiledb-cloud>=0.7.11",
         ],
     },
     classifiers=[
