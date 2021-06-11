@@ -1,10 +1,9 @@
-name: TileDB-ML Python CI
+name: TileDB-ML CI
 
 on: [push]
 
 jobs:
   build:
-
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -39,6 +38,29 @@ jobs:
       run: pip install -e .[full]
       shell: bash
 
-    - name: 'Run tests'
+    - name: 'Run test coverage statistics'
+      id: stats
+      shell: bash
       run: |
-        pytest -q tests
+        pip install pytest-cov
+        TEST_COVERAGE="$(pytest --cov-report term:skip-covered --cov=tiledb tests/ | grep '^TOTAL' | awk -v N=4 '{print $N}')"
+        echo "::set-output name=COVERAGE::$TEST_COVERAGE"
+        REF=${{ github.ref }}
+        echo "github.ref: $REF"
+        IFS='/' read -ra PATHS <<< "$REF"
+        BRANCH_NAME="${PATHS[1]}_${PATHS[2]}"
+        echo $BRANCH_NAME
+        echo $TEST_COVERAGE
+        echo "BRANCH=$(echo ${BRANCH_NAME})" >> $GITHUB_ENV
+
+    - name: 'Create the Badge'
+      if: ${{ matrix.os == 'macos-latest' && matrix.python-version == '3.6' }}
+      uses: schneegans/dynamic-badges-action@v1.0.0
+      with:
+        auth: ${{ secrets.COVERAGE_SECRET }}
+        gistID: 2506f6c9d3375e2d636cf594340d11bf
+        filename: gistfile.json
+        label: coverage
+        message: ${{ steps.stats.outputs.COVERAGE }}
+        color: green
+        namedLogo: pytest
