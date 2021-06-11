@@ -65,10 +65,7 @@ class SklearnTileDB(TileDBModel):
         try:
             dom = tiledb.Domain(
                 tiledb.Dim(
-                    name="model",
-                    domain=(1, 1),
-                    tile=1,
-                    dtype=np.int32,
+                    name="model", domain=(1, 1), tile=1, dtype=np.int32, ctx=self.ctx
                 ),
             )
 
@@ -78,10 +75,13 @@ class SklearnTileDB(TileDBModel):
                     dtype="S1",
                     var=True,
                     filters=tiledb.FilterList([tiledb.ZstdFilter()]),
+                    ctx=self.ctx,
                 ),
             ]
 
-            schema = tiledb.ArraySchema(domain=dom, sparse=False, attrs=attrs)
+            schema = tiledb.ArraySchema(
+                domain=dom, sparse=False, attrs=attrs, ctx=self.ctx
+            )
 
             tiledb.Array.create(self.uri, schema, ctx=self.ctx)
 
