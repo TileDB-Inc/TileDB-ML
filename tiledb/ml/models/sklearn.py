@@ -6,21 +6,14 @@ import platform
 import numpy as np
 import json
 import tiledb
-import tiledb.cloud
 
+from urllib.error import HTTPError
 from typing import Optional
 
 import sklearn
 from sklearn.base import BaseEstimator
 
 from .base import TileDBModel
-from . import (
-    FILETYPE_ML_MODEL,
-    FilePropertyName_ML_FRAMEWORK,
-    FilePropertyName_STAGE,
-    FilePropertyName_PYTHON_VERSION,
-    FilePropertyName_ML_FRAMEWORK_VERSION,
-)
 
 
 class SklearnTileDB(TileDBModel):
@@ -53,7 +46,7 @@ class SklearnTileDB(TileDBModel):
         """
         Loads a Sklearn model from a TileDB array.
         """
-        model_array = tiledb.open(self.uri, ctx=self.ctx)
+        model_array = tiledb.open(self.uri)
         model_array_results = model_array[:]
         model = pickle.loads(model_array_results["model_params"].item(0))
         return model
@@ -64,9 +57,7 @@ class SklearnTileDB(TileDBModel):
         """
         try:
             dom = tiledb.Domain(
-                tiledb.Dim(
-                    name="model", domain=(1, 1), tile=1, dtype=np.int32, ctx=self.ctx
-                ),
+                tiledb.Dim(name="model", domain=(1, 1), tile=1, dtype=np.int32),
             )
 
             attrs = [
@@ -75,34 +66,23 @@ class SklearnTileDB(TileDBModel):
                     dtype="S1",
                     var=True,
                     filters=tiledb.FilterList([tiledb.ZstdFilter()]),
-                    ctx=self.ctx,
                 ),
             ]
 
             schema = tiledb.ArraySchema(
-                domain=dom, sparse=False, attrs=attrs, ctx=self.ctx
+                domain=dom,
+                sparse=False,
+                attrs=attrs,
             )
 
-            tiledb.Array.create(self.uri, schema, ctx=self.ctx)
-
-            # In case we are on TileDB-Cloud we have to update model array's file properties
-            if self.namespace:
-                tiledb.cloud.array.update_file_properties(
-                    uri=self.uri,
-                    file_type=FILETYPE_ML_MODEL,
-                    file_properties={
-                        FilePropertyName_ML_FRAMEWORK: "SKLEARN",
-                        FilePropertyName_STAGE: "STAGING",
-                        FilePropertyName_PYTHON_VERSION: platform.python_version(),
-                        FilePropertyName_ML_FRAMEWORK_VERSION: sklearn.__version__,
-                    },
-                )
+            tiledb.Array.create(self.uri, schema)
         except tiledb.TileDBError as error:
             if "Error while listing with prefix" in str(error):
                 # It is possible to land here if user sets wrong default s3 credentials
                 # with respect to default s3 path
-                raise Exception(
-                    f"Error creating file, {error} Are your S3 credentials valid?"
+                raise HTTPError(
+                    code=400,
+                    msg=f"Error creating file, {error} Are your S3 credentials valid?",
                 )
 
             if "already exists" in str(error):
@@ -115,17 +95,26 @@ class SklearnTileDB(TileDBModel):
     def _write_array(self, serialized_model: bytes, meta: Optional[dict]):
         """
         Writes a Sklearn model to a TileDB array.
-        :param serialized_model: Bytes. A pickled sklearn model.
-        :param meta: Dict. A dictionary that can contain any kind of metadata in a (key, value) form.
         """
-        with tiledb.open(self.uri, "w", ctx=self.ctx) as tf_model_tiledb:
+        with tiledb.open(self.uri, "w") as tf_model_tiledb:
             # Insertion in TileDB array
             tf_model_tiledb[:] = {"model_params": np.array([serialized_model])}
+
+            # Add Python version to metadata
+            tf_model_tiledb.meta["python_version"] = platform.python_version()
+
+            # Add Sklearn version to metadata
+            tf_model_tiledb.meta["sklearn_version"] = sklearn.__version__
 
             # Add extra metadata given by the user to array's metadata
             if meta:
                 for key, value in meta.items():
-                    tf_model_tiledb.meta[key] = json.dumps(value).encode("utf8")
+                    try:
+                        tf_model_tiledb.meta[key] = json.dumps(value).encode("utf8")
+                    except:
+                        logging.warning(
+                            "Exception occurred during Json serialization of metadata!"
+                        )
 
     @staticmethod
     def _serialize_model(model: BaseEstimator) -> bytes:
