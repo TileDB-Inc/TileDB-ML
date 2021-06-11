@@ -1,118 +1,25 @@
-import unittest
-import tempfile
-import numpy as np
+import pytest
+import os
 
-from sklearn import datasets
-from sklearn.svm import LinearSVC, SVC
-from sklearn.naive_bayes import MultinomialNB
-from sklearn.linear_model import LinearRegression, ElasticNet
-from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
+import sklearn.base
 
 from tiledb.ml.models.sklearn import SklearnTileDB
 
-iris = datasets.load_iris()
+
+def iter_models(*modules):
+    for estim_name, estim_class in sklearn.utils.all_estimators():
+        if str(estim_class).split(".")[1] in modules:
+            yield estim_class
 
 
-class TestSaveLoadTileDBModel(unittest.TestCase):
-    def test_save_load_svc(self):
-        with tempfile.TemporaryDirectory() as tiledb_array:
-            model = SVC()
-            model.fit(iris.data, iris.target)
-
-            tiledb_sklearn_obj = SklearnTileDB(uri=tiledb_array)
-            tiledb_sklearn_obj.save(model=model)
-
-            loaded_model = tiledb_sklearn_obj.load()
-
-            model_pred = model.predict(iris.data)
-            loaded_model_pred = loaded_model.predict(iris.data)
-
-            self.assertTrue(np.array_equal(model_pred, loaded_model_pred))
-
-    def test_save_load_linear_svc(self):
-        with tempfile.TemporaryDirectory() as tiledb_array:
-            model = LinearSVC()
-            model.fit(iris.data, iris.target)
-
-            tiledb_sklearn_obj = SklearnTileDB(uri=tiledb_array)
-            tiledb_sklearn_obj.save(model=model)
-
-            loaded_model = tiledb_sklearn_obj.load()
-
-            model_pred = model.predict(iris.data)
-            loaded_model_pred = loaded_model.predict(iris.data)
-
-            self.assertTrue(np.array_equal(model_pred, loaded_model_pred))
-
-    def test_save_load_multinomial_nb(self):
-        with tempfile.TemporaryDirectory() as tiledb_array:
-            model = MultinomialNB()
-            model.fit(iris.data, iris.target)
-
-            tiledb_sklearn_obj = SklearnTileDB(uri=tiledb_array)
-            tiledb_sklearn_obj.save(model=model)
-
-            loaded_model = tiledb_sklearn_obj.load()
-
-            model_pred = model.predict(iris.data)
-            loaded_model_pred = loaded_model.predict(iris.data)
-
-            self.assertTrue(np.array_equal(model_pred, loaded_model_pred))
-
-    def test_save_load_decision_tree_regressor(self):
-        with tempfile.TemporaryDirectory() as tiledb_array:
-            model = DecisionTreeRegressor()
-            model.fit(iris.data, iris.target)
-
-            tiledb_sklearn_obj = SklearnTileDB(uri=tiledb_array)
-            tiledb_sklearn_obj.save(model=model)
-
-            loaded_model = tiledb_sklearn_obj.load()
-
-            model_pred = model.predict(iris.data)
-            loaded_model_pred = loaded_model.predict(iris.data)
-
-            self.assertTrue(np.array_equal(model_pred, loaded_model_pred))
-
-    def test_save_load_decision_tree_classifier(self):
-        with tempfile.TemporaryDirectory() as tiledb_array:
-            model = DecisionTreeClassifier()
-            model.fit(iris.data, iris.target)
-
-            tiledb_sklearn_obj = SklearnTileDB(uri=tiledb_array)
-            tiledb_sklearn_obj.save(model=model)
-
-            loaded_model = tiledb_sklearn_obj.load()
-
-            model_pred = model.predict(iris.data)
-            loaded_model_pred = loaded_model.predict(iris.data)
-
-            self.assertTrue(np.array_equal(model_pred, loaded_model_pred))
-
-    def test_save_load_with_update(self):
-        with tempfile.TemporaryDirectory() as tiledb_array:
-            model = LinearRegression()
-            model.fit(iris.data, iris.target)
-
-            tiledb_sklearn_obj = SklearnTileDB(uri=tiledb_array)
-            tiledb_sklearn_obj.save(model=model)
-
-            loaded_model = tiledb_sklearn_obj.load()
-
-            model_pred = model.predict(iris.data)
-            loaded_model_pred = loaded_model.predict(iris.data)
-
-            self.assertTrue(np.array_equal(model_pred, loaded_model_pred))
-
-            model = ElasticNet()
-            model.fit(iris.data, iris.target)
-
-            tiledb_sklearn_obj = SklearnTileDB(uri=tiledb_array)
-            tiledb_sklearn_obj.save(model=model, update=True)
-
-            loaded_model = tiledb_sklearn_obj.load()
-
-            model_pred = model.predict(iris.data)
-            loaded_model_pred = loaded_model.predict(iris.data)
-
-            self.assertTrue(np.array_equal(model_pred, loaded_model_pred))
+@pytest.mark.parametrize(
+    "net",
+    list(iter_models("svm", "linear_model", "naive_bayes", "tree")),
+)
+def test_save_load(tmpdir, net):
+    tiledb_array = os.path.join(tmpdir, "test_array")
+    model = net()
+    tiledb_sklearn_obj = SklearnTileDB(uri=tiledb_array)
+    tiledb_sklearn_obj.save(model=model)
+    loaded_model = tiledb_sklearn_obj.load()
+    assert all([a == b for a, b in zip(model.get_params(), loaded_model.get_params())])

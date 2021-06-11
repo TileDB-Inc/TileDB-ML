@@ -88,7 +88,7 @@ TileDB-ML can be installed:
 - You may run the test suite with:
       
       # You will need the .[full] installation in case you want to run all tests
-      python -m unittest discover tests
+      pytest -q tests
 
 ## Roadmap
 
