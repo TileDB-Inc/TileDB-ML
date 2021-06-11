@@ -4,7 +4,7 @@ import abc
 import os
 import tiledb.cloud
 
-from .cloud_utils import get_s3_prefix
+from tiledb.ml._cloud_utils import get_s3_prefix
 
 
 class TileDBModel(abc.ABC):
