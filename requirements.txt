@@ -1,6 +1,0 @@
-tiledb>=0.8.5
-torch>=1.8.1
-scikit-learn>=0.23.0
-torchvision>=0.9.1
-tensorflow>=2.5.0
-pytest==6.2.4
