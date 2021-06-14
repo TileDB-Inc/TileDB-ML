@@ -1,6 +1,5 @@
 """Functionality for saving and loading Sklearn models as TileDB arrays"""
 
-import logging
 import pickle
 import platform
 import numpy as np
@@ -39,7 +38,6 @@ class SklearnTileDB(TileDBModel):
         model at the target location.
         :param meta: Dict. Extra metadata to save in a TileDB array.
         """
-
         # Serialize model
         serialized_model = self._serialize_model(model)
 
@@ -62,55 +60,38 @@ class SklearnTileDB(TileDBModel):
         """
         Creates a TileDB array for a Sklearn model.
         """
-        try:
-            dom = tiledb.Domain(
-                tiledb.Dim(
-                    name="model", domain=(1, 1), tile=1, dtype=np.int32, ctx=self.ctx
-                ),
+        dom = tiledb.Domain(
+            tiledb.Dim(
+                name="model", domain=(1, 1), tile=1, dtype=np.int32, ctx=self.ctx
+            ),
+        )
+
+        attrs = [
+            tiledb.Attr(
+                name="model_params",
+                dtype="S1",
+                var=True,
+                filters=tiledb.FilterList([tiledb.ZstdFilter()]),
+                ctx=self.ctx,
+            ),
+        ]
+
+        schema = tiledb.ArraySchema(domain=dom, sparse=False, attrs=attrs, ctx=self.ctx)
+
+        tiledb.Array.create(self.uri, schema, ctx=self.ctx)
+
+        # In case we are on TileDB-Cloud we have to update model array's file properties
+        if self.namespace:
+            tiledb.cloud.array.update_file_properties(
+                uri=self.uri,
+                file_type=FILETYPE_ML_MODEL,
+                file_properties={
+                    FilePropertyName_ML_FRAMEWORK: "SKLEARN",
+                    FilePropertyName_STAGE: "STAGING",
+                    FilePropertyName_PYTHON_VERSION: platform.python_version(),
+                    FilePropertyName_ML_FRAMEWORK_VERSION: sklearn.__version__,
+                },
             )
-
-            attrs = [
-                tiledb.Attr(
-                    name="model_params",
-                    dtype="S1",
-                    var=True,
-                    filters=tiledb.FilterList([tiledb.ZstdFilter()]),
-                    ctx=self.ctx,
-                ),
-            ]
-
-            schema = tiledb.ArraySchema(
-                domain=dom, sparse=False, attrs=attrs, ctx=self.ctx
-            )
-
-            tiledb.Array.create(self.uri, schema, ctx=self.ctx)
-
-            # In case we are on TileDB-Cloud we have to update model array's file properties
-            if self.namespace:
-                tiledb.cloud.array.update_file_properties(
-                    uri=self.uri,
-                    file_type=FILETYPE_ML_MODEL,
-                    file_properties={
-                        FilePropertyName_ML_FRAMEWORK: "SKLEARN",
-                        FilePropertyName_STAGE: "STAGING",
-                        FilePropertyName_PYTHON_VERSION: platform.python_version(),
-                        FilePropertyName_ML_FRAMEWORK_VERSION: sklearn.__version__,
-                    },
-                )
-        except tiledb.TileDBError as error:
-            if "Error while listing with prefix" in str(error):
-                # It is possible to land here if user sets wrong default s3 credentials
-                # with respect to default s3 path
-                raise Exception(
-                    f"Error creating file, {error} Are your S3 credentials valid?"
-                )
-
-            if "already exists" in str(error):
-                logging.warning(
-                    "TileDB array already exists but update=False. "
-                    "Next time set update=True. Returning"
-                )
-                raise error
 
     def _write_array(self, serialized_model: bytes, meta: Optional[dict]):
         """

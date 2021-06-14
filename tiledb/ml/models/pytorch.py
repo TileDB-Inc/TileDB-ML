@@ -1,6 +1,5 @@
 """Functionality for saving and loading PytTorch models as TileDB arrays"""
 
-import logging
 import pickle
 import platform
 import json
@@ -38,7 +37,6 @@ class PyTorchTileDB(TileDBModel):
         model at the target location.
         :param meta: Dict. Extra metadata to save in a TileDB array.
         """
-
         # Serialize model information
         serialized_model_info = {
             key: pickle.dumps(value, protocol=4) for key, value in model_info.items()
@@ -58,7 +56,6 @@ class PyTorchTileDB(TileDBModel):
         :return: Dict. A dictionary with attributes other than model or optimizer
         state_dict.
         """
-
         model_array = tiledb.open(self.uri, ctx=self.ctx)
         model_array_results = model_array[:]
         schema = model_array.schema
@@ -90,61 +87,46 @@ class PyTorchTileDB(TileDBModel):
         Creates a TileDB array for a PyTorch model
         :param serialized_model_info: Dict. A dictionary with serialized (pickled) information of a PyTorch model.
         """
-        try:
-            dom = tiledb.Domain(
-                tiledb.Dim(
-                    name="model", domain=(1, 1), tile=1, dtype=np.int32, ctx=self.ctx
+        dom = tiledb.Domain(
+            tiledb.Dim(
+                name="model", domain=(1, 1), tile=1, dtype=np.int32, ctx=self.ctx
+            ),
+        )
+
+        attrs = []
+
+        for key in serialized_model_info:
+            attrs.append(
+                tiledb.Attr(
+                    name=key,
+                    dtype="S1",
+                    var=True,
+                    filters=tiledb.FilterList([tiledb.ZstdFilter()]),
+                    ctx=self.ctx,
                 ),
             )
 
-            attrs = []
+        schema = tiledb.ArraySchema(
+            domain=dom,
+            sparse=False,
+            attrs=attrs,
+            ctx=self.ctx,
+        )
 
-            for key in serialized_model_info:
-                attrs.append(
-                    tiledb.Attr(
-                        name=key,
-                        dtype="S1",
-                        var=True,
-                        filters=tiledb.FilterList([tiledb.ZstdFilter()]),
-                        ctx=self.ctx,
-                    ),
-                )
+        tiledb.Array.create(self.uri, schema, ctx=self.ctx)
 
-            schema = tiledb.ArraySchema(
-                domain=dom,
-                sparse=False,
-                attrs=attrs,
-                ctx=self.ctx,
+        # In case we are on TileDB-Cloud we have to update model array's file properties
+        if self.namespace:
+            tiledb.cloud.array.update_file_properties(
+                uri=self.uri,
+                file_type=FILETYPE_ML_MODEL,
+                file_properties={
+                    FilePropertyName_ML_FRAMEWORK: "PYTORCH",
+                    FilePropertyName_STAGE: "STAGING",
+                    FilePropertyName_PYTHON_VERSION: platform.python_version(),
+                    FilePropertyName_ML_FRAMEWORK_VERSION: torch.__version__,
+                },
             )
-
-            tiledb.Array.create(self.uri, schema, ctx=self.ctx)
-
-            # In case we are on TileDB-Cloud we have to update model array's file properties
-            if self.namespace:
-                tiledb.cloud.array.update_file_properties(
-                    uri=self.uri,
-                    file_type=FILETYPE_ML_MODEL,
-                    file_properties={
-                        FilePropertyName_ML_FRAMEWORK: "PYTORCH",
-                        FilePropertyName_STAGE: "STAGING",
-                        FilePropertyName_PYTHON_VERSION: platform.python_version(),
-                        FilePropertyName_ML_FRAMEWORK_VERSION: torch.__version__,
-                    },
-                )
-        except tiledb.TileDBError as error:
-            if "Error while listing with prefix" in str(error):
-                # It is possible to land here if user sets wrong default s3 credentials
-                # with respect to default s3 path
-                raise Exception(
-                    f"Error creating file, {error} Are your S3 credentials valid?"
-                )
-
-            if "already exists" in str(error):
-                logging.warning(
-                    "TileDB array already exists but update=False. "
-                    "Next time set update=True. Returning"
-                )
-                raise error
 
     def _write_array(self, serialized_model_info: dict, meta: Optional[dict]):
         """
