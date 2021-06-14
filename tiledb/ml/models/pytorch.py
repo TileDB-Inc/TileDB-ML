@@ -7,7 +7,6 @@ import json
 import numpy as np
 import tiledb
 
-from urllib.error import HTTPError
 from typing import Optional
 
 import torch
@@ -15,6 +14,13 @@ from torch.optim import Optimizer
 from torch.nn import Module
 
 from .base import TileDBModel
+from . import (
+    FILETYPE_ML_MODEL,
+    FilePropertyName_ML_FRAMEWORK,
+    FilePropertyName_STAGE,
+    FilePropertyName_PYTHON_VERSION,
+    FilePropertyName_ML_FRAMEWORK_VERSION,
+)
 
 
 class PyTorchTileDB(TileDBModel):
@@ -53,7 +59,7 @@ class PyTorchTileDB(TileDBModel):
         state_dict.
         """
 
-        model_array = tiledb.open(self.uri)
+        model_array = tiledb.open(self.uri, ctx=self.ctx)
         model_array_results = model_array[:]
         schema = model_array.schema
 
@@ -82,10 +88,13 @@ class PyTorchTileDB(TileDBModel):
     def _create_array(self, serialized_model_info: dict):
         """
         Creates a TileDB array for a PyTorch model
+        :param serialized_model_info: Dict. A dictionary with serialized (pickled) information of a PyTorch model.
         """
         try:
             dom = tiledb.Domain(
-                tiledb.Dim(name="model", domain=(1, 1), tile=1, dtype=np.int32),
+                tiledb.Dim(
+                    name="model", domain=(1, 1), tile=1, dtype=np.int32, ctx=self.ctx
+                ),
             )
 
             attrs = []
@@ -97,6 +106,7 @@ class PyTorchTileDB(TileDBModel):
                         dtype="S1",
                         var=True,
                         filters=tiledb.FilterList([tiledb.ZstdFilter()]),
+                        ctx=self.ctx,
                     ),
                 )
 
@@ -104,16 +114,29 @@ class PyTorchTileDB(TileDBModel):
                 domain=dom,
                 sparse=False,
                 attrs=attrs,
+                ctx=self.ctx,
             )
 
-            tiledb.Array.create(self.uri, schema)
+            tiledb.Array.create(self.uri, schema, ctx=self.ctx)
+
+            # In case we are on TileDB-Cloud we have to update model array's file properties
+            if self.namespace:
+                tiledb.cloud.array.update_file_properties(
+                    uri=self.uri,
+                    file_type=FILETYPE_ML_MODEL,
+                    file_properties={
+                        FilePropertyName_ML_FRAMEWORK: "PYTORCH",
+                        FilePropertyName_STAGE: "STAGING",
+                        FilePropertyName_PYTHON_VERSION: platform.python_version(),
+                        FilePropertyName_ML_FRAMEWORK_VERSION: torch.__version__,
+                    },
+                )
         except tiledb.TileDBError as error:
             if "Error while listing with prefix" in str(error):
                 # It is possible to land here if user sets wrong default s3 credentials
                 # with respect to default s3 path
-                raise HTTPError(
-                    code=400,
-                    msg=f"Error creating file, {error} Are your S3 credentials valid?",
+                raise Exception(
+                    f"Error creating file, {error} Are your S3 credentials valid?"
                 )
 
             if "already exists" in str(error):
@@ -126,8 +149,10 @@ class PyTorchTileDB(TileDBModel):
     def _write_array(self, serialized_model_info: dict, meta: Optional[dict]):
         """
         Writes a PyTorch model to a TileDB array.
+        :param serialized_model_info: Dict. A dictionary with serialized (pickled) information of a PyTorch model.
+        :param meta: Optional Dict. Extra metadata the user will save as model array's metadata.
         """
-        with tiledb.open(self.uri, "w") as tf_model_tiledb:
+        with tiledb.open(self.uri, "w", ctx=self.ctx) as tf_model_tiledb:
             # Insertion in TileDB array
             insertion_dict = {
                 key: np.array([value]) for key, value in serialized_model_info.items()
@@ -135,18 +160,7 @@ class PyTorchTileDB(TileDBModel):
 
             tf_model_tiledb[:] = insertion_dict
 
-            # Add Python version to metadata
-            tf_model_tiledb.meta["python_version"] = platform.python_version()
-
-            # Add PyTorch version to metadata
-            tf_model_tiledb.meta["pytorch_version"] = torch.__version__
-
             # Add extra metadata given by the user to array's metadata
             if meta:
                 for key, value in meta.items():
-                    try:
-                        tf_model_tiledb.meta[key] = json.dumps(value).encode("utf8")
-                    except:
-                        logging.warning(
-                            "Exception occurred during Json serialization of metadata!"
-                        )
+                    tf_model_tiledb.meta[key] = json.dumps(value).encode("utf8")
