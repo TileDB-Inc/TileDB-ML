@@ -180,7 +180,7 @@ class TensorflowTileDB(TileDBModel):
                 uri=self.uri,
                 file_type=FILETYPE_ML_MODEL,
                 file_properties={
-                    FilePropertyName_ML_FRAMEWORK: "PYTORCH",
+                    FilePropertyName_ML_FRAMEWORK: "TENSORFLOW",
                     FilePropertyName_STAGE: "STAGING",
                     FilePropertyName_PYTHON_VERSION: platform.python_version(),
                     FilePropertyName_ML_FRAMEWORK_VERSION: tf.__version__,
