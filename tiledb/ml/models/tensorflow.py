@@ -8,7 +8,6 @@ import numpy as np
 import tensorflow as tf
 import tiledb
 
-from urllib.error import HTTPError
 from typing import Optional
 
 from tensorflow.python.keras.models import Model, Sequential
@@ -18,6 +17,13 @@ from tensorflow.python.keras.saving import saving_utils
 from tensorflow.python.keras.saving.saved_model import json_utils
 
 from .base import TileDBModel
+from . import (
+    FILETYPE_ML_MODEL,
+    FilePropertyName_ML_FRAMEWORK,
+    FilePropertyName_STAGE,
+    FilePropertyName_PYTHON_VERSION,
+    FilePropertyName_ML_FRAMEWORK_VERSION,
+)
 
 
 class TensorflowTileDB(TileDBModel):
@@ -76,7 +82,7 @@ class TensorflowTileDB(TileDBModel):
         custom classes or functions to be considered during deserialization.
         :return: Model. Tensorflow model.
         """
-        model_array = tiledb.open(self.uri)
+        model_array = tiledb.open(self.uri, ctx=self.ctx)
         model_array_results = model_array[:]
         model_weights = pickle.loads(model_array_results["model_weights"].item(0))
         model_config = json.loads(model_array.meta["model_config"])
@@ -136,48 +142,50 @@ class TensorflowTileDB(TileDBModel):
         """
         Creates a TileDB array for a Tensorflow model
         """
-        try:
-            dom = tiledb.Domain(
-                tiledb.Dim(name="model", domain=(1, 1), tile=1, dtype=np.int32),
+        dom = tiledb.Domain(
+            tiledb.Dim(
+                name="model", domain=(1, 1), tile=1, dtype=np.int32, ctx=self.ctx
+            ),
+        )
+
+        attrs = [
+            tiledb.Attr(
+                name="model_weights",
+                dtype="S1",
+                var=True,
+                filters=tiledb.FilterList([tiledb.ZstdFilter()]),
+                ctx=self.ctx,
+            ),
+            tiledb.Attr(
+                name="optimizer_weights",
+                dtype="S1",
+                var=True,
+                filters=tiledb.FilterList([tiledb.ZstdFilter()]),
+                ctx=self.ctx,
+            ),
+        ]
+
+        schema = tiledb.ArraySchema(
+            domain=dom,
+            sparse=False,
+            attrs=attrs,
+            ctx=self.ctx,
+        )
+
+        tiledb.Array.create(self.uri, schema, ctx=self.ctx)
+
+        # In case we are on TileDB-Cloud we have to update model array's file properties
+        if self.namespace:
+            tiledb.cloud.array.update_file_properties(
+                uri=self.uri,
+                file_type=FILETYPE_ML_MODEL,
+                file_properties={
+                    FilePropertyName_ML_FRAMEWORK: "TENSORFLOW",
+                    FilePropertyName_STAGE: "STAGING",
+                    FilePropertyName_PYTHON_VERSION: platform.python_version(),
+                    FilePropertyName_ML_FRAMEWORK_VERSION: tf.__version__,
+                },
             )
-
-            attrs = [
-                tiledb.Attr(
-                    name="model_weights",
-                    dtype="S1",
-                    var=True,
-                    filters=tiledb.FilterList([tiledb.ZstdFilter()]),
-                ),
-                tiledb.Attr(
-                    name="optimizer_weights",
-                    dtype="S1",
-                    var=True,
-                    filters=tiledb.FilterList([tiledb.ZstdFilter()]),
-                ),
-            ]
-
-            schema = tiledb.ArraySchema(
-                domain=dom,
-                sparse=False,
-                attrs=attrs,
-            )
-
-            tiledb.Array.create(self.uri, schema)
-        except tiledb.TileDBError as error:
-            if "Error while listing with prefix" in str(error):
-                # It is possible to land here if user sets wrong default s3 credentials
-                # with respect to default s3 path
-                raise HTTPError(
-                    code=400,
-                    msg=f"Error creating file, {error} Are your S3 credentials valid?",
-                )
-
-            if "already exists" in str(error):
-                logging.warning(
-                    "TileDB array already exists but update=False. "
-                    "Next time set update=True. Returning"
-                )
-                raise error
 
     def _write_array(
         self,
@@ -190,7 +198,7 @@ class TensorflowTileDB(TileDBModel):
         """
         Writes Tensorflow model to a TileDB array.
         """
-        with tiledb.open(self.uri, "w") as tf_model_tiledb:
+        with tiledb.open(self.uri, "w", ctx=self.ctx) as tf_model_tiledb:
             # Insert weights and optimizer
             tf_model_tiledb[:] = {
                 "model_weights": np.array([serialized_weights]),
@@ -200,29 +208,16 @@ class TensorflowTileDB(TileDBModel):
             # Insert all model metadata
             model_metadata = saving_utils.model_metadata(model, include_optimizer)
             for key, value in model_metadata.items():
-                try:
-                    tf_model_tiledb.meta[key] = json.dumps(
-                        value, default=json_utils.get_json_type
-                    ).encode("utf8")
-                except:
-                    logging.warning(
-                        "Exception occurred during Json serialization of metadata!"
-                    )
-
-            # Add Python version to array's metadata
-            tf_model_tiledb.meta["python_version"] = platform.python_version()
+                tf_model_tiledb.meta[key] = json.dumps(
+                    value, default=json_utils.get_json_type
+                ).encode("utf8")
 
             # Add extra metadata given by the user to array's metadata
             if meta:
                 for key, value in meta.items():
-                    try:
-                        tf_model_tiledb.meta[key] = json.dumps(
-                            value, default=json_utils.get_json_type
-                        ).encode("utf8")
-                    except:
-                        logging.warning(
-                            "Exception occurred during Json serialization of metadata!"
-                        )
+                    tf_model_tiledb.meta[key] = json.dumps(
+                        value, default=json_utils.get_json_type
+                    ).encode("utf8")
 
     @staticmethod
     def _serialize_model_weights(model: Model) -> bytes:
