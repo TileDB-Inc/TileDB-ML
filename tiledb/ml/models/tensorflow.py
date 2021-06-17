@@ -73,16 +73,21 @@ class TensorflowTileDB(TileDBModel):
         )
 
     def load(
-        self, compile_model: bool = False, custom_objects: Optional[dict] = None
+        self,
+        compile_model: bool = False,
+        custom_objects: Optional[dict] = None,
+        timestamp: Optional[int] = None,
     ) -> Model:
         """
         Loads a Tensorflow model from a TileDB array.
         :param compile_model: Boolean. Whether to compile the model after loading or not.
         :param custom_objects: Optional dictionary mapping names (strings) to
         custom classes or functions to be considered during deserialization.
+        :param timestamp: Int. In case we want to use TileDB time travelling, we can provide a
+        specific timestamp in order to load a specific fragment of the array.
         :return: Model. Tensorflow model.
         """
-        model_array = tiledb.open(self.uri, ctx=self.ctx)
+        model_array = tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp)
         model_array_results = model_array[:]
         model_weights = pickle.loads(model_array_results["model_weights"].item(0))
         model_config = json.loads(model_array.meta["model_config"])

@@ -47,11 +47,14 @@ class SklearnTileDB(TileDBModel):
 
         self._write_array(serialized_model=serialized_model, meta=meta)
 
-    def load(self) -> BaseEstimator:
+    def load(self, timestamp: Optional[int] = None) -> BaseEstimator:
         """
         Loads a Sklearn model from a TileDB array.
+        :param timestamp: Int. In case we want to use TileDB time travelling, we can provide a
+        specific timestamp in order to load a specific fragment of the array.
+        :return: BaseEstimator. A Sklearn model object.
         """
-        model_array = tiledb.open(self.uri, ctx=self.ctx)
+        model_array = tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp)
         model_array_results = model_array[:]
         model = pickle.loads(model_array_results["model_params"].item(0))
         return model
