@@ -1,25 +1,21 @@
-from setuptools import find_packages, setup
+from setuptools import setup, find_namespace_packages
 
 with open("README.md", "r", encoding="utf-8") as fh:
     README_MD = fh.read()
 
 setup(
     name="tiledb-ml",
+    version="0.1.2.6",
     description="Package supports all machine learning functionality for TileDB Embedded and TileDB Cloud",
     long_description=README_MD,
     long_description_content_type="text/markdown",
     author="TileDB, Inc.",
     author_email="help@tiledb.io",
-    maintainers="TileDB, Inc.",
+    maintainer="TileDB, Inc.",
     maintainer_email="help@tiledb.io",
     url="https://github.com/TileDB-Inc/TileDB-ML",
     license="MIT",
     platforms=["any"],
-    use_scm_version={
-        "version_scheme": "guess-next-dev",
-        "local_scheme": "dirty-tag",
-        "write_to": "tiledb-ml/version.py",
-    },
     project_urls={
         "Bug Tracker": "https://github.com/TileDB-Inc/TileDB-ML/issues",
     },
@@ -39,7 +35,6 @@ setup(
             "torch>=1.8.1",
             "torchvision>=0.9.1",
             "scikit-learn>=0.23.0",
-            "pytest>=6.2.4",
             "tiledb-cloud>=0.7.11",
         ],
     },
@@ -60,6 +55,6 @@ setup(
         "Programming Language :: Python :: 3.8",
         "License :: OSI Approved :: MIT License",
     ],
-    packages=find_packages(),
+    packages=find_namespace_packages(),
     python_requires=">=3.6",
 )

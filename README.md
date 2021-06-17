@@ -64,6 +64,14 @@ We also provide detailed notebook examples on how to train Tensorflow and PyTorc
 
 TileDB-ML can be installed:
 
+### Quick Installation
+
+- TileDB-ML is available from either [PyPI](https://test.pypi.org/project/tiledb-ml/0.1.2.2/) with ``pip``:
+
+  ```
+  pip install tiledb-ml
+  ```
+
 - with pip from git
 
       pip install git+https://github.com/TileDB-Inc/TileDB-ML.git@master
@@ -96,10 +104,9 @@ TileDB-ML can be installed:
       pip install -e .[pytorch_cloud]
   
 - You may run the test suite with:
-      
-      # You will need the .[full] installation in case you want to run all tests
-      pytest -q tests
-
+  ```
+  python setup.py test
+  ```
 ## Roadmap
 
 We are already working on the following:
