@@ -6,7 +6,7 @@ import json
 import numpy as np
 import tiledb
 
-from typing import Optional
+from typing import Optional, Tuple
 
 import torch
 from torch.optim import Optimizer
@@ -49,14 +49,17 @@ class PyTorchTileDB(TileDBModel):
         self._write_array(serialized_model_info=serialized_model_info, meta=meta)
 
     def load(
-        self, model: Module, optimizer: Optimizer, timestamp: Optional[int] = None
+        self,
+        model: Module,
+        optimizer: Optimizer,
+        timestamp: Optional[Tuple[int, int]] = None,
     ) -> dict:
         """
         Loads a PyTorch model from a TileDB array.
         :param model: Pytorch Module. A defined PyTorch model.
         :param optimizer: PyTorch Optimizer. A defined PyTorch optimizer.
-        :param timestamp: Int. In case we want to use TileDB time travelling, we can provide a
-        specific timestamp in order to load a specific fragment of the array.
+        :param timestamp: Tuple of int. In case we want to use TileDB time travelling, we can provide a range of
+        timestamps in order to load fragments of the array which live in the specified time range.
         :return: Dict. A dictionary with attributes other than model or optimizer
         state_dict.
         """
