@@ -2,9 +2,7 @@
 
 import abc
 import os
-import tiledb.cloud
-
-from tiledb.ml._cloud_utils import get_s3_prefix
+import tiledb
 
 
 class TileDBModel(abc.ABC):
@@ -29,6 +27,8 @@ class TileDBModel(abc.ABC):
 
         # In case we work on TileDB-Cloud we need user's namespace.
         if self.namespace:
+            from tiledb.ml._cloud_utils import get_s3_prefix
+
             s3_prefix = get_s3_prefix(self.namespace)
             if s3_prefix is None:
                 raise ValueError(
