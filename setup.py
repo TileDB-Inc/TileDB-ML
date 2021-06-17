@@ -1,16 +1,25 @@
-import setuptools
+from setuptools import find_packages, setup
 
 with open("README.md", "r", encoding="utf-8") as fh:
-    long_description = fh.read()
+    README_MD = fh.read()
 
-setuptools.setup(
+setup(
     name="tiledb-ml",
-    version="0.1.0",
-    author="George Skoumas",
     description="Package supports all machine learning functionality for TileDB Embedded and TileDB Cloud",
-    long_description=long_description,
+    long_description=README_MD,
     long_description_content_type="text/markdown",
+    author="TileDB, Inc.",
+    author_email="help@tiledb.io",
+    maintainers="TileDB, Inc.",
+    maintainer_email="help@tiledb.io",
     url="https://github.com/TileDB-Inc/TileDB-ML",
+    license="MIT",
+    platforms=["any"],
+    use_scm_version={
+        "version_scheme": "guess-next-dev",
+        "local_scheme": "dirty-tag",
+        "write_to": "tiledb-ml/version.py",
+    },
     project_urls={
         "Bug Tracker": "https://github.com/TileDB-Inc/TileDB-ML/issues",
     },
@@ -35,12 +44,22 @@ setuptools.setup(
         ],
     },
     classifiers=[
+        "Development Status :: 4 - Beta",
+        "Intended Audience :: Developers",
+        "Intended Audience :: Information Technology",
+        "Intended Audience :: Science/Research",
+        "Programming Language :: Python",
+        "Topic :: Software Development :: Libraries :: Python Modules",
+        "Topic :: Scientific/Engineering :: Artificial Intelligence",
+        "Operating System :: Unix",
+        "Operating System :: POSIX :: Linux",
+        "Operating System :: MacOS :: MacOS X",
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
         "License :: OSI Approved :: MIT License",
     ],
-    packages=setuptools.find_packages(),
+    packages=find_packages(),
     python_requires=">=3.6",
 )
