@@ -16,7 +16,7 @@ setuptools.setup(
     },
     test_suite="tests",
     install_requires=[
-        "tiledb>=0.8.5, <=0.8.9",
+        "tiledb>=0.9.0",
     ],
     extras_require={
         "tensorflow": ["tensorflow>=2.5.0"],

@@ -8,7 +8,7 @@ import numpy as np
 import tensorflow as tf
 import tiledb
 
-from typing import Optional
+from typing import Optional, Tuple
 
 from tensorflow.python.keras.models import Model, Sequential
 from tensorflow.python.keras.engine.functional import Functional
@@ -73,16 +73,21 @@ class TensorflowTileDB(TileDBModel):
         )
 
     def load(
-        self, compile_model: bool = False, custom_objects: Optional[dict] = None
+        self,
+        compile_model: bool = False,
+        custom_objects: Optional[dict] = None,
+        timestamp: Optional[Tuple[int, int]] = None,
     ) -> Model:
         """
         Loads a Tensorflow model from a TileDB array.
         :param compile_model: Boolean. Whether to compile the model after loading or not.
         :param custom_objects: Optional dictionary mapping names (strings) to
         custom classes or functions to be considered during deserialization.
+        :param timestamp: Tuple of int. In case we want to use TileDB time travelling, we can provide a range of
+        timestamps in order to load fragments of the array which live in the specified time range.
         :return: Model. Tensorflow model.
         """
-        model_array = tiledb.open(self.uri, ctx=self.ctx)
+        model_array = tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp)
         model_array_results = model_array[:]
         model_weights = pickle.loads(model_array_results["model_weights"].item(0))
         model_config = json.loads(model_array.meta["model_config"])

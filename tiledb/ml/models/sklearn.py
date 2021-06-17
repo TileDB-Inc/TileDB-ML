@@ -7,7 +7,7 @@ import json
 import tiledb
 import tiledb.cloud
 
-from typing import Optional
+from typing import Optional, Tuple
 
 import sklearn
 from sklearn.base import BaseEstimator
@@ -47,11 +47,14 @@ class SklearnTileDB(TileDBModel):
 
         self._write_array(serialized_model=serialized_model, meta=meta)
 
-    def load(self) -> BaseEstimator:
+    def load(self, timestamp: Optional[Tuple[int, int]] = None) -> BaseEstimator:
         """
         Loads a Sklearn model from a TileDB array.
+        :param timestamp: Tuple of int. In case we want to use TileDB time travelling, we can provide a range of
+        timestamps in order to load fragments of the array which live in the specified time range.
+        :return: BaseEstimator. A Sklearn model object.
         """
-        model_array = tiledb.open(self.uri, ctx=self.ctx)
+        model_array = tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp)
         model_array_results = model_array[:]
         model = pickle.loads(model_array_results["model_params"].item(0))
         return model
