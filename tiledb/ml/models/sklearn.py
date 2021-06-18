@@ -11,6 +11,13 @@ import sklearn
 from sklearn.base import BaseEstimator
 
 from .base import TileDBModel
+import platform
+from . import (
+    FilePropertyName_ML_FRAMEWORK,
+    FilePropertyName_STAGE,
+    FilePropertyName_PYTHON_VERSION,
+    FilePropertyName_ML_FRAMEWORK_VERSION,
+)
 
 
 class SklearnTileDB(TileDBModel):
@@ -78,7 +85,13 @@ class SklearnTileDB(TileDBModel):
         if self.namespace:
             from tiledb.ml._cloud_utils import update_file_properties_wrapper
 
-            update_file_properties_wrapper(self.uri, "SKLEARN", sklearn.__version__)
+            file_properties = {
+                FilePropertyName_ML_FRAMEWORK: "SKLEARN",
+                FilePropertyName_STAGE: "STAGING",
+                FilePropertyName_PYTHON_VERSION: platform.python_version(),
+                FilePropertyName_ML_FRAMEWORK_VERSION: sklearn.__version__,
+            }
+            update_file_properties_wrapper(self.uri, file_properties)
 
     def _write_array(self, serialized_model: bytes, meta: Optional[dict]):
         """

@@ -16,6 +16,13 @@ from tensorflow.python.keras.saving import saving_utils
 from tensorflow.python.keras.saving.saved_model import json_utils
 
 from .base import TileDBModel
+import platform
+from . import (
+    FilePropertyName_ML_FRAMEWORK,
+    FilePropertyName_STAGE,
+    FilePropertyName_PYTHON_VERSION,
+    FilePropertyName_ML_FRAMEWORK_VERSION,
+)
 
 
 class TensorflowTileDB(TileDBModel):
@@ -175,7 +182,13 @@ class TensorflowTileDB(TileDBModel):
         if self.namespace:
             from tiledb.ml._cloud_utils import update_file_properties_wrapper
 
-            update_file_properties_wrapper(self.uri, "TENSORFLOW", tf.__version__)
+            file_properties = {
+                FilePropertyName_ML_FRAMEWORK: "TENSORFLOW",
+                FilePropertyName_STAGE: "STAGING",
+                FilePropertyName_PYTHON_VERSION: platform.python_version(),
+                FilePropertyName_ML_FRAMEWORK_VERSION: tf.__version__,
+            }
+            update_file_properties_wrapper(self.uri, file_properties)
 
     def _write_array(
         self,

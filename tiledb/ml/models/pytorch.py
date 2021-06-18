@@ -12,6 +12,13 @@ from torch.optim import Optimizer
 from torch.nn import Module
 
 from .base import TileDBModel
+import platform
+from . import (
+    FilePropertyName_ML_FRAMEWORK,
+    FilePropertyName_STAGE,
+    FilePropertyName_PYTHON_VERSION,
+    FilePropertyName_ML_FRAMEWORK_VERSION,
+)
 
 
 class PyTorchTileDB(TileDBModel):
@@ -118,7 +125,13 @@ class PyTorchTileDB(TileDBModel):
         if self.namespace:
             from tiledb.ml._cloud_utils import update_file_properties_wrapper
 
-            update_file_properties_wrapper(self.uri, "PYTORCH", torch.__version__)
+            file_properties = {
+                FilePropertyName_ML_FRAMEWORK: "PYTORCH",
+                FilePropertyName_STAGE: "STAGING",
+                FilePropertyName_PYTHON_VERSION: platform.python_version(),
+                FilePropertyName_ML_FRAMEWORK_VERSION: torch.__version__,
+            }
+            update_file_properties_wrapper(self.uri, file_properties)
 
     def _write_array(self, serialized_model_info: dict, meta: Optional[dict]):
         """
