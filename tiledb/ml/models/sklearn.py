@@ -5,7 +5,6 @@ import platform
 import numpy as np
 import json
 import tiledb
-import tiledb.cloud
 
 from typing import Optional, Tuple
 

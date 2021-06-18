@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="tiledb-ml",
-    version="0.1.2.6",
+    version="0.1.0",
     description="Package supports all machine learning functionality for TileDB Embedded and TileDB Cloud",
     long_description=README_MD,
     long_description_content_type="text/markdown",

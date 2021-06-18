@@ -71,6 +71,25 @@ TileDB-ML can be installed:
   ```
   pip install tiledb-ml
   ```
+  The above command will just install the basic dependency of `tiledb-ml`, hence `tiledb`.
+  In order to install the integration for a specific framework you need to use:
+  
+  ```
+  pip install tiledb-ml[pytorch] # e.g. For checking only the Pytorch integration
+  ```
+  
+  Checking all the supported frameworks you will need to use:
+
+  ```
+  pip install tiledb-ml[full]
+  ```
+  
+  The above commands apply to `bash` shell in case you use `zsh` you will 
+  need to escape the `bracket` character like the following for example:
+  
+  ```
+  pip install tiledb-ml\[pytorch\]
+  ```
 
 - with pip from git
 
