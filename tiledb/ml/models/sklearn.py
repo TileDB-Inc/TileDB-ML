@@ -1,11 +1,9 @@
 """Functionality for saving and loading Sklearn models as TileDB arrays"""
 
 import pickle
-import platform
 import numpy as np
 import json
 import tiledb
-import tiledb.cloud
 
 from typing import Optional, Tuple
 
@@ -13,8 +11,8 @@ import sklearn
 from sklearn.base import BaseEstimator
 
 from .base import TileDBModel
+import platform
 from . import (
-    FILETYPE_ML_MODEL,
     FilePropertyName_ML_FRAMEWORK,
     FilePropertyName_STAGE,
     FilePropertyName_PYTHON_VERSION,
@@ -85,16 +83,15 @@ class SklearnTileDB(TileDBModel):
 
         # In case we are on TileDB-Cloud we have to update model array's file properties
         if self.namespace:
-            tiledb.cloud.array.update_file_properties(
-                uri=self.uri,
-                file_type=FILETYPE_ML_MODEL,
-                file_properties={
-                    FilePropertyName_ML_FRAMEWORK: "SKLEARN",
-                    FilePropertyName_STAGE: "STAGING",
-                    FilePropertyName_PYTHON_VERSION: platform.python_version(),
-                    FilePropertyName_ML_FRAMEWORK_VERSION: sklearn.__version__,
-                },
-            )
+            from tiledb.ml._cloud_utils import update_file_properties
+
+            file_properties = {
+                FilePropertyName_ML_FRAMEWORK: "SKLEARN",
+                FilePropertyName_STAGE: "STAGING",
+                FilePropertyName_PYTHON_VERSION: platform.python_version(),
+                FilePropertyName_ML_FRAMEWORK_VERSION: sklearn.__version__,
+            }
+            update_file_properties(self.uri, file_properties)
 
     def _write_array(self, serialized_model: bytes, meta: Optional[dict]):
         """

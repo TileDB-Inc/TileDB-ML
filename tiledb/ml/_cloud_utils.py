@@ -5,6 +5,7 @@ import tiledb.cloud
 from typing import Union
 
 from . import CLOUD_MODELS
+from models import FILETYPE_ML_MODEL
 
 
 def get_s3_prefix(namespace: str) -> Union[str, None]:
@@ -26,3 +27,11 @@ def get_s3_prefix(namespace: str) -> Union[str, None]:
             return os.path.join(organization.default_s3_path, CLOUD_MODELS)
         else:
             return None
+
+
+def update_file_properties(uri: str, file_properties: dict):
+    tiledb.cloud.array.update_file_properties(
+        uri=uri,
+        file_type=FILETYPE_ML_MODEL,
+        file_properties=file_properties,
+    )
