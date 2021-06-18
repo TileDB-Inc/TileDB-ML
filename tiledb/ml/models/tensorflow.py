@@ -3,7 +3,6 @@
 import logging
 import json
 import pickle
-import platform
 import numpy as np
 import tensorflow as tf
 import tiledb
@@ -17,13 +16,6 @@ from tensorflow.python.keras.saving import saving_utils
 from tensorflow.python.keras.saving.saved_model import json_utils
 
 from .base import TileDBModel
-from . import (
-    FILETYPE_ML_MODEL,
-    FilePropertyName_ML_FRAMEWORK,
-    FilePropertyName_STAGE,
-    FilePropertyName_PYTHON_VERSION,
-    FilePropertyName_ML_FRAMEWORK_VERSION,
-)
 
 
 class TensorflowTileDB(TileDBModel):
@@ -181,16 +173,9 @@ class TensorflowTileDB(TileDBModel):
 
         # In case we are on TileDB-Cloud we have to update model array's file properties
         if self.namespace:
-            tiledb.cloud.array.update_file_properties(
-                uri=self.uri,
-                file_type=FILETYPE_ML_MODEL,
-                file_properties={
-                    FilePropertyName_ML_FRAMEWORK: "TENSORFLOW",
-                    FilePropertyName_STAGE: "STAGING",
-                    FilePropertyName_PYTHON_VERSION: platform.python_version(),
-                    FilePropertyName_ML_FRAMEWORK_VERSION: tf.__version__,
-                },
-            )
+            from tiledb.ml._cloud_utils import update_file_properties_wrapper
+
+            update_file_properties_wrapper(self.uri, "TENSORFLOW", tf.__version__)
 
     def _write_array(
         self,
