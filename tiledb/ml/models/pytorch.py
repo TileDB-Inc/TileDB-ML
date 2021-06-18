@@ -123,7 +123,7 @@ class PyTorchTileDB(TileDBModel):
 
         # In case we are on TileDB-Cloud we have to update model array's file properties
         if self.namespace:
-            from tiledb.ml._cloud_utils import update_file_properties_wrapper
+            from tiledb.ml._cloud_utils import update_file_properties
 
             file_properties = {
                 FilePropertyName_ML_FRAMEWORK: "PYTORCH",
@@ -131,7 +131,7 @@ class PyTorchTileDB(TileDBModel):
                 FilePropertyName_PYTHON_VERSION: platform.python_version(),
                 FilePropertyName_ML_FRAMEWORK_VERSION: torch.__version__,
             }
-            update_file_properties_wrapper(self.uri, file_properties)
+            update_file_properties(self.uri, file_properties)
 
     def _write_array(self, serialized_model_info: dict, meta: Optional[dict]):
         """

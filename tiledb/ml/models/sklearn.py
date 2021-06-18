@@ -83,7 +83,7 @@ class SklearnTileDB(TileDBModel):
 
         # In case we are on TileDB-Cloud we have to update model array's file properties
         if self.namespace:
-            from tiledb.ml._cloud_utils import update_file_properties_wrapper
+            from tiledb.ml._cloud_utils import update_file_properties
 
             file_properties = {
                 FilePropertyName_ML_FRAMEWORK: "SKLEARN",
@@ -91,7 +91,7 @@ class SklearnTileDB(TileDBModel):
                 FilePropertyName_PYTHON_VERSION: platform.python_version(),
                 FilePropertyName_ML_FRAMEWORK_VERSION: sklearn.__version__,
             }
-            update_file_properties_wrapper(self.uri, file_properties)
+            update_file_properties(self.uri, file_properties)
 
     def _write_array(self, serialized_model: bytes, meta: Optional[dict]):
         """

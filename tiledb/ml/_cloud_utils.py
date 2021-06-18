@@ -29,7 +29,7 @@ def get_s3_prefix(namespace: str) -> Union[str, None]:
             return None
 
 
-def update_file_properties_wrapper(uri: str, file_properties: dict):
+def update_file_properties(uri: str, file_properties: dict):
     tiledb.cloud.array.update_file_properties(
         uri=uri,
         file_type=FILETYPE_ML_MODEL,
