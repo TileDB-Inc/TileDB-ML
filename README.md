@@ -66,35 +66,6 @@ TileDB-ML can be installed:
 
 ### Quick Installation
 
-- TileDB-ML is available from either [PyPI](https://test.pypi.org/project/tiledb-ml/0.1.2.2/) with ``pip``:
-
-  ```
-  pip install tiledb-ml
-  ```
-  The above command will just install the basic dependency of `tiledb-ml`, hence `tiledb`.
-  In order to install the integration for a specific framework you need to use:
-  
-  ```
-  pip install tiledb-ml[pytorch] # e.g. For checking only the Pytorch integration
-  ```
-  
-  Checking all the supported frameworks you will need to use:
-
-  ```
-  pip install tiledb-ml[full]
-  ```
-  
-  The above commands apply to `bash` shell in case you use `zsh` you will 
-  need to escape the `bracket` character like the following for example:
-  
-  ```
-  pip install tiledb-ml\[pytorch\]
-  ```
-
-- with pip from git
-
-      pip install git+https://github.com/TileDB-Inc/TileDB-ML.git@master
-
 - from source by cloning the [Git](https://github.com/TileDB-Inc/TileDB-ML) repository:
 
       git clone https://github.com/TileDB-Inc/TileDB-ML.git
@@ -121,6 +92,37 @@ TileDB-ML can be installed:
       pip install -e .[tensorflow_cloud]
       pip install -e .[pytorch_cloud]
       pip install -e .[pytorch_cloud]
+
+- with pip from git:
+
+      pip install git+https://github.com/TileDB-Inc/TileDB-ML.git@master
+
+- Soon from PyPi:
+
+[comment]: <> (TileDB-ML is available from either [PyPI]&#40;https://test.pypi.org/project/tiledb-ml/0.1.2.2/&#41; with ``pip``:)
+
+  ```
+  pip install tiledb-ml
+  ```
+  The above command will just install the basic dependency of `tiledb-ml`, hence `tiledb`.
+  In order to install the integration for a specific framework you need to use:
+  
+  ```
+  pip install tiledb-ml[pytorch] # e.g. For checking only the Pytorch integration
+  ```
+  
+  Checking all the supported frameworks you will need to use:
+
+  ```
+  pip install tiledb-ml[full]
+  ```
+  
+  The above commands apply to `bash` shell in case you use `zsh` you will 
+  need to escape the `bracket` character like the following for example:
+  
+  ```
+  pip install tiledb-ml\[pytorch\]
+  ```
   
 - You may run the test suite with:
   ```
