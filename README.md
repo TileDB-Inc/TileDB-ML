@@ -50,7 +50,10 @@ this is useful in order to create simple and flexible model registries with Tile
 * [Example for Tensorflow Keras Models](https://github.com/TileDB-Inc/TileDB-ML/blob/master/examples/models/tensorflow_keras_tiledb_models_example.ipynb)
 * [Example for PyTorch Models](https://github.com/TileDB-Inc/TileDB-ML/blob/master/examples/models/pytorch_tiledb_models_example.ipynb)
 * [Example for Scikit-Learn Models](https://github.com/TileDB-Inc/TileDB-ML/blob/master/examples/models/sklearn_tiledb_models_example.ipynb)
-* [Example for Scikit-Learn Model on TileDB-Cloud](https://github.com/TileDB-Inc/TileDB-ML/blob/master/examples/cloud/tiledb_cloud_ml_model_array.ipynb)
+* [Example for Tensorflow Model on TileDB-Cloud](https://github.com/TileDB-Inc/TileDB-ML/blob/master/examples/cloud/tensorflow_tiledb_cloud_ml_model_array.ipynb)
+* [Example for PyTorch Model on TileDB-Cloud](https://github.com/TileDB-Inc/TileDB-ML/blob/master/examples/cloud/pytorch_tiledb_cloud_ml_model_array.ipynb)
+* [Example for Scikit-Learn Model on TileDB-Cloud](https://github.com/TileDB-Inc/TileDB-ML/blob/master/examples/cloud/sklearn_tiledb_cloud_ml_model_array.ipynb)
+
 
 We also provide detailed notebook examples on how to train Tensorflow and PyTorch models with the use of our Data APIs support for Dense and Sparse TileDB arrays.
 
