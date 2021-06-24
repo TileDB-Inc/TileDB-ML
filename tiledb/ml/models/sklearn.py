@@ -8,7 +8,6 @@ import tiledb
 from typing import Optional, Tuple
 
 import sklearn
-from sklearn import set_config
 from sklearn import config_context
 from sklearn.base import BaseEstimator
 
@@ -68,10 +67,8 @@ class SklearnTileDB(TileDBModel):
         :return A string representation of the models internal configuration.
 
         """
-        set_config(display=display)
-        output = str(model)
-        config_context(display="text")
-        return output
+        with config_context(display=display):
+            return str(model)
 
     def _create_array(self):
         """

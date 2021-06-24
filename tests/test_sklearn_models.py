@@ -33,5 +33,4 @@ def test_preview(tmpdir, net):
     tiledb_array = os.path.join(tmpdir, "test_array")
     model = net()
     tiledb_sklearn_obj = SklearnTileDB(uri=tiledb_array)
-    print(tiledb_sklearn_obj.preview(model))
     assert type(tiledb_sklearn_obj.preview(model)) == str
