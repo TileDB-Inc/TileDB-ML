@@ -152,7 +152,6 @@ class TensorflowTileDB(TileDBModel):
         s = io.StringIO()
         model.summary(print_fn=lambda x: s.write(x + "\n"))
         model_summary = s.getvalue()
-        s.close()
         return model_summary
 
     def _create_array(self):

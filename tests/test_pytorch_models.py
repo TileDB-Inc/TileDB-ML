@@ -144,5 +144,5 @@ def test_preview(tmpdir, net):
     tiledb_array = os.path.join(tmpdir, "model_array")
     tiledb_obj = PyTorchTileDB(uri=tiledb_array)
     saved_net = net()
+    print(tiledb_obj.preview(saved_net))
     assert type(tiledb_obj.preview(saved_net)) == str
-    assert tiledb_obj.preview(saved_net) is not None

@@ -1,7 +1,5 @@
 """Functionality for saving and loading Sklearn models as TileDB arrays"""
 
-import sys
-import io
 import pickle
 import numpy as np
 import json
@@ -11,6 +9,7 @@ from typing import Optional, Tuple
 
 import sklearn
 from sklearn import set_config
+from sklearn import config_context
 from sklearn.base import BaseEstimator
 
 from .base import TileDBModel
@@ -69,14 +68,9 @@ class SklearnTileDB(TileDBModel):
         :return A string representation of the models internal configuration.
 
         """
-
-        old_stdout = sys.stdout
-        new_stdout = io.StringIO()
-        sys.stdout = new_stdout
         set_config(display=display)
-        print(model)
-        output = new_stdout.getvalue()
-        sys.stdout = old_stdout
+        output = str(model)
+        config_context(display="text")
         return output
 
     def _create_array(self):

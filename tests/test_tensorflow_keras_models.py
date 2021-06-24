@@ -390,7 +390,6 @@ class TestTensorflowKerasModel:
         tiledb_model_obj = TensorflowTileDB(uri=tiledb_uri)
         if model.built:
             assert type(tiledb_model_obj.preview(model)) == str
-            assert tiledb_model_obj.preview(model) is not None
         else:
             # Model should be built before preview it
             with pytest.raises(ValueError):
