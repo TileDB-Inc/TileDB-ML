@@ -66,5 +66,3 @@ class TileDBModel(abc.ABC):
         Must be implemented per machine learning framework, i.e, Tensorflow,
         PyTorch etc.
         """
-
-        raise NotImplementedError("Preview method is not implemented")
