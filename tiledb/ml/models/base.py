@@ -3,6 +3,7 @@
 import abc
 import os
 import tiledb
+import typing
 
 
 class TileDBModel(abc.ABC):
@@ -57,3 +58,13 @@ class TileDBModel(abc.ABC):
         Abstract method that loads a machine learning model from a model TileDB array.
         Must be implemented per machine learning framework.
         """
+
+    @abc.abstractmethod
+    def preview(self, model: typing.Any, **kwargs):
+        """
+        Abstract method that previews a machine learning model.
+        Must be implemented per machine learning framework, i.e, Tensorflow,
+        PyTorch etc.
+        """
+
+        raise NotImplementedError("Preview method is not implemented")

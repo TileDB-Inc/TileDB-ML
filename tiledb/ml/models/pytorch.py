@@ -88,6 +88,14 @@ class PyTorchTileDB(TileDBModel):
                 )
         return out_dict
 
+    def preview(self, model: Module) -> str:
+        """
+        Creates a diagram representation of the model.
+        :param model: An torch.nn.Module object
+        :return: A string representation of the models internal configuration.
+        """
+        return str(model)
+
     def _create_array(self, serialized_model_info: dict):
         """
         Creates a TileDB array for a PyTorch model

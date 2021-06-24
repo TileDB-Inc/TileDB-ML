@@ -8,6 +8,8 @@ import tiledb
 from typing import Optional, Tuple
 
 import sklearn
+from sklearn import set_config
+from sklearn import config_context
 from sklearn.base import BaseEstimator
 
 from .base import TileDBModel
@@ -56,6 +58,20 @@ class SklearnTileDB(TileDBModel):
         model_array_results = model_array[:]
         model = pickle.loads(model_array_results["model_params"].item(0))
         return model
+
+    def preview(self, model: BaseEstimator, display: str = "text") -> str:
+        """
+        Creates a diagram representation of the model.
+        :param model: An Sklearn Estimator object.
+        :param display: If ‘diagram’, estimators will be displayed as a diagram in an HTML format when shown in a jupyter notebook.
+        If ‘text’, estimators will be displayed as text. Default is ‘text’.
+        :return A string representation of the models internal configuration.
+
+        """
+        set_config(display=display)
+        output = str(model)
+        config_context(display="text")
+        return output
 
     def _create_array(self):
         """
