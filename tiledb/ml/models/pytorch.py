@@ -1,5 +1,7 @@
 """Functionality for saving and loading PytTorch models as TileDB arrays"""
 
+import sys
+import io
 import pickle
 import json
 import numpy as np
@@ -87,6 +89,20 @@ class PyTorchTileDB(TileDBModel):
                     model_array_results[attr_name].item(0)
                 )
         return out_dict
+
+    def preview(self, model: Module) -> str:
+        """
+        Creates a diagram representation of the model.
+        :param model: An torch.nn.Module object
+        :return: A string representation of the models internal configuration.
+        """
+        old_stdout = sys.stdout
+        new_stdout = io.StringIO()
+        sys.stdout = new_stdout
+        print(model)
+        output = new_stdout.getvalue()
+        sys.stdout = old_stdout
+        return output
 
     def _create_array(self, serialized_model_info: dict):
         """

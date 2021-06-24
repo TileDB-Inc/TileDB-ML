@@ -1,5 +1,7 @@
 """Functionality for saving and loading Sklearn models as TileDB arrays"""
 
+import sys
+import io
 import pickle
 import numpy as np
 import json
@@ -8,6 +10,7 @@ import tiledb
 from typing import Optional, Tuple
 
 import sklearn
+from sklearn import set_config
 from sklearn.base import BaseEstimator
 
 from .base import TileDBModel
@@ -56,6 +59,25 @@ class SklearnTileDB(TileDBModel):
         model_array_results = model_array[:]
         model = pickle.loads(model_array_results["model_params"].item(0))
         return model
+
+    def preview(self, model: BaseEstimator, display: str = "text") -> str:
+        """
+        Creates a diagram representation of the model.
+        :param model: An Sklearn Estimator object.
+        :param display: If ‘diagram’, estimators will be displayed as a diagram in an HTML format when shown in a jupyter notebook.
+        If ‘text’, estimators will be displayed as text. Default is ‘text’.
+        :return A string representation of the models internal configuration.
+
+        """
+
+        old_stdout = sys.stdout
+        new_stdout = io.StringIO()
+        sys.stdout = new_stdout
+        set_config(display=display)
+        print(model)
+        output = new_stdout.getvalue()
+        sys.stdout = old_stdout
+        return output
 
     def _create_array(self):
         """

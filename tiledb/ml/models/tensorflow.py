@@ -1,5 +1,6 @@
 """Functionality for saving and loading Tensorflow Keras models as TileDB arrays"""
 
+import io
 import logging
 import json
 import pickle
@@ -141,6 +142,18 @@ class TensorflowTileDB(TileDBModel):
                         "optimizer."
                     )
         return model
+
+    def preview(self, model: Model) -> str:
+        """
+        Creates a diagram representation of the model.
+        :param model:  Tensorflow model.
+        :return: A string representation of the models internal configuration.
+        """
+        s = io.StringIO()
+        model.summary(print_fn=lambda x: s.write(x + "\n"))
+        model_summary = s.getvalue()
+        s.close()
+        return model_summary
 
     def _create_array(self):
         """

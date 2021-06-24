@@ -373,3 +373,25 @@ class TestTensorflowKerasModel:
         np.testing.assert_array_equal(
             loaded_model.predict(data_x), model.predict(data_x)
         )
+
+    def test_preview(self, tmpdir, api, loss, optimizer, metrics):
+        model = (
+            api(num_hidden=1, num_classes=2, input_dim=3)
+            if api != testing_utils.get_small_subclass_mlp
+            else api(num_hidden=1, num_classes=2)
+        )
+
+        tiledb_uri = os.path.join(tmpdir, "model_array")
+
+        # Compiles the model if optimizer is present
+        if optimizer:
+            model.compile(loss=loss, optimizer=optimizer, metrics=[metrics])
+
+        tiledb_model_obj = TensorflowTileDB(uri=tiledb_uri)
+        if model.built:
+            assert type(tiledb_model_obj.preview(model)) == str
+            assert tiledb_model_obj.preview(model) is not None
+        else:
+            # Model should be built before preview it
+            with pytest.raises(ValueError):
+                tiledb_model_obj.preview(model)

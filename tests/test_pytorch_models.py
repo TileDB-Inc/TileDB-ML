@@ -130,3 +130,19 @@ def test_save(tmpdir, net, optimizer):
         saved_optimizer.state_dict().items(), loaded_optimizer.state_dict().items()
     ):
         assert all([a == b for a, b in zip(key_item_1[1], key_item_2[1])])
+
+
+@pytest.mark.parametrize(
+    "net",
+    [
+        getattr(sys.modules[__name__], name)
+        for name, obj in inspect.getmembers(sys.modules[__name__])
+        if inspect.isclass(obj) and obj.__module__ == __name__
+    ],
+)
+def test_preview(tmpdir, net):
+    tiledb_array = os.path.join(tmpdir, "model_array")
+    tiledb_obj = PyTorchTileDB(uri=tiledb_array)
+    saved_net = net()
+    assert type(tiledb_obj.preview(saved_net)) == str
+    assert tiledb_obj.preview(saved_net) is not None
