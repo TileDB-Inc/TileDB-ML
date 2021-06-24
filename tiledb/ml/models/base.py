@@ -4,7 +4,6 @@ import abc
 import os
 import tiledb
 import typing
-from functools import singledispatchmethod
 
 
 class TileDBModel(abc.ABC):
@@ -60,7 +59,7 @@ class TileDBModel(abc.ABC):
         Must be implemented per machine learning framework.
         """
 
-    @singledispatchmethod
+    @abc.abstractmethod
     def preview(self, model: typing.Any, **kwargs):
         """
         Abstract method that previews a machine learning model.
