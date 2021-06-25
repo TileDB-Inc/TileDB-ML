@@ -17,13 +17,6 @@ from tensorflow.python.keras.saving import saving_utils
 from tensorflow.python.keras.saving.saved_model import json_utils
 
 from .base import TileDBModel
-import platform
-from . import (
-    FilePropertyName_ML_FRAMEWORK,
-    FilePropertyName_STAGE,
-    FilePropertyName_PYTHON_VERSION,
-    FilePropertyName_ML_FRAMEWORK_VERSION,
-)
 
 
 class TensorflowTileDB(TileDBModel):
@@ -31,6 +24,17 @@ class TensorflowTileDB(TileDBModel):
     Class that implements all functionality needed to save Tensorflow models as
     TileDB arrays and load Tensorflow models from TileDB arrays.
     """
+
+    def __init__(self, model: Optional[Model], *args, **kwargs):
+        super(self.__class__, self).__init__(*args, **kwargs)
+        self.model = model
+
+        if self.namespace:
+            self.file_properties = self.set_file_properties(
+                framework="TENSORFLOW",
+                framework_version=tf.__version__,
+                preview=self.preview(),
+            )
 
     def save(
         self,
@@ -143,14 +147,13 @@ class TensorflowTileDB(TileDBModel):
                     )
         return model
 
-    def preview(self, model: Model) -> str:
+    def preview(self) -> str:
         """
-        Creates a diagram representation of the model.
-        :param model:  Tensorflow model.
-        :return: A string representation of the models internal configuration.
+        Creates a string representation of the model.
+        :return: str. A string representation of the models internal configuration.
         """
         s = io.StringIO()
-        model.summary(print_fn=lambda x: s.write(x + "\n"))
+        self.model.summary(print_fn=lambda x: s.write(x + "\n"))
         model_summary = s.getvalue()
         return model_summary
 
@@ -194,13 +197,7 @@ class TensorflowTileDB(TileDBModel):
         if self.namespace:
             from tiledb.ml._cloud_utils import update_file_properties
 
-            file_properties = {
-                FilePropertyName_ML_FRAMEWORK: "TENSORFLOW",
-                FilePropertyName_STAGE: "STAGING",
-                FilePropertyName_PYTHON_VERSION: platform.python_version(),
-                FilePropertyName_ML_FRAMEWORK_VERSION: tf.__version__,
-            }
-            update_file_properties(self.uri, file_properties)
+            update_file_properties(self.uri, self.file_properties)
 
     def _write_array(
         self,
@@ -229,10 +226,13 @@ class TensorflowTileDB(TileDBModel):
 
             # Add extra metadata given by the user to array's metadata
             if meta:
-                for key, value in meta.items():
-                    tf_model_tiledb.meta[key] = json.dumps(
-                        value, default=json_utils.get_json_type
-                    ).encode("utf8")
+                self.update_model_metadata(array=tf_model_tiledb, meta=meta)
+
+            # In case we are on TileDB-Cloud we have to save model array's file properties also in metadata
+            if self.namespace:
+                self.update_model_metadata(
+                    array=tf_model_tiledb, meta=self.file_properties
+                )
 
     @staticmethod
     def _serialize_model_weights(model: Model) -> bytes:

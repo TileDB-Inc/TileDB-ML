@@ -3,7 +3,9 @@
 import abc
 import os
 import tiledb
-import typing
+import enum
+import json
+import platform
 
 
 class TileDBModel(abc.ABC):
@@ -41,6 +43,9 @@ class TileDBModel(abc.ABC):
             self.uri = "tiledb://{}/{}".format(
                 self.namespace, os.path.join(s3_prefix, uri)
             )
+
+            # Create a file properties object, needed only when on TileDB-Cloud
+            self.file_properties_obj = ModelFileProperties()
         else:
             self.uri = uri
 
@@ -60,9 +65,44 @@ class TileDBModel(abc.ABC):
         """
 
     @abc.abstractmethod
-    def preview(self, model: typing.Any, **kwargs):
+    def preview(self, **kwargs):
         """
         Abstract method that previews a machine learning model.
         Must be implemented per machine learning framework, i.e, Tensorflow,
         PyTorch etc.
         """
+
+    def set_file_properties(
+        self, framework: str, framework_version: str, preview: str
+    ) -> dict:
+        """
+        Abstract method that returns model array's file properties.
+        :param framework: str. Machine learning framework.
+        :param framework_version: str. Machine learning framework's version.
+        :param preview: str. Machine learning model's preview.
+        :return: dict. Dictionary with model's file properties
+        """
+        return {
+            self.file_properties_obj.ML_FRAMEWORK: framework,
+            self.file_properties_obj.STAGE: "STAGING",
+            self.file_properties_obj.PYTHON_VERSION: platform.python_version(),
+            self.file_properties_obj.FRAMEWORK_VERSION: framework_version,
+            self.file_properties_obj.MODEL_PREVIEW: preview,
+        }
+
+    @staticmethod
+    def update_model_metadata(array: tiledb.Array, meta: dict):
+        for key, value in meta.items():
+            array.meta[key] = json.dumps(value).encode("utf8")
+
+
+class ModelFileProperties(enum):
+    """
+    Enum Class that contains all model array file properties.
+    """
+
+    ML_FRAMEWORK = "ML_FRAMEWORK"
+    FRAMEWORK_VERSION = "ML_FRAMEWORK_VERSION"
+    STAGE = "STAGE"
+    PYTHON_VERSION = "PYTHON_VERSION"
+    MODEL_PREVIEW = "PREVIEW"
