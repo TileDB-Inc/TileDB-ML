@@ -19,7 +19,7 @@ class PyTorchTileDB(TileDBModel):
     TileDB arrays and load PyTorch models from TileDB arrays.
     """
 
-    def __init__(self, model: Optional[Module], *args, **kwargs):
+    def __init__(self, model: Optional[Module] = None, *args, **kwargs):
         super(self.__class__, self).__init__(*args, **kwargs)
         self.model = model
 
@@ -96,7 +96,10 @@ class PyTorchTileDB(TileDBModel):
         Creates a string representation of the model.
         :return: str. A string representation of the models internal configuration.
         """
-        return str(self.model)
+        if self.model:
+            return str(self.model)
+        else:
+            return ""
 
     def _create_array(self, serialized_model_info: dict):
         """

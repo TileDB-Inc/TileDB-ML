@@ -19,7 +19,7 @@ class SklearnTileDB(TileDBModel):
     TileDB arrays and load Sklearn models from TileDB arrays.
     """
 
-    def __init__(self, model: Optional[BaseEstimator], *args, **kwargs):
+    def __init__(self, model: Optional[BaseEstimator] = None, *args, **kwargs):
         super(self.__class__, self).__init__(*args, **kwargs)
         self.model = model
 
@@ -68,8 +68,11 @@ class SklearnTileDB(TileDBModel):
         jupyter notebook. If ‘text’, estimators will be displayed as text. Default is ‘text’.
         :return str. A string representation of the models internal configuration.
         """
-        with config_context(display=display):
-            return str(self.model)
+        if self.model:
+            with config_context(display=display):
+                return str(self.model)
+        else:
+            return ""
 
     def _create_array(self):
         """

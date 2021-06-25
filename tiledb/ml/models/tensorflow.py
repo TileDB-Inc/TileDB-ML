@@ -25,7 +25,7 @@ class TensorflowTileDB(TileDBModel):
     TileDB arrays and load Tensorflow models from TileDB arrays.
     """
 
-    def __init__(self, model: Optional[Model], *args, **kwargs):
+    def __init__(self, model: Optional[Model] = None, *args, **kwargs):
         super(self.__class__, self).__init__(*args, **kwargs)
         self.model = model
 
@@ -152,10 +152,13 @@ class TensorflowTileDB(TileDBModel):
         Creates a string representation of the model.
         :return: str. A string representation of the models internal configuration.
         """
-        s = io.StringIO()
-        self.model.summary(print_fn=lambda x: s.write(x + "\n"))
-        model_summary = s.getvalue()
-        return model_summary
+        if self.model:
+            s = io.StringIO()
+            self.model.summary(print_fn=lambda x: s.write(x + "\n"))
+            model_summary = s.getvalue()
+            return model_summary
+        else:
+            return ""
 
     def _create_array(self):
         """

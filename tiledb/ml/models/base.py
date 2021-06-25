@@ -3,9 +3,10 @@
 import abc
 import os
 import tiledb
-import enum
 import json
 import platform
+
+from enum import Enum, unique
 
 
 class TileDBModel(abc.ABC):
@@ -45,7 +46,7 @@ class TileDBModel(abc.ABC):
             )
 
             # Create a file properties object, needed only when on TileDB-Cloud
-            self.file_properties_obj = ModelFileProperties()
+            self.file_properties_obj = ModelFileProperties
         else:
             self.uri = uri
 
@@ -83,11 +84,11 @@ class TileDBModel(abc.ABC):
         :return: dict. Dictionary with model's file properties
         """
         return {
-            self.file_properties_obj.ML_FRAMEWORK: framework,
-            self.file_properties_obj.STAGE: "STAGING",
-            self.file_properties_obj.PYTHON_VERSION: platform.python_version(),
-            self.file_properties_obj.FRAMEWORK_VERSION: framework_version,
-            self.file_properties_obj.MODEL_PREVIEW: preview,
+            self.file_properties_obj.ML_FRAMEWORK.value: framework,
+            self.file_properties_obj.STAGE.value: "STAGING",
+            self.file_properties_obj.PYTHON_VERSION.value: platform.python_version(),
+            self.file_properties_obj.FRAMEWORK_VERSION.value: framework_version,
+            self.file_properties_obj.MODEL_PREVIEW.value: preview,
         }
 
     @staticmethod
@@ -96,7 +97,8 @@ class TileDBModel(abc.ABC):
             array.meta[key] = json.dumps(value).encode("utf8")
 
 
-class ModelFileProperties(enum):
+@unique
+class ModelFileProperties(Enum):
     """
     Enum Class that contains all model array file properties.
     """
