@@ -42,8 +42,7 @@ jobs:
       id: stats
       shell: bash
       run: |
-        pip install pytest-mock
-        pip install pytest-cov
+        pip install pytest-mock, pytest-cov
         TEST_COVERAGE="$(pytest --cov-report term:skip-covered --cov=tiledb tests/ | grep '^TOTAL' | awk -v N=4 '{print $N}')"
         echo "::set-output name=COVERAGE::$TEST_COVERAGE"
         REF=${{ github.ref }}

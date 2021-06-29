@@ -402,14 +402,47 @@ class TestTensorflowKerasModel:
         assert type(tiledb_model_obj.preview()) == str
 
 
+def test_file_properties(tmpdir):
+    model = keras.models.Sequential()
+    model.add(keras.layers.Flatten(input_shape=(10, 10)))
+
+    tiledb_array = os.path.join(tmpdir, "model_array")
+    tiledb_obj = TensorflowTileDB(uri=tiledb_array)
+    tiledb_obj.save(model=model)
+
+    assert tiledb_obj._file_properties["ML_FRAMEWORK"] == "TENSORFLOW"
+    assert tiledb_obj._file_properties["STAGE"] == "STAGING"
+    assert tiledb_obj._file_properties["PYTHON_VERSION"] == platform.python_version()
+    assert tiledb_obj._file_properties["ML_FRAMEWORK_VERSION"] == tf.__version__
+    assert tiledb_obj._file_properties["PREVIEW"] == ""
+
+
 def test_file_properties_in_tiledb_cloud_case(tmpdir, mocker):
+    model = keras.models.Sequential()
+    model.add(keras.layers.Flatten(input_shape=(10, 10)))
+
+    tiledb_array = os.path.join(tmpdir, "model_array")
     mocker.patch("tiledb.ml._cloud_utils.get_s3_prefix", return_value="")
+    mocker.patch(
+        "tiledb.ml.models.base.TileDBModel.set_cloud_uri", return_value=tiledb_array
+    )
+    mocker.patch("tiledb.ml._cloud_utils.update_file_properties")
 
     tiledb_array = os.path.join(tmpdir, "model_array")
     tiledb_obj = TensorflowTileDB(uri=tiledb_array, namespace="test_namespace")
+    tiledb_obj.save(model=model)
 
-    assert tiledb_obj.file_properties["ML_FRAMEWORK"] == "TENSORFLOW"
-    assert tiledb_obj.file_properties["STAGE"] == "STAGING"
-    assert tiledb_obj.file_properties["PYTHON_VERSION"] == platform.python_version()
-    assert tiledb_obj.file_properties["ML_FRAMEWORK_VERSION"] == tf.__version__
-    assert tiledb_obj.file_properties["PREVIEW"] == ""
+    assert tiledb_obj._file_properties["ML_FRAMEWORK"] == "TENSORFLOW"
+    assert tiledb_obj._file_properties["STAGE"] == "STAGING"
+    assert tiledb_obj._file_properties["PYTHON_VERSION"] == platform.python_version()
+    assert tiledb_obj._file_properties["ML_FRAMEWORK_VERSION"] == tf.__version__
+    assert tiledb_obj._file_properties["PREVIEW"] == ""
+
+
+def test_exception_raise_file_property_in_meta_error(tmpdir):
+    with pytest.raises(ValueError):
+        model = keras.models.Sequential()
+        model.add(keras.layers.Flatten(input_shape=(10, 10)))
+        tiledb_array = os.path.join(tmpdir, "model_array")
+        tiledb_obj = TensorflowTileDB(uri=tiledb_array)
+        tiledb_obj.save(model=model, meta={"ML_FRAMEWORK": "ML_FRAMEWORK"})

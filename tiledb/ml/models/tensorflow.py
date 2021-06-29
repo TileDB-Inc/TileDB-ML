@@ -25,16 +25,10 @@ class TensorflowTileDB(TileDBModel):
     TileDB arrays and load Tensorflow models from TileDB arrays.
     """
 
-    def __init__(self, model: Optional[Model] = None, *args, **kwargs):
-        super(self.__class__, self).__init__(*args, **kwargs)
-        self.model = model
-
-        if self.namespace:
-            self.file_properties = self.set_file_properties(
-                framework="TENSORFLOW",
-                framework_version=tf.__version__,
-                preview=self.preview(),
-            )
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            framework="TENSORFLOW", framework_version=tf.__version__, *args, **kwargs
+        )
 
     def save(
         self,
@@ -67,6 +61,8 @@ class TensorflowTileDB(TileDBModel):
         # Create TileDB model array
         if not update:
             self._create_array()
+
+        self.set_file_properties()
 
         self._write_array(
             model=model,
@@ -200,7 +196,7 @@ class TensorflowTileDB(TileDBModel):
         if self.namespace:
             from tiledb.ml._cloud_utils import update_file_properties
 
-            update_file_properties(self.uri, self.file_properties)
+            update_file_properties(self.uri, self._file_properties)
 
     def _write_array(
         self,
@@ -227,15 +223,7 @@ class TensorflowTileDB(TileDBModel):
                     value, default=json_utils.get_json_type
                 ).encode("utf8")
 
-            # Add extra metadata given by the user to array's metadata
-            if meta:
-                self.update_model_metadata(array=tf_model_tiledb, meta=meta)
-
-            # In case we are on TileDB-Cloud we have to save model array's file properties also in metadata
-            if self.namespace:
-                self.update_model_metadata(
-                    array=tf_model_tiledb, meta=self.file_properties
-                )
+            self.update_model_metadata(array=tf_model_tiledb, meta=meta)
 
     @staticmethod
     def _serialize_model_weights(model: Model) -> bytes:

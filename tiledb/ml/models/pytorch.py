@@ -19,16 +19,10 @@ class PyTorchTileDB(TileDBModel):
     TileDB arrays and load PyTorch models from TileDB arrays.
     """
 
-    def __init__(self, model: Optional[Module] = None, *args, **kwargs):
-        super(self.__class__, self).__init__(*args, **kwargs)
-        self.model = model
-
-        if self.namespace:
-            self.file_properties = self.set_file_properties(
-                framework="PYTORCH",
-                framework_version=torch.__version__,
-                preview=self.preview(),
-            )
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            framework="PYTORCH", framework_version=torch.__version__, *args, **kwargs
+        )
 
     def save(self, model_info: dict, update: bool = False, meta: Optional[dict] = None):
         """
@@ -47,6 +41,8 @@ class PyTorchTileDB(TileDBModel):
         # Create TileDB model array
         if not update:
             self._create_array(serialized_model_info)
+
+        self.set_file_properties()
 
         self._write_array(serialized_model_info=serialized_model_info, meta=meta)
 
@@ -96,10 +92,7 @@ class PyTorchTileDB(TileDBModel):
         Creates a string representation of the model.
         :return: str. A string representation of the models internal configuration.
         """
-        if self.model:
-            return str(self.model)
-        else:
-            return ""
+        return str(self.model) if self.model else ""
 
     def _create_array(self, serialized_model_info: dict):
         """
@@ -138,7 +131,7 @@ class PyTorchTileDB(TileDBModel):
         if self.namespace:
             from tiledb.ml._cloud_utils import update_file_properties
 
-            update_file_properties(self.uri, self.file_properties)
+            update_file_properties(self.uri, self._file_properties)
 
     def _write_array(self, serialized_model_info: dict, meta: Optional[dict]):
         """
@@ -154,12 +147,4 @@ class PyTorchTileDB(TileDBModel):
 
             tf_model_tiledb[:] = insertion_dict
 
-            # Add extra metadata given by the user to array's metadata
-            if meta:
-                self.update_model_metadata(array=tf_model_tiledb, meta=meta)
-
-            # In case we are on TileDB-Cloud we have to save model array's file properties also in metadata
-            if self.namespace:
-                self.update_model_metadata(
-                    array=tf_model_tiledb, meta=self.file_properties
-                )
+            self.update_model_metadata(array=tf_model_tiledb, meta=meta)

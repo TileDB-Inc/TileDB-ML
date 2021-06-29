@@ -19,16 +19,10 @@ class SklearnTileDB(TileDBModel):
     TileDB arrays and load Sklearn models from TileDB arrays.
     """
 
-    def __init__(self, model: Optional[BaseEstimator] = None, *args, **kwargs):
-        super(self.__class__, self).__init__(*args, **kwargs)
-        self.model = model
-
-        if self.namespace:
-            self.file_properties = self.set_file_properties(
-                framework="SKLEARN",
-                framework_version=sklearn.__version__,
-                preview=self.preview(),
-            )
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            framework="SKLEARN", framework_version=sklearn.__version__, *args, **kwargs
+        )
 
     def save(
         self, model: BaseEstimator, update: bool = False, meta: Optional[dict] = None
@@ -46,6 +40,8 @@ class SklearnTileDB(TileDBModel):
         # Create TileDB model array
         if not update:
             self._create_array()
+
+        self.set_file_properties()
 
         self._write_array(serialized_model=serialized_model, meta=meta)
 
@@ -102,7 +98,7 @@ class SklearnTileDB(TileDBModel):
         if self.namespace:
             from tiledb.ml._cloud_utils import update_file_properties
 
-            update_file_properties(self.uri, self.file_properties)
+            update_file_properties(self.uri, self._file_properties)
 
     def _write_array(self, serialized_model: bytes, meta: Optional[dict]):
         """
@@ -114,15 +110,7 @@ class SklearnTileDB(TileDBModel):
             # Insertion in TileDB array
             tf_model_tiledb[:] = {"model_params": np.array([serialized_model])}
 
-            # Add extra metadata given by the user to array's metadata
-            if meta:
-                self.update_model_metadata(array=tf_model_tiledb, meta=meta)
-
-            # In case we are on TileDB-Cloud we have to save model array's file properties also in metadata
-            if self.namespace:
-                self.update_model_metadata(
-                    array=tf_model_tiledb, meta=self.file_properties
-                )
+            self.update_model_metadata(array=tf_model_tiledb, meta=meta)
 
     @staticmethod
     def _serialize_model(model: BaseEstimator) -> bytes:

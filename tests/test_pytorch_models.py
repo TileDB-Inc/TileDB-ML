@@ -155,27 +155,69 @@ def test_preview(tmpdir, net):
     assert type(tiledb_obj.preview()) == str
 
 
-def test_function_calls_in_tiledb_cloud_case(tmpdir, mocker):
-    mock_1 = mocker.patch("tiledb.ml._cloud_utils.get_s3_prefix", return_value="")
-    mock_2 = mocker.patch(
-        "tiledb.ml.models.base.TileDBModel.set_file_properties", return_value={}
-    )
-
+@pytest.mark.parametrize(
+    "net",
+    [
+        getattr(sys.modules[__name__], name)
+        for name, obj in inspect.getmembers(sys.modules[__name__])
+        if inspect.isclass(obj) and obj.__module__ == __name__
+    ],
+)
+def test_file_properties(tmpdir, net):
+    saved_net = net()
     tiledb_array = os.path.join(tmpdir, "model_array")
-    PyTorchTileDB(uri=tiledb_array, namespace="test_namespace")
+    tiledb_obj = PyTorchTileDB(uri=tiledb_array)
+    tiledb_obj.save(model_info={"state_dict": saved_net.state_dict()})
 
-    mock_1.assert_called()
-    mock_2.assert_called()
+    assert tiledb_obj._file_properties["ML_FRAMEWORK"] == "PYTORCH"
+    assert tiledb_obj._file_properties["STAGE"] == "STAGING"
+    assert tiledb_obj._file_properties["PYTHON_VERSION"] == platform.python_version()
+    assert tiledb_obj._file_properties["ML_FRAMEWORK_VERSION"] == torch.__version__
+    assert tiledb_obj._file_properties["PREVIEW"] == ""
 
 
-def test_file_properties_in_tiledb_cloud_case(tmpdir, mocker):
+@pytest.mark.parametrize(
+    "net",
+    [
+        getattr(sys.modules[__name__], name)
+        for name, obj in inspect.getmembers(sys.modules[__name__])
+        if inspect.isclass(obj) and obj.__module__ == __name__
+    ],
+)
+def test_file_properties_in_tiledb_cloud_case(tmpdir, net, mocker):
+    saved_net = net()
+    tiledb_array = os.path.join(tmpdir, "model_array")
+
     mocker.patch("tiledb.ml._cloud_utils.get_s3_prefix", return_value="")
+    mocker.patch(
+        "tiledb.ml.models.base.TileDBModel.set_cloud_uri", return_value=tiledb_array
+    )
+    mocker.patch("tiledb.ml._cloud_utils.update_file_properties")
 
-    tiledb_array = os.path.join(tmpdir, "model_array")
     tiledb_obj = PyTorchTileDB(uri=tiledb_array, namespace="test_namespace")
+    tiledb_obj.save(model_info={"state_dict": saved_net.state_dict()})
 
-    assert tiledb_obj.file_properties["ML_FRAMEWORK"] == "PYTORCH"
-    assert tiledb_obj.file_properties["STAGE"] == "STAGING"
-    assert tiledb_obj.file_properties["PYTHON_VERSION"] == platform.python_version()
-    assert tiledb_obj.file_properties["ML_FRAMEWORK_VERSION"] == torch.__version__
-    assert tiledb_obj.file_properties["PREVIEW"] == ""
+    assert tiledb_obj._file_properties["ML_FRAMEWORK"] == "PYTORCH"
+    assert tiledb_obj._file_properties["STAGE"] == "STAGING"
+    assert tiledb_obj._file_properties["PYTHON_VERSION"] == platform.python_version()
+    assert tiledb_obj._file_properties["ML_FRAMEWORK_VERSION"] == torch.__version__
+    assert tiledb_obj._file_properties["PREVIEW"] == ""
+
+
+@pytest.mark.parametrize(
+    "net",
+    [
+        getattr(sys.modules[__name__], name)
+        for name, obj in inspect.getmembers(sys.modules[__name__])
+        if inspect.isclass(obj) and obj.__module__ == __name__
+    ],
+)
+def test_exception_raise_file_property_in_meta_error(tmpdir, net):
+    with pytest.raises(ValueError):
+        saved_net = net()
+        tiledb_array = os.path.join(tmpdir, "model_array")
+        tiledb_obj = PyTorchTileDB(uri=tiledb_array)
+        tiledb_obj.save(
+            model_info={"state_dict": saved_net.state_dict()},
+            meta={"ML_FRAMEWORK": "ML_FRAMEWORK"},
+        )
