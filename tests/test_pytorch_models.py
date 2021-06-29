@@ -11,7 +11,7 @@ import torch.nn as nn
 import torch.optim as optimizers
 import torch.nn.functional as F
 
-from tiledb.ml.models.pytorch import PyTorchTileDB
+from tiledb.ml.models.pytorch import PyTorchTileDBModel
 
 
 class Net(nn.Module):
@@ -105,7 +105,7 @@ class TestPyTorchModel:
         EPOCH = 5
         LOSS = 0.4
         tiledb_array = os.path.join(tmpdir, "model_array")
-        tiledb_obj = PyTorchTileDB(uri=tiledb_array)
+        tiledb_obj = PyTorchTileDBModel(uri=tiledb_array)
         saved_net = net()
         saved_optimizer = optimizer(saved_net.parameters(), lr=0.001)
         tiledb_obj.save(
@@ -139,17 +139,17 @@ class TestPyTorchModel:
         # With model given as argument
         saved_net = net()
         tiledb_array = os.path.join(tmpdir, "model_array")
-        tiledb_obj = PyTorchTileDB(uri=tiledb_array, model=saved_net)
+        tiledb_obj = PyTorchTileDBModel(uri=tiledb_array, model=saved_net)
         assert type(tiledb_obj.preview()) == str
 
         # Without a model given as argumet
-        tiledb_obj = PyTorchTileDB(uri=tiledb_array)
+        tiledb_obj = PyTorchTileDBModel(uri=tiledb_array)
         assert type(tiledb_obj.preview()) == str
 
     def test_file_properties(self, tmpdir, net, optimizer):
         saved_net = net()
         tiledb_array = os.path.join(tmpdir, "model_array")
-        tiledb_obj = PyTorchTileDB(uri=tiledb_array)
+        tiledb_obj = PyTorchTileDBModel(uri=tiledb_array)
         tiledb_obj.save(model_info={"state_dict": saved_net.state_dict()})
 
         assert tiledb_obj._file_properties["ML_FRAMEWORK"] == "PYTORCH"
@@ -169,7 +169,7 @@ class TestPyTorchModel:
         )
         mocker.patch("tiledb.ml._cloud_utils.update_file_properties")
 
-        tiledb_obj = PyTorchTileDB(uri=tiledb_array, namespace="test_namespace")
+        tiledb_obj = PyTorchTileDBModel(uri=tiledb_array, namespace="test_namespace")
         tiledb_obj.save(model_info={"state_dict": saved_net.state_dict()})
 
         assert tiledb_obj._file_properties["ML_FRAMEWORK"] == "PYTORCH"
@@ -183,7 +183,7 @@ class TestPyTorchModel:
     def test_exception_raise_file_property_in_meta_error(self, tmpdir, net, optimizer):
         saved_net = net()
         tiledb_array = os.path.join(tmpdir, "model_array")
-        tiledb_obj = PyTorchTileDB(uri=tiledb_array)
+        tiledb_obj = PyTorchTileDBModel(uri=tiledb_array)
         with pytest.raises(ValueError):
             tiledb_obj.save(
                 model_info={"state_dict": saved_net.state_dict()},

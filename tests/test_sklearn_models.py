@@ -9,7 +9,7 @@ import sklearn.base
 
 from itertools import zip_longest
 
-from tiledb.ml.models.sklearn import SklearnTileDB
+from tiledb.ml.models.sklearn import SklearnTileDBModel
 
 
 def iter_models(*modules):
@@ -26,7 +26,7 @@ class TestSklearnModel:
     def test_save_load(self, tmpdir, net):
         tiledb_array = os.path.join(tmpdir, "test_array")
         model = net()
-        tiledb_sklearn_obj = SklearnTileDB(uri=tiledb_array)
+        tiledb_sklearn_obj = SklearnTileDBModel(uri=tiledb_array)
         tiledb_sklearn_obj.save(model=model)
         loaded_model = tiledb_sklearn_obj.load()
         assert all(
@@ -40,17 +40,17 @@ class TestSklearnModel:
         # With model as argument
         tiledb_array = os.path.join(tmpdir, "test_array")
         model = net()
-        tiledb_sklearn_obj = SklearnTileDB(uri=tiledb_array, model=model)
+        tiledb_sklearn_obj = SklearnTileDBModel(uri=tiledb_array, model=model)
         assert type(tiledb_sklearn_obj.preview()) == str
 
         # Without model as argumet
-        tiledb_sklearn_obj = SklearnTileDB(uri=tiledb_array)
+        tiledb_sklearn_obj = SklearnTileDBModel(uri=tiledb_array)
         assert type(tiledb_sklearn_obj.preview()) == str
 
     def test_file_properties(self, tmpdir, net):
         model = net()
         tiledb_array = os.path.join(tmpdir, "model_array")
-        tiledb_obj = SklearnTileDB(uri=tiledb_array)
+        tiledb_obj = SklearnTileDBModel(uri=tiledb_array)
         tiledb_obj.save(model=model)
 
         assert tiledb_obj._file_properties["ML_FRAMEWORK"] == "SKLEARN"
@@ -72,7 +72,7 @@ class TestSklearnModel:
         )
         mocker.patch("tiledb.ml._cloud_utils.update_file_properties")
 
-        tiledb_obj = SklearnTileDB(uri=tiledb_array, namespace="test_namespace")
+        tiledb_obj = SklearnTileDBModel(uri=tiledb_array, namespace="test_namespace")
         tiledb_obj.save(model=model)
 
         assert tiledb_obj._file_properties["ML_FRAMEWORK"] == "SKLEARN"
@@ -88,6 +88,6 @@ class TestSklearnModel:
     def test_exception_raise_file_property_in_meta_error(self, tmpdir, net):
         model = net()
         tiledb_array = os.path.join(tmpdir, "model_array")
-        tiledb_obj = SklearnTileDB(uri=tiledb_array)
+        tiledb_obj = SklearnTileDBModel(uri=tiledb_array)
         with pytest.raises(ValueError):
             tiledb_obj.save(model=model, meta={"ML_FRAMEWORK": "ML_FRAMEWORK"})

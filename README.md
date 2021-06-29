@@ -34,7 +34,7 @@ can (or will be able to):
 
 [comment]: <> (into Tensorflow Data API. The corresponding implementations for model save/load, live in ``tiledb/ml/models`` folder. )
 
-[comment]: <> (All implemented classes &#40;``TensorflowTileDB``, ``PyTorchTileDB``, ``SklearnTileDB`` &#41; )
+[comment]: <> (All implemented classes &#40;``TensorflowTileDBModel``, ``PyTorchTileDBModel``, ``SklearnTileDBModel`` &#41; )
 
 [comment]: <> (inherit from base class &#40;``TileDBModel``&#41; and implement ``save&#40;&#41;`` and ``load&#40;&#41;`` functionality. )
 
