@@ -422,9 +422,8 @@ def test_file_properties_in_tiledb_cloud_case(tmpdir, mocker):
     model.add(keras.layers.Flatten(input_shape=(10, 10)))
 
     tiledb_array = os.path.join(tmpdir, "model_array")
-    mocker.patch("tiledb.ml._cloud_utils.get_s3_prefix", return_value="")
     mocker.patch(
-        "tiledb.ml.models.base.TileDBModel.set_cloud_uri", return_value=tiledb_array
+        "tiledb.ml.models.base.TileDBModel.get_cloud_uri", return_value=tiledb_array
     )
     mocker.patch("tiledb.ml._cloud_utils.update_file_properties")
 
@@ -440,9 +439,9 @@ def test_file_properties_in_tiledb_cloud_case(tmpdir, mocker):
 
 
 def test_exception_raise_file_property_in_meta_error(tmpdir):
+    model = keras.models.Sequential()
+    model.add(keras.layers.Flatten(input_shape=(10, 10)))
+    tiledb_array = os.path.join(tmpdir, "model_array")
+    tiledb_obj = TensorflowTileDB(uri=tiledb_array)
     with pytest.raises(ValueError):
-        model = keras.models.Sequential()
-        model.add(keras.layers.Flatten(input_shape=(10, 10)))
-        tiledb_array = os.path.join(tmpdir, "model_array")
-        tiledb_obj = TensorflowTileDB(uri=tiledb_array)
         tiledb_obj.save(model=model, meta={"ML_FRAMEWORK": "ML_FRAMEWORK"})

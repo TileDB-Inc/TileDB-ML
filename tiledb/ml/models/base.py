@@ -33,14 +33,15 @@ class TileDBModel(abc.ABC):
     store machine learning models (Tensorflow, PyTorch, etc) as TileDB arrays.
     """
 
+    Framework = None
+    FrameworkVersion = None
+
     def __init__(
         self,
         uri: str,
         namespace: str = None,
         ctx: tiledb.Ctx = None,
         model: Optional[Union[Module, Model, BaseEstimator]] = None,
-        framework: str = None,
-        framework_version: str = None,
     ):
         """
         Base class for saving machine learning models as TileDB arrays
@@ -52,34 +53,12 @@ class TileDBModel(abc.ABC):
         TileDB-Cloud we need the user's namespace on TileDB-Cloud. Moreover, array's uri must have an s3 prefix.
         :param ctx: tiledb.Ctx. TileDB Context.
         :param model: Machine learning model based on the framework we are using.
-        :param framework: str. Machine learning framework name. NOT provided by the user. It gets automatically
-        populated, by each child class.
-        :param framework_version: str. Machine learning framework version. NOT provided by the user. It gets automatically
-        populated, by each child class.
         """
         self.namespace = namespace
         self.ctx = ctx
-
         self.model = model
-        self.framework = framework
-        self.framework_version = framework_version
-
-        self._file_properties = None
-
-        # In case we work on TileDB-Cloud we need user's namespace.
-        if self.namespace:
-            from tiledb.ml._cloud_utils import get_s3_prefix
-
-            s3_prefix = get_s3_prefix(self.namespace)
-            if s3_prefix is None:
-                raise ValueError(
-                    "You must set the default s3 prefix path for ML models in {} profile settings on TileDB-Cloud".format(
-                        self.namespace
-                    )
-                )
-            self.uri = self.set_cloud_uri(s3_prefix=s3_prefix, uri=uri)
-        else:
-            self.uri = uri
+        self._file_properties = {}
+        self.uri = self.get_cloud_uri(uri) if self.namespace else uri
 
     @abc.abstractmethod
     def save(self, **kwargs):
@@ -109,32 +88,38 @@ class TileDBModel(abc.ABC):
         Method that sets model array's file properties.
         """
         self._file_properties = {
-            ModelFileProperties.ML_FRAMEWORK.value: self.framework,
-            ModelFileProperties.ML_FRAMEWORK_VERSION.value: self.framework_version,
+            ModelFileProperties.ML_FRAMEWORK.value: self.Framework,
+            ModelFileProperties.ML_FRAMEWORK_VERSION.value: self.FrameworkVersion,
             ModelFileProperties.STAGE.value: "STAGING",
             ModelFileProperties.PYTHON_VERSION.value: platform.python_version(),
             ModelFileProperties.PREVIEW.value: self.preview(),
         }
 
-    def update_model_metadata(self, array: tiledb.Array, meta: dict):
+    def update_model_metadata(self, array: tiledb.Array, meta: Optional[dict] = {}):
         """
         This method updates the metadata in a TileDB model array. File properties also go in the metadata section.
         :param array: tiledb.Array. A TileDB model array.
         :param meta: dict. A dictionary with the <key, value> pairs that will be inserted in array's metadata.
         """
         # Raise ValueError in case users provide metadata with the same keys as file properties.
-        if meta:
-            if meta.keys() & self._file_properties.keys():
-                raise ValueError(
-                    "Please avoid using file property key names as metadata keys!"
-                )
-            else:
-                for key, value in {**meta, **self._file_properties}.items():
-                    array.meta[key] = json.dumps(value).encode("utf8")
+        if meta.keys() & self._file_properties.keys():
+            raise ValueError(
+                "Please avoid using file property key names as metadata keys!"
+            )
         else:
-            # In case meta is None, insert only file properties in the metadata.
-            for key, value in self._file_properties.items():
+            for key, value in {**meta, **self._file_properties}.items():
                 array.meta[key] = json.dumps(value).encode("utf8")
 
-    def set_cloud_uri(self, s3_prefix: str, uri: str) -> str:
+    def get_cloud_uri(self, uri: str) -> str:
+        from tiledb.ml._cloud_utils import get_s3_prefix
+
+        s3_prefix = get_s3_prefix(self.namespace)
+
+        if s3_prefix is None:
+            raise ValueError(
+                "You must set the default s3 prefix path for ML models in {} profile settings on TileDB-Cloud".format(
+                    self.namespace
+                )
+            )
+
         return "tiledb://{}/{}".format(self.namespace, os.path.join(s3_prefix, uri))

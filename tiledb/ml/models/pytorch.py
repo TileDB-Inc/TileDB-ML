@@ -19,12 +19,10 @@ class PyTorchTileDB(TileDBModel):
     TileDB arrays and load PyTorch models from TileDB arrays.
     """
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(
-            framework="PYTORCH", framework_version=torch.__version__, *args, **kwargs
-        )
+    Framework = "PYTORCH"
+    FrameworkVersion = torch.__version__
 
-    def save(self, model_info: dict, update: bool = False, meta: Optional[dict] = None):
+    def save(self, model_info: dict, update: bool = False, meta: Optional[dict] = {}):
         """
         Saves a PyTorch model as a TileDB array.
         :param model_info: Python dictionary. Contains all model info like,

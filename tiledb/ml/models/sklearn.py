@@ -19,13 +19,11 @@ class SklearnTileDB(TileDBModel):
     TileDB arrays and load Sklearn models from TileDB arrays.
     """
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(
-            framework="SKLEARN", framework_version=sklearn.__version__, *args, **kwargs
-        )
+    Framework = "SKLEARN"
+    FrameworkVersion = sklearn.__version__
 
     def save(
-        self, model: BaseEstimator, update: bool = False, meta: Optional[dict] = None
+        self, model: BaseEstimator, update: bool = False, meta: Optional[dict] = {}
     ):
         """
         Saves a Sklearn model as a TileDB array.

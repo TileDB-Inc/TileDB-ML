@@ -25,17 +25,15 @@ class TensorflowTileDB(TileDBModel):
     TileDB arrays and load Tensorflow models from TileDB arrays.
     """
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(
-            framework="TENSORFLOW", framework_version=tf.__version__, *args, **kwargs
-        )
+    Framework = "TENSORFLOW"
+    FrameworkVersion = tf.__version__
 
     def save(
         self,
         model: Model,
         include_optimizer: bool = False,
         update: bool = False,
-        meta: Optional[dict] = None,
+        meta: Optional[dict] = {},
     ):
         """
         Saves a Tensorflow model as a TileDB array.
