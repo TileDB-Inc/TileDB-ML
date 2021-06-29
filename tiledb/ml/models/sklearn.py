@@ -2,7 +2,6 @@
 
 import pickle
 import numpy as np
-import json
 import tiledb
 
 from typing import Optional, Tuple
@@ -12,13 +11,6 @@ from sklearn import config_context
 from sklearn.base import BaseEstimator
 
 from .base import TileDBModel
-import platform
-from . import (
-    FilePropertyName_ML_FRAMEWORK,
-    FilePropertyName_STAGE,
-    FilePropertyName_PYTHON_VERSION,
-    FilePropertyName_ML_FRAMEWORK_VERSION,
-)
 
 
 class SklearnTileDB(TileDBModel):
@@ -27,8 +19,11 @@ class SklearnTileDB(TileDBModel):
     TileDB arrays and load Sklearn models from TileDB arrays.
     """
 
+    Framework = "SKLEARN"
+    FrameworkVersion = sklearn.__version__
+
     def save(
-        self, model: BaseEstimator, update: bool = False, meta: Optional[dict] = None
+        self, model: BaseEstimator, update: bool = False, meta: Optional[dict] = {}
     ):
         """
         Saves a Sklearn model as a TileDB array.
@@ -44,6 +39,8 @@ class SklearnTileDB(TileDBModel):
         if not update:
             self._create_array()
 
+        self.set_file_properties()
+
         self._write_array(serialized_model=serialized_model, meta=meta)
 
     def load(self, timestamp: Optional[Tuple[int, int]] = None) -> BaseEstimator:
@@ -58,17 +55,18 @@ class SklearnTileDB(TileDBModel):
         model = pickle.loads(model_array_results["model_params"].item(0))
         return model
 
-    def preview(self, model: BaseEstimator, display: str = "text") -> str:
+    def preview(self, display: str = "text") -> str:
         """
-        Creates a diagram representation of the model.
-        :param model: An Sklearn Estimator object.
-        :param display: If ‘diagram’, estimators will be displayed as a diagram in an HTML format when shown in a jupyter notebook.
-        If ‘text’, estimators will be displayed as text. Default is ‘text’.
-        :return A string representation of the models internal configuration.
-
+        Creates a text representation of the model.
+        :param display: str. If ‘diagram’, estimators will be displayed as a diagram in an HTML format when shown in a
+        jupyter notebook. If ‘text’, estimators will be displayed as text. Default is ‘text’.
+        :return str. A string representation of the models internal configuration.
         """
-        with config_context(display=display):
-            return str(model)
+        if self.model:
+            with config_context(display=display):
+                return str(self.model)
+        else:
+            return ""
 
     def _create_array(self):
         """
@@ -98,13 +96,7 @@ class SklearnTileDB(TileDBModel):
         if self.namespace:
             from tiledb.ml._cloud_utils import update_file_properties
 
-            file_properties = {
-                FilePropertyName_ML_FRAMEWORK: "SKLEARN",
-                FilePropertyName_STAGE: "STAGING",
-                FilePropertyName_PYTHON_VERSION: platform.python_version(),
-                FilePropertyName_ML_FRAMEWORK_VERSION: sklearn.__version__,
-            }
-            update_file_properties(self.uri, file_properties)
+            update_file_properties(self.uri, self._file_properties)
 
     def _write_array(self, serialized_model: bytes, meta: Optional[dict]):
         """
@@ -116,10 +108,7 @@ class SklearnTileDB(TileDBModel):
             # Insertion in TileDB array
             tf_model_tiledb[:] = {"model_params": np.array([serialized_model])}
 
-            # Add extra metadata given by the user to array's metadata
-            if meta:
-                for key, value in meta.items():
-                    tf_model_tiledb.meta[key] = json.dumps(value).encode("utf8")
+            self.update_model_metadata(array=tf_model_tiledb, meta=meta)
 
     @staticmethod
     def _serialize_model(model: BaseEstimator) -> bytes:

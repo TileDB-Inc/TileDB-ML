@@ -1,7 +1,6 @@
 """Functionality for saving and loading PytTorch models as TileDB arrays"""
 
 import pickle
-import json
 import numpy as np
 import tiledb
 
@@ -12,13 +11,6 @@ from torch.optim import Optimizer
 from torch.nn import Module
 
 from .base import TileDBModel
-import platform
-from . import (
-    FilePropertyName_ML_FRAMEWORK,
-    FilePropertyName_STAGE,
-    FilePropertyName_PYTHON_VERSION,
-    FilePropertyName_ML_FRAMEWORK_VERSION,
-)
 
 
 class PyTorchTileDB(TileDBModel):
@@ -27,7 +19,10 @@ class PyTorchTileDB(TileDBModel):
     TileDB arrays and load PyTorch models from TileDB arrays.
     """
 
-    def save(self, model_info: dict, update: bool = False, meta: Optional[dict] = None):
+    Framework = "PYTORCH"
+    FrameworkVersion = torch.__version__
+
+    def save(self, model_info: dict, update: bool = False, meta: Optional[dict] = {}):
         """
         Saves a PyTorch model as a TileDB array.
         :param model_info: Python dictionary. Contains all model info like,
@@ -44,6 +39,8 @@ class PyTorchTileDB(TileDBModel):
         # Create TileDB model array
         if not update:
             self._create_array(serialized_model_info)
+
+        self.set_file_properties()
 
         self._write_array(serialized_model_info=serialized_model_info, meta=meta)
 
@@ -88,13 +85,12 @@ class PyTorchTileDB(TileDBModel):
                 )
         return out_dict
 
-    def preview(self, model: Module) -> str:
+    def preview(self) -> str:
         """
-        Creates a diagram representation of the model.
-        :param model: An torch.nn.Module object
-        :return: A string representation of the models internal configuration.
+        Creates a string representation of the model.
+        :return: str. A string representation of the models internal configuration.
         """
-        return str(model)
+        return str(self.model) if self.model else ""
 
     def _create_array(self, serialized_model_info: dict):
         """
@@ -133,13 +129,7 @@ class PyTorchTileDB(TileDBModel):
         if self.namespace:
             from tiledb.ml._cloud_utils import update_file_properties
 
-            file_properties = {
-                FilePropertyName_ML_FRAMEWORK: "PYTORCH",
-                FilePropertyName_STAGE: "STAGING",
-                FilePropertyName_PYTHON_VERSION: platform.python_version(),
-                FilePropertyName_ML_FRAMEWORK_VERSION: torch.__version__,
-            }
-            update_file_properties(self.uri, file_properties)
+            update_file_properties(self.uri, self._file_properties)
 
     def _write_array(self, serialized_model_info: dict, meta: Optional[dict]):
         """
@@ -155,7 +145,4 @@ class PyTorchTileDB(TileDBModel):
 
             tf_model_tiledb[:] = insertion_dict
 
-            # Add extra metadata given by the user to array's metadata
-            if meta:
-                for key, value in meta.items():
-                    tf_model_tiledb.meta[key] = json.dumps(value).encode("utf8")
+            self.update_model_metadata(array=tf_model_tiledb, meta=meta)
