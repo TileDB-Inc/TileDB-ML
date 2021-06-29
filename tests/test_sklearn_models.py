@@ -7,6 +7,8 @@ import platform
 import sklearn
 import sklearn.base
 
+from itertools import zip_longest
+
 from tiledb.ml.models.sklearn import SklearnTileDB
 
 
@@ -28,7 +30,10 @@ class TestSklearnModel:
         tiledb_sklearn_obj.save(model=model)
         loaded_model = tiledb_sklearn_obj.load()
         assert all(
-            [a == b for a, b in zip(model.get_params(), loaded_model.get_params())]
+            [
+                a == b
+                for a, b in zip_longest(model.get_params(), loaded_model.get_params())
+            ]
         )
 
     def test_preview(self, tmpdir, net):
