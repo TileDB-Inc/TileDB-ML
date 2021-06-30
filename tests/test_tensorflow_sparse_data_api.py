@@ -9,7 +9,7 @@ import uuid
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
 
-from tiledb.ml.data_apis.tensorflow_sparse import TensorflowTileDBSparseDataset
+from tiledb.ml.data_apis.tensorflow_sparse import KerasTensorflowTileDBSparseDataset
 from tiledb.ml._utils import ingest_in_tiledb, create_sparse_array_one_hot_2d
 
 # Suppress all Tensorflow messages
@@ -65,7 +65,7 @@ class TestTileDBTensorflowSparseDataAPI:
         )
 
         with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
-            tiledb_dataset = TensorflowTileDBSparseDataset(
+            tiledb_dataset = KerasTensorflowTileDBSparseDataset(
                 x_array=x, y_array=y, batch_size=BATCH_SIZE
             )
 
@@ -96,7 +96,7 @@ class TestTileDBTensorflowSparseDataAPI:
         )
 
         with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
-            tiledb_dataset = TensorflowTileDBSparseDataset(
+            tiledb_dataset = KerasTensorflowTileDBSparseDataset(
                 x_array=x, y_array=y, batch_size=BATCH_SIZE
             )
 
@@ -133,7 +133,7 @@ class TestTileDBTensorflowSparseDataAPI:
         )
 
         with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
-            tiledb_dataset = TensorflowTileDBSparseDataset(
+            tiledb_dataset = KerasTensorflowTileDBSparseDataset(
                 x_array=x, y_array=y, batch_size=BATCH_SIZE
             )
             with pytest.raises(Exception):
@@ -163,7 +163,7 @@ class TestTileDBTensorflowSparseDataAPI:
 
         with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
             with pytest.raises(Exception):
-                TensorflowTileDBSparseDataset(
+                KerasTensorflowTileDBSparseDataset(
                     x_array=x, y_array=y, batch_size=BATCH_SIZE
                 )
 
@@ -194,7 +194,7 @@ class TestTileDBTensorflowSparseDataAPI:
         )
 
         with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
-            tiledb_dataset = TensorflowTileDBSparseDataset(
+            tiledb_dataset = KerasTensorflowTileDBSparseDataset(
                 x_array=x, y_array=y, batch_size=BATCH_SIZE
             )
             with pytest.raises(Exception):
@@ -227,7 +227,7 @@ class TestTileDBTensorflowSparseDataAPI:
         )
 
         with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
-            tiledb_dataset = TensorflowTileDBSparseDataset(
+            tiledb_dataset = KerasTensorflowTileDBSparseDataset(
                 x_array=x, y_array=y, batch_size=BATCH_SIZE
             )
             model.fit(tiledb_dataset, verbose=0, epochs=2)

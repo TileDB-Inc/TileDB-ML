@@ -19,7 +19,7 @@ from tensorflow.python.keras.saving.saved_model import json_utils
 from .base import TileDBModel
 
 
-class TensorflowTileDBModel(TileDBModel):
+class KerasTensorflowTileDBModel(TileDBModel):
     """
     Class that implements all functionality needed to save Tensorflow models as
     TileDB arrays and load Tensorflow models from TileDB arrays.
