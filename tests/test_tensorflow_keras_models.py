@@ -410,7 +410,7 @@ def test_file_properties(tmpdir):
     tiledb_obj = KerasTensorflowTileDBModel(uri=tiledb_array)
     tiledb_obj.save(model=model)
 
-    assert tiledb_obj._file_properties["ML_FRAMEWORK"] == "TENSORFLOW"
+    assert tiledb_obj._file_properties["ML_FRAMEWORK"] == "TENSORFLOW KERAS"
     assert tiledb_obj._file_properties["STAGE"] == "STAGING"
     assert tiledb_obj._file_properties["PYTHON_VERSION"] == platform.python_version()
     assert tiledb_obj._file_properties["ML_FRAMEWORK_VERSION"] == tf.__version__
@@ -433,7 +433,7 @@ def test_file_properties_in_tiledb_cloud_case(tmpdir, mocker):
     )
     tiledb_obj.save(model=model)
 
-    assert tiledb_obj._file_properties["ML_FRAMEWORK"] == "TENSORFLOW"
+    assert tiledb_obj._file_properties["ML_FRAMEWORK"] == "TENSORFLOW KERAS"
     assert tiledb_obj._file_properties["STAGE"] == "STAGING"
     assert tiledb_obj._file_properties["PYTHON_VERSION"] == platform.python_version()
     assert tiledb_obj._file_properties["ML_FRAMEWORK_VERSION"] == tf.__version__

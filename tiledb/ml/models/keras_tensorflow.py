@@ -25,7 +25,7 @@ class KerasTensorflowTileDBModel(TileDBModel):
     TileDB arrays and load Tensorflow models from TileDB arrays.
     """
 
-    Framework = "TENSORFLOW"
+    Framework = "TENSORFLOW KERAS"
     FrameworkVersion = tf.__version__
 
     def save(
