@@ -9,7 +9,7 @@ import pytest
 import torch.nn as nn
 import torch.optim as optim
 
-from tiledb.ml.data_apis.pytorch_sparse import PyTorchTileDBSparseDataset
+from tiledb.ml.readers.pytorch_sparse import PyTorchTileDBSparseDataset
 from tiledb.ml._utils import ingest_in_tiledb, create_sparse_array_one_hot_2d
 
 # Test parameters
