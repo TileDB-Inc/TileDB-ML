@@ -14,7 +14,7 @@ from tensorflow.keras.layers import (
     Dropout,
 )
 
-from tiledb.ml.readers.tensorflow import KerasTensorflowTileDBDenseDataset
+from tiledb.ml.readers.tensorflow import TensorflowTileDBDenseDataset
 from tiledb.ml._utils import ingest_in_tiledb
 
 # Suppress all Tensorflow messages
@@ -82,7 +82,7 @@ class TestTileDBTensorflowDataAPI:
 
         with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
 
-            tiledb_dataset = KerasTensorflowTileDBDenseDataset(
+            tiledb_dataset = TensorflowTileDBDenseDataset(
                 x_array=x, y_array=y, batch_size=BATCH_SIZE
             )
 
@@ -114,7 +114,7 @@ class TestTileDBTensorflowDataAPI:
 
         with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
             with pytest.raises(Exception):
-                KerasTensorflowTileDBDenseDataset(
+                TensorflowTileDBDenseDataset(
                     x_array=x, y_array=y, batch_size=BATCH_SIZE
                 )
 
@@ -141,7 +141,7 @@ class TestTileDBTensorflowDataAPI:
         )
 
         with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
-            tiledb_dataset = KerasTensorflowTileDBDenseDataset(
+            tiledb_dataset = TensorflowTileDBDenseDataset(
                 x_array=x, y_array=y, batch_size=BATCH_SIZE
             )
 

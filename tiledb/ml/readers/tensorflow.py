@@ -4,7 +4,7 @@ import tensorflow as tf
 from tensorflow.python.data.ops.dataset_ops import FlatMapDataset
 
 
-class KerasTensorflowTileDBDenseDataset(FlatMapDataset):
+class TensorflowTileDBDenseDataset(FlatMapDataset):
     """
     Class that implements all functionality needed to load data from TileDB directly to the
     Tensorflow Data API, by employing generators.

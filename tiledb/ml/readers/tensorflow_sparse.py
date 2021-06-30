@@ -7,7 +7,7 @@ from tensorflow.python.framework import constant_op
 from tensorflow.python.data.ops import dataset_ops
 
 
-class KerasTensorflowTileDBSparseDataset(tf.data.Dataset):
+class TensorflowTileDBSparseDataset(tf.data.Dataset):
     """
     Class that implements all functionality needed to load sparse data from TileDB directly to the
     Tensorflow Data API, by employing generators.
@@ -23,7 +23,7 @@ class KerasTensorflowTileDBSparseDataset(tf.data.Dataset):
 
         if type(x_array) is tiledb.DenseArray:
             raise TypeError(
-                "KerasTensorflowTileDBSparseDataset class should be used with tiledb.SparseArray representation"
+                "TensorflowTileDBSparseDataset class should be used with tiledb.SparseArray representation"
             )
 
         # Check that x and y have the same number of rows
