@@ -18,7 +18,7 @@ from tensorflow.python.keras import testing_utils
 from tensorflow.python.keras.feature_column import dense_features
 from tensorflow.python.keras.feature_column import sequence_feature_column as ksfc
 
-from tiledb.ml.models.tensorflow import KerasTensorflowTileDBModel
+from tiledb.ml.models.keras_tensorflow import KerasTensorflowTileDBModel
 
 # Suppress all Tensorflow messages
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
