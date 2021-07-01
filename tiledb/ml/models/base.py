@@ -20,11 +20,11 @@ class ModelFileProperties(Enum):
     Enum Class that contains all model array file properties.
     """
 
-    ML_FRAMEWORK = "ML_FRAMEWORK"
-    ML_FRAMEWORK_VERSION = "ML_FRAMEWORK_VERSION"
-    STAGE = "STAGE"
-    PYTHON_VERSION = "PYTHON_VERSION"
-    PREVIEW = "PREVIEW"
+    TILEDB_ML_MODEL_ML_FRAMEWORK = "TILEDB_ML_MODEL_ML_FRAMEWORK"
+    TILEDB_ML_MODEL_ML_FRAMEWORK_VERSION = "TILEDB_ML_MODEL_ML_FRAMEWORK_VERSION"
+    TILEDB_ML_MODEL_STAGE = "TILEDB_ML_MODEL_STAGE"
+    TILEDB_ML_MODEL_PYTHON_VERSION = "TILEDB_ML_MODEL_PYTHON_VERSION"
+    TILEDB_ML_MODEL_PREVIEW = "TILEDB_ML_MODEL_PREVIEW"
 
 
 class TileDBModel(abc.ABC):
@@ -88,11 +88,11 @@ class TileDBModel(abc.ABC):
         Method that sets model array's file properties.
         """
         self._file_properties = {
-            ModelFileProperties.ML_FRAMEWORK.value: self.Framework,
-            ModelFileProperties.ML_FRAMEWORK_VERSION.value: self.FrameworkVersion,
-            ModelFileProperties.STAGE.value: "STAGING",
-            ModelFileProperties.PYTHON_VERSION.value: platform.python_version(),
-            ModelFileProperties.PREVIEW.value: self.preview(),
+            ModelFileProperties.TILEDB_ML_MODEL_ML_FRAMEWORK.value: self.Framework,
+            ModelFileProperties.TILEDB_ML_MODEL_ML_FRAMEWORK_VERSION.value: self.FrameworkVersion,
+            ModelFileProperties.TILEDB_ML_MODEL_STAGE.value: "STAGING",
+            ModelFileProperties.TILEDB_ML_MODEL_PYTHON_VERSION.value: platform.python_version(),
+            ModelFileProperties.TILEDB_ML_MODEL_PREVIEW.value: self.preview(),
         }
 
     def update_model_metadata(self, array: tiledb.Array, meta: Optional[dict] = {}):

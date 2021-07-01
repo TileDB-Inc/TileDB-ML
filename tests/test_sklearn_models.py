@@ -53,15 +53,17 @@ class TestSklearnModel:
         tiledb_obj = SklearnTileDBModel(uri=tiledb_array)
         tiledb_obj.save(model=model)
 
-        assert tiledb_obj._file_properties["ML_FRAMEWORK"] == "SKLEARN"
-        assert tiledb_obj._file_properties["STAGE"] == "STAGING"
+        assert tiledb_obj._file_properties["TILEDB_ML_MODEL_ML_FRAMEWORK"] == "SKLEARN"
+        assert tiledb_obj._file_properties["TILEDB_ML_MODEL_STAGE"] == "STAGING"
         assert (
-            tiledb_obj._file_properties["PYTHON_VERSION"] == platform.python_version()
+            tiledb_obj._file_properties["TILEDB_ML_MODEL_PYTHON_VERSION"]
+            == platform.python_version()
         )
         assert (
-            tiledb_obj._file_properties["ML_FRAMEWORK_VERSION"] == sklearn.__version__
+            tiledb_obj._file_properties["TILEDB_ML_MODEL_ML_FRAMEWORK_VERSION"]
+            == sklearn.__version__
         )
-        assert tiledb_obj._file_properties["PREVIEW"] == ""
+        assert tiledb_obj._file_properties["TILEDB_ML_MODEL_PREVIEW"] == ""
 
     def test_file_properties_in_tiledb_cloud_case(self, tmpdir, net, mocker):
         model = net()
@@ -75,19 +77,24 @@ class TestSklearnModel:
         tiledb_obj = SklearnTileDBModel(uri=tiledb_array, namespace="test_namespace")
         tiledb_obj.save(model=model)
 
-        assert tiledb_obj._file_properties["ML_FRAMEWORK"] == "SKLEARN"
-        assert tiledb_obj._file_properties["STAGE"] == "STAGING"
+        assert tiledb_obj._file_properties["TILEDB_ML_MODEL_ML_FRAMEWORK"] == "SKLEARN"
+        assert tiledb_obj._file_properties["TILEDB_ML_MODEL_STAGE"] == "STAGING"
         assert (
-            tiledb_obj._file_properties["PYTHON_VERSION"] == platform.python_version()
+            tiledb_obj._file_properties["TILEDB_ML_MODEL_PYTHON_VERSION"]
+            == platform.python_version()
         )
         assert (
-            tiledb_obj._file_properties["ML_FRAMEWORK_VERSION"] == sklearn.__version__
+            tiledb_obj._file_properties["TILEDB_ML_MODEL_ML_FRAMEWORK_VERSION"]
+            == sklearn.__version__
         )
-        assert tiledb_obj._file_properties["PREVIEW"] == ""
+        assert tiledb_obj._file_properties["TILEDB_ML_MODEL_PREVIEW"] == ""
 
     def test_exception_raise_file_property_in_meta_error(self, tmpdir, net):
         model = net()
         tiledb_array = os.path.join(tmpdir, "model_array")
         tiledb_obj = SklearnTileDBModel(uri=tiledb_array)
         with pytest.raises(ValueError):
-            tiledb_obj.save(model=model, meta={"ML_FRAMEWORK": "ML_FRAMEWORK"})
+            tiledb_obj.save(
+                model=model,
+                meta={"TILEDB_ML_MODEL_ML_FRAMEWORK": "TILEDB_ML_MODEL_ML_FRAMEWORK"},
+            )
