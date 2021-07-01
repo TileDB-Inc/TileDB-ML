@@ -152,13 +152,17 @@ class TestPyTorchModel:
         tiledb_obj = PyTorchTileDBModel(uri=tiledb_array)
         tiledb_obj.save(model_info={"state_dict": saved_net.state_dict()})
 
-        assert tiledb_obj._file_properties["ML_FRAMEWORK"] == "PYTORCH"
-        assert tiledb_obj._file_properties["STAGE"] == "STAGING"
+        assert tiledb_obj._file_properties["TILEDB_ML_MODEL_ML_FRAMEWORK"] == "PYTORCH"
+        assert tiledb_obj._file_properties["TILEDB_ML_MODEL_STAGE"] == "STAGING"
         assert (
-            tiledb_obj._file_properties["PYTHON_VERSION"] == platform.python_version()
+            tiledb_obj._file_properties["TILEDB_ML_MODEL_PYTHON_VERSION"]
+            == platform.python_version()
         )
-        assert tiledb_obj._file_properties["ML_FRAMEWORK_VERSION"] == torch.__version__
-        assert tiledb_obj._file_properties["PREVIEW"] == ""
+        assert (
+            tiledb_obj._file_properties["TILEDB_ML_MODEL_ML_FRAMEWORK_VERSION"]
+            == torch.__version__
+        )
+        assert tiledb_obj._file_properties["TILEDB_ML_MODEL_PREVIEW"] == ""
 
     def test_file_properties_in_tiledb_cloud_case(self, tmpdir, net, optimizer, mocker):
         saved_net = net()
@@ -172,13 +176,17 @@ class TestPyTorchModel:
         tiledb_obj = PyTorchTileDBModel(uri=tiledb_array, namespace="test_namespace")
         tiledb_obj.save(model_info={"state_dict": saved_net.state_dict()})
 
-        assert tiledb_obj._file_properties["ML_FRAMEWORK"] == "PYTORCH"
-        assert tiledb_obj._file_properties["STAGE"] == "STAGING"
+        assert tiledb_obj._file_properties["TILEDB_ML_MODEL_ML_FRAMEWORK"] == "PYTORCH"
+        assert tiledb_obj._file_properties["TILEDB_ML_MODEL_STAGE"] == "STAGING"
         assert (
-            tiledb_obj._file_properties["PYTHON_VERSION"] == platform.python_version()
+            tiledb_obj._file_properties["TILEDB_ML_MODEL_PYTHON_VERSION"]
+            == platform.python_version()
         )
-        assert tiledb_obj._file_properties["ML_FRAMEWORK_VERSION"] == torch.__version__
-        assert tiledb_obj._file_properties["PREVIEW"] == ""
+        assert (
+            tiledb_obj._file_properties["TILEDB_ML_MODEL_ML_FRAMEWORK_VERSION"]
+            == torch.__version__
+        )
+        assert tiledb_obj._file_properties["TILEDB_ML_MODEL_PREVIEW"] == ""
 
     def test_exception_raise_file_property_in_meta_error(self, tmpdir, net, optimizer):
         saved_net = net()
@@ -187,5 +195,5 @@ class TestPyTorchModel:
         with pytest.raises(ValueError):
             tiledb_obj.save(
                 model_info={"state_dict": saved_net.state_dict()},
-                meta={"ML_FRAMEWORK": "ML_FRAMEWORK"},
+                meta={"TILEDB_ML_MODEL_ML_FRAMEWORK": "TILEDB_ML_MODEL_ML_FRAMEWORK"},
             )
