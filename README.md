@@ -23,7 +23,7 @@ can (or will be able to):
 * **Load** machine learning models from TileDB arrays.     
 
 * **Read** features, in order to train machine learning models, from TileDB arrays directly to machine learning framework's data APIs. 
-  We already [support](https://github.com/TileDB-Inc/TileDB-ML/blob/master/tiledb/ml/data_apis/) the Tensorflow and PyTorch
+  We already [support](https://github.com/TileDB-Inc/TileDB-ML/blob/master/tiledb/ml/readers/) the Tensorflow and PyTorch
   data APIs with the use of Python generators for Dense and Sparse TileDB arrays, and we are similarly working on Scikit-Learn 
   Pipelines which will be out soon.
   
@@ -34,7 +34,7 @@ can (or will be able to):
 
 [comment]: <> (into Tensorflow Data API. The corresponding implementations for model save/load, live in ``tiledb/ml/models`` folder. )
 
-[comment]: <> (All implemented classes &#40;``TensorflowTileDB``, ``PyTorchTileDB``, ``SklearnTileDB`` &#41; )
+[comment]: <> (All implemented classes &#40;``TensorflowKerasTileDBModel``, ``PyTorchTileDBModel``, ``SklearnTileDBModel`` &#41; )
 
 [comment]: <> (inherit from base class &#40;``TileDBModel``&#41; and implement ``save&#40;&#41;`` and ``load&#40;&#41;`` functionality. )
 
@@ -57,10 +57,10 @@ this is useful in order to create simple and flexible model registries with Tile
 
 We also provide detailed notebook examples on how to train Tensorflow and PyTorch models with the use of our Data APIs support for Dense and Sparse TileDB arrays.
 
-* [Example on training wih Tensorflow and Dense TileDB arrays](https://github.com/TileDB-Inc/TileDB-ML/blob/master/examples/data_apis/tensorflow_data_api_tiledb_dense.ipynb)
-* [Example on training wih Tensorflow and Sparse TileDB arrays](https://github.com/TileDB-Inc/TileDB-ML/blob/master/examples/data_apis/tensorflow_data_api_tiledb_sparse.ipynb)
-* [Example on training wih PyTorch and Dense TileDB arrays](https://github.com/TileDB-Inc/TileDB-ML/blob/master/examples/data_apis/pytorch_data_api_tiledb_dense.ipynb)
-* [Example on training wih PyTorch and Sparse TileDB arrays](https://github.com/TileDB-Inc/TileDB-ML/blob/master/examples/data_apis/pytorch_data_api_tiledb_sparse.ipynb)
+* [Example on training wih Tensorflow and Dense TileDB arrays](https://github.com/TileDB-Inc/TileDB-ML/blob/master/examples/readers/tensorflow_data_api_tiledb_dense.ipynb)
+* [Example on training wih Tensorflow and Sparse TileDB arrays](https://github.com/TileDB-Inc/TileDB-ML/blob/master/examples/readers/tensorflow_data_api_tiledb_sparse.ipynb)
+* [Example on training wih PyTorch and Dense TileDB arrays](https://github.com/TileDB-Inc/TileDB-ML/blob/master/examples/readers/pytorch_data_api_tiledb_dense.ipynb)
+* [Example on training wih PyTorch and Sparse TileDB arrays](https://github.com/TileDB-Inc/TileDB-ML/blob/master/examples/readers/pytorch_data_api_tiledb_sparse.ipynb)
 
 
 ## Installation

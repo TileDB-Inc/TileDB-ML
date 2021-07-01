@@ -14,7 +14,7 @@ from tensorflow.keras.layers import (
     Dropout,
 )
 
-from tiledb.ml.data_apis.tensorflow import TensorflowTileDBDenseDataset
+from tiledb.ml.readers.tensorflow import TensorflowTileDBDenseDataset
 from tiledb.ml._utils import ingest_in_tiledb
 
 # Suppress all Tensorflow messages

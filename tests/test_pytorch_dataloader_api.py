@@ -9,7 +9,7 @@ import pytest
 import torch.nn as nn
 import torch.optim as optim
 
-from tiledb.ml.data_apis.pytorch import PyTorchTileDBDenseDataset
+from tiledb.ml.readers.pytorch import PyTorchTileDBDenseDataset
 from tiledb.ml._utils import ingest_in_tiledb
 
 # Test parameters

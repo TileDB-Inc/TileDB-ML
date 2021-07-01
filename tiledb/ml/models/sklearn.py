@@ -13,7 +13,7 @@ from sklearn.base import BaseEstimator
 from .base import TileDBModel
 
 
-class SklearnTileDB(TileDBModel):
+class SklearnTileDBModel(TileDBModel):
     """
     Class that implements all functionality needed to save Sklearn models as
     TileDB arrays and load Sklearn models from TileDB arrays.

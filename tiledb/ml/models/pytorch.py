@@ -13,7 +13,7 @@ from torch.nn import Module
 from .base import TileDBModel
 
 
-class PyTorchTileDB(TileDBModel):
+class PyTorchTileDBModel(TileDBModel):
     """
     Class that implements all functionality needed to save PyTorch models as
     TileDB arrays and load PyTorch models from TileDB arrays.
