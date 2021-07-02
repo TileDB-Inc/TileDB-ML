@@ -5,6 +5,7 @@ import tiledb
 import numpy as np
 import pytest
 import platform
+import io
 
 import tensorflow as tf
 from tensorflow.python.keras.backend import batch_get_value
@@ -64,18 +65,15 @@ class TestTensorflowKerasModel:
         # Compiles the model if optimizer is present
         if optimizer:
             model.compile(loss=loss, optimizer=optimizer, metrics=[metrics])
-        tiledb_model_obj = TensorflowKerasTileDBModel(uri=tiledb_uri)
+
+        tiledb_model_obj = TensorflowKerasTileDBModel(uri=tiledb_uri, model=model)
 
         if api != testing_utils.get_small_subclass_mlp:
-            tiledb_model_obj.save(
-                model=model, include_optimizer=True if optimizer else False
-            )
+            tiledb_model_obj.save(include_optimizer=True if optimizer else False)
             assert tiledb.array_exists(tiledb_uri)
         else:
             with pytest.raises(NotImplementedError):
-                tiledb_model_obj.save(
-                    model=model, include_optimizer=True if optimizer else False
-                )
+                tiledb_model_obj.save(include_optimizer=True if optimizer else False)
 
     def test_save_model_to_tiledb_array_predictions(
         self, tmpdir, api, loss, optimizer, metrics
@@ -91,12 +89,11 @@ class TestTensorflowKerasModel:
         # Compiles the model if optimizer is present
         if optimizer:
             model.compile(loss=loss, optimizer=optimizer, metrics=[metrics])
-        tiledb_model_obj = TensorflowKerasTileDBModel(uri=tiledb_uri)
+
+        tiledb_model_obj = TensorflowKerasTileDBModel(uri=tiledb_uri, model=model)
 
         if api != testing_utils.get_small_subclass_mlp:
-            tiledb_model_obj.save(
-                model=model, include_optimizer=True if optimizer else False
-            )
+            tiledb_model_obj.save(include_optimizer=True if optimizer else False)
             loaded_model = tiledb_model_obj.load(compile_model=False)
             data = np.random.rand(100, 3)
 
@@ -107,9 +104,7 @@ class TestTensorflowKerasModel:
             # assert all([a == b for a, b in zip(loaded_model.predict(data), model.predict(data))])
         else:
             with pytest.raises(NotImplementedError):
-                tiledb_model_obj.save(
-                    model=model, include_optimizer=True if optimizer else False
-                )
+                tiledb_model_obj.save(include_optimizer=True if optimizer else False)
 
     def test_save_model_to_tiledb_array_weights(
         self, tmpdir, api, loss, optimizer, metrics
@@ -125,12 +120,11 @@ class TestTensorflowKerasModel:
         # Compiles the model if optimizer is present
         if optimizer:
             model.compile(loss=loss, optimizer=optimizer, metrics=[metrics])
-        tiledb_model_obj = TensorflowKerasTileDBModel(uri=tiledb_uri)
+
+        tiledb_model_obj = TensorflowKerasTileDBModel(uri=tiledb_uri, model=model)
 
         if api != testing_utils.get_small_subclass_mlp:
-            tiledb_model_obj.save(
-                model=model, include_optimizer=True if optimizer else False
-            )
+            tiledb_model_obj.save(include_optimizer=True if optimizer else False)
             loaded_model = tiledb_model_obj.load(
                 compile_model=True if optimizer else False
             )
@@ -154,9 +148,7 @@ class TestTensorflowKerasModel:
                 )
         else:
             with pytest.raises(NotImplementedError):
-                tiledb_model_obj.save(
-                    model=model, include_optimizer=True if optimizer else False
-                )
+                tiledb_model_obj.save(include_optimizer=True if optimizer else False)
 
     def test_save_load_with_dense_features(self, tmpdir, api, loss, optimizer, metrics):
         if optimizer is None:
@@ -186,8 +178,8 @@ class TestTensorflowKerasModel:
         )
 
         tiledb_uri = os.path.join(tmpdir, "model_array")
-        tiledb_model_obj = TensorflowKerasTileDBModel(uri=tiledb_uri)
-        tiledb_model_obj.save(model=model, include_optimizer=True)
+        tiledb_model_obj = TensorflowKerasTileDBModel(uri=tiledb_uri, model=model)
+        tiledb_model_obj.save(include_optimizer=True)
         loaded_model = tiledb_model_obj.load(compile_model=True)
 
         model_opt_weights = batch_get_value(getattr(model.optimizer, "weights"))
@@ -242,8 +234,8 @@ class TestTensorflowKerasModel:
         )
 
         tiledb_uri = os.path.join(tmpdir, "model_array")
-        tiledb_model_obj = TensorflowKerasTileDBModel(uri=tiledb_uri)
-        tiledb_model_obj.save(model=model, include_optimizer=True)
+        tiledb_model_obj = TensorflowKerasTileDBModel(uri=tiledb_uri, model=model)
+        tiledb_model_obj.save(include_optimizer=True)
         loaded_model = tiledb_model_obj.load(compile_model=True)
 
         model_opt_weights = batch_get_value(getattr(model.optimizer, "weights"))
@@ -302,8 +294,8 @@ class TestTensorflowKerasModel:
         model.train_on_batch(data_x, data_y)
 
         tiledb_uri = os.path.join(tmpdir, "model_array")
-        tiledb_model_obj = TensorflowKerasTileDBModel(uri=tiledb_uri)
-        tiledb_model_obj.save(model=model, include_optimizer=True)
+        tiledb_model_obj = TensorflowKerasTileDBModel(uri=tiledb_uri, model=model)
+        tiledb_model_obj.save(include_optimizer=True)
         loaded_model = tiledb_model_obj.load(compile_model=True)
 
         # Assert all evaluation results are the same.
@@ -336,8 +328,8 @@ class TestTensorflowKerasModel:
         model = keras.Model(inputs=[inputs], outputs=[pred, pred_feat])
 
         tiledb_uri = os.path.join(tmpdir, "model_array")
-        tiledb_model_obj = TensorflowKerasTileDBModel(uri=tiledb_uri)
-        tiledb_model_obj.save(model=model, include_optimizer=False)
+        tiledb_model_obj = TensorflowKerasTileDBModel(uri=tiledb_uri, model=model)
+        tiledb_model_obj.save(include_optimizer=False)
         loaded_model = tiledb_model_obj.load(compile_model=False)
 
         data = np.random.rand(50, 10, 10)
@@ -366,8 +358,8 @@ class TestTensorflowKerasModel:
         model.train_on_batch(data_x, data_y)
 
         tiledb_uri = os.path.join(tmpdir, "model_array")
-        tiledb_model_obj = TensorflowKerasTileDBModel(uri=tiledb_uri)
-        tiledb_model_obj.save(model=model, include_optimizer=True)
+        tiledb_model_obj = TensorflowKerasTileDBModel(uri=tiledb_uri, model=model)
+        tiledb_model_obj.save(include_optimizer=True)
         loaded_model = tiledb_model_obj.load(compile_model=True)
 
         # Assert model predictions are equal
@@ -392,25 +384,25 @@ class TestTensorflowKerasModel:
         tiledb_model_obj = TensorflowKerasTileDBModel(uri=tiledb_uri, model=model)
         if model.built:
             assert type(tiledb_model_obj.preview()) == str
-        else:
-            # Model should be built before preview it
-            with pytest.raises(ValueError):
-                tiledb_model_obj.preview()
-
-        # Without model given as argument
-        tiledb_model_obj = TensorflowKerasTileDBModel(uri=tiledb_uri)
-        assert type(tiledb_model_obj.preview()) == str
 
 
 def test_file_properties(tmpdir):
     model = keras.models.Sequential()
     model.add(keras.layers.Flatten(input_shape=(10, 10)))
 
-    tiledb_array = os.path.join(tmpdir, "model_array")
-    tiledb_obj = TensorflowKerasTileDBModel(uri=tiledb_array)
-    tiledb_obj.save(model=model)
+    # Get model summary in a string
+    s = io.StringIO()
+    model.summary(print_fn=lambda x: s.write(x + "\n"))
+    model_summary = s.getvalue()
 
-    assert tiledb_obj._file_properties["TILEDB_ML_MODEL_ML_FRAMEWORK"] == "TENSORFLOW KERAS"
+    tiledb_array = os.path.join(tmpdir, "model_array")
+    tiledb_obj = TensorflowKerasTileDBModel(uri=tiledb_array, model=model)
+    tiledb_obj.save()
+
+    assert (
+        tiledb_obj._file_properties["TILEDB_ML_MODEL_ML_FRAMEWORK"]
+        == "TENSORFLOW KERAS"
+    )
     assert tiledb_obj._file_properties["TILEDB_ML_MODEL_STAGE"] == "STAGING"
     assert (
         tiledb_obj._file_properties["TILEDB_ML_MODEL_PYTHON_VERSION"]
@@ -420,12 +412,17 @@ def test_file_properties(tmpdir):
         tiledb_obj._file_properties["TILEDB_ML_MODEL_ML_FRAMEWORK_VERSION"]
         == tf.__version__
     )
-    assert tiledb_obj._file_properties["TILEDB_ML_MODEL_PREVIEW"] == ""
+    assert tiledb_obj._file_properties["TILEDB_ML_MODEL_PREVIEW"] == model_summary
 
 
 def test_file_properties_in_tiledb_cloud_case(tmpdir, mocker):
     model = keras.models.Sequential()
     model.add(keras.layers.Flatten(input_shape=(10, 10)))
+
+    # Get model summary in a string
+    s = io.StringIO()
+    model.summary(print_fn=lambda x: s.write(x + "\n"))
+    model_summary = s.getvalue()
 
     tiledb_array = os.path.join(tmpdir, "model_array")
     mocker.patch(
@@ -435,11 +432,14 @@ def test_file_properties_in_tiledb_cloud_case(tmpdir, mocker):
 
     tiledb_array = os.path.join(tmpdir, "model_array")
     tiledb_obj = TensorflowKerasTileDBModel(
-        uri=tiledb_array, namespace="test_namespace"
+        uri=tiledb_array, namespace="test_namespace", model=model
     )
-    tiledb_obj.save(model=model)
+    tiledb_obj.save()
 
-    assert tiledb_obj._file_properties["TILEDB_ML_MODEL_ML_FRAMEWORK"] == "TENSORFLOW KERAS"
+    assert (
+        tiledb_obj._file_properties["TILEDB_ML_MODEL_ML_FRAMEWORK"]
+        == "TENSORFLOW KERAS"
+    )
     assert tiledb_obj._file_properties["TILEDB_ML_MODEL_STAGE"] == "STAGING"
     assert (
         tiledb_obj._file_properties["TILEDB_ML_MODEL_PYTHON_VERSION"]
@@ -449,16 +449,15 @@ def test_file_properties_in_tiledb_cloud_case(tmpdir, mocker):
         tiledb_obj._file_properties["TILEDB_ML_MODEL_ML_FRAMEWORK_VERSION"]
         == tf.__version__
     )
-    assert tiledb_obj._file_properties["TILEDB_ML_MODEL_PREVIEW"] == ""
+    assert tiledb_obj._file_properties["TILEDB_ML_MODEL_PREVIEW"] == model_summary
 
 
 def test_exception_raise_file_property_in_meta_error(tmpdir):
     model = keras.models.Sequential()
     model.add(keras.layers.Flatten(input_shape=(10, 10)))
     tiledb_array = os.path.join(tmpdir, "model_array")
-    tiledb_obj = TensorflowKerasTileDBModel(uri=tiledb_array)
+    tiledb_obj = TensorflowKerasTileDBModel(uri=tiledb_array, model=model)
     with pytest.raises(ValueError):
         tiledb_obj.save(
-            model=model,
             meta={"TILEDB_ML_MODEL_ML_FRAMEWORK": "TILEDB_ML_MODEL_ML_FRAMEWORK"},
         )

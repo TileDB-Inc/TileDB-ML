@@ -22,24 +22,19 @@ class SklearnTileDBModel(TileDBModel):
     Framework = "SKLEARN"
     FrameworkVersion = sklearn.__version__
 
-    def save(
-        self, model: BaseEstimator, update: bool = False, meta: Optional[dict] = {}
-    ):
+    def save(self, update: bool = False, meta: Optional[dict] = {}):
         """
         Saves a Sklearn model as a TileDB array.
-        :param model: An Sklearn Estimator object. Model to store as TileDB array.
         :param update: Boolean. Whether we should update any existing TileDB array
         model at the target location.
         :param meta: Dict. Extra metadata to save in a TileDB array.
         """
         # Serialize model
-        serialized_model = self._serialize_model(model)
+        serialized_model = self._serialize_model()
 
         # Create TileDB model array
         if not update:
             self._create_array()
-
-        self.set_file_properties()
 
         self._write_array(serialized_model=serialized_model, meta=meta)
 
@@ -110,11 +105,9 @@ class SklearnTileDBModel(TileDBModel):
 
             self.update_model_metadata(array=tf_model_tiledb, meta=meta)
 
-    @staticmethod
-    def _serialize_model(model: BaseEstimator) -> bytes:
+    def _serialize_model(self) -> bytes:
         """
         Serializes a Sklearn model with pickle.
-        :param model: A Sklearn Estimator object.
         :return: Bytes. Pickled Sklearn model.
         """
-        return pickle.dumps(model, protocol=4)
+        return pickle.dumps(self.model, protocol=4)
