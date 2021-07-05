@@ -30,40 +30,35 @@ class TensorflowKerasTileDBModel(TileDBModel):
 
     def save(
         self,
-        model: Model,
         include_optimizer: bool = False,
         update: bool = False,
         meta: Optional[dict] = {},
     ):
         """
         Saves a Tensorflow model as a TileDB array.
-        :param model: Tensorflow model.
         :param include_optimizer: Boolean. Whether to save the optimizer or not.
         :param update: Boolean. Whether we should update any existing TileDB array model at the target location.
         :param meta: Dict. Extra metadata to save in a TileDB array.
         """
-        if not isinstance(model, (Functional, Sequential)):
+        if not isinstance(self.model, (Functional, Sequential)):
             raise NotImplementedError(
                 "No support for Subclassed models at the moment. Your "
                 "model should be either Sequential or Functional."
             )
 
         # Serialize model weights and optimizer (if needed)
-        model_weights = pickle.dumps(model.get_weights(), protocol=4)
+        model_weights = pickle.dumps(self.model.get_weights(), protocol=4)
 
         # Serialize model optimizer
         optimizer_weights = self._serialize_optimizer_weights(
-            model=model, include_optimizer=include_optimizer
+            include_optimizer=include_optimizer
         )
 
         # Create TileDB model array
         if not update:
             self._create_array()
 
-        self.set_file_properties()
-
         self._write_array(
-            model=model,
             include_optimizer=include_optimizer,
             serialized_weights=model_weights,
             serialized_optimizer_weights=optimizer_weights,
@@ -198,7 +193,6 @@ class TensorflowKerasTileDBModel(TileDBModel):
 
     def _write_array(
         self,
-        model: Model,
         include_optimizer: bool,
         serialized_weights: bytes,
         serialized_optimizer_weights: bytes,
@@ -215,7 +209,7 @@ class TensorflowKerasTileDBModel(TileDBModel):
             }
 
             # Insert all model metadata
-            model_metadata = saving_utils.model_metadata(model, include_optimizer)
+            model_metadata = saving_utils.model_metadata(self.model, include_optimizer)
             for key, value in model_metadata.items():
                 tf_model_tiledb.meta[key] = json.dumps(
                     value, default=json_utils.get_json_type
@@ -223,28 +217,24 @@ class TensorflowKerasTileDBModel(TileDBModel):
 
             self.update_model_metadata(array=tf_model_tiledb, meta=meta)
 
-    @staticmethod
-    def _serialize_model_weights(model: Model) -> bytes:
+    def _serialize_model_weights(self) -> bytes:
         """
         Serialization of model weights
         """
-        return pickle.dumps(model.get_weights(), protocol=4)
+        return pickle.dumps(self.model.get_weights(), protocol=4)
 
-    @staticmethod
-    def _serialize_optimizer_weights(
-        model: Model, include_optimizer: bool = True
-    ) -> bytes:
+    def _serialize_optimizer_weights(self, include_optimizer: bool = True) -> bytes:
         """
         Serialization of optimizer weights
         """
         if (
             include_optimizer
-            and model.optimizer
-            and not isinstance(model.optimizer, optimizer_v1.TFOptimizer)
+            and self.model.optimizer
+            and not isinstance(self.model.optimizer, optimizer_v1.TFOptimizer)
         ):
 
             optimizer_weights = tf.keras.backend.batch_get_value(
-                getattr(model.optimizer, "weights")
+                getattr(self.model.optimizer, "weights")
             )
 
             return pickle.dumps(optimizer_weights, protocol=4)

@@ -41,7 +41,7 @@ class TileDBModel(abc.ABC):
         uri: str,
         namespace: str = None,
         ctx: tiledb.Ctx = None,
-        model: Optional[Union[Module, Model, BaseEstimator]] = None,
+        model: Union[Module, Model, BaseEstimator] = None,
     ):
         """
         Base class for saving machine learning models as TileDB arrays
@@ -57,8 +57,15 @@ class TileDBModel(abc.ABC):
         self.namespace = namespace
         self.ctx = ctx
         self.model = model
-        self._file_properties = {}
         self.uri = self.get_cloud_uri(uri) if self.namespace else uri
+
+        self._file_properties = {
+            ModelFileProperties.TILEDB_ML_MODEL_ML_FRAMEWORK.value: self.Framework,
+            ModelFileProperties.TILEDB_ML_MODEL_ML_FRAMEWORK_VERSION.value: self.FrameworkVersion,
+            ModelFileProperties.TILEDB_ML_MODEL_STAGE.value: "STAGING",
+            ModelFileProperties.TILEDB_ML_MODEL_PYTHON_VERSION.value: platform.python_version(),
+            ModelFileProperties.TILEDB_ML_MODEL_PREVIEW.value: self.preview(),
+        }
 
     @abc.abstractmethod
     def save(self, **kwargs):
@@ -82,18 +89,6 @@ class TileDBModel(abc.ABC):
         Must be implemented per machine learning framework, i.e, Tensorflow,
         PyTorch etc.
         """
-
-    def set_file_properties(self):
-        """
-        Method that sets model array's file properties.
-        """
-        self._file_properties = {
-            ModelFileProperties.TILEDB_ML_MODEL_ML_FRAMEWORK.value: self.Framework,
-            ModelFileProperties.TILEDB_ML_MODEL_ML_FRAMEWORK_VERSION.value: self.FrameworkVersion,
-            ModelFileProperties.TILEDB_ML_MODEL_STAGE.value: "STAGING",
-            ModelFileProperties.TILEDB_ML_MODEL_PYTHON_VERSION.value: platform.python_version(),
-            ModelFileProperties.TILEDB_ML_MODEL_PREVIEW.value: self.preview(),
-        }
 
     def update_model_metadata(self, array: tiledb.Array, meta: Optional[dict] = {}):
         """
