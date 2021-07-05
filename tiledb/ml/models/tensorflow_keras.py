@@ -142,14 +142,10 @@ class TensorflowKerasTileDBModel(TileDBModel):
         :return: str. A string representation of the models internal configuration.
         """
         if self.model:
-            try:
-                s = io.StringIO()
-                self.model.summary(print_fn=lambda x: s.write(x + "\n"))
-                model_summary = s.getvalue()
-                return model_summary
-            # Tensorflow raises value error when it's not able to create a summary, i.e., when model is not built.
-            except ValueError as e:
-                return e
+            s = io.StringIO()
+            self.model.summary(print_fn=lambda x: s.write(x + "\n"))
+            model_summary = s.getvalue()
+            return model_summary
         else:
             return ""
 
