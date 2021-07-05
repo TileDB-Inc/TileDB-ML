@@ -6,12 +6,8 @@ import tiledb
 import json
 import platform
 
-from typing import Optional, Union
+from typing import Optional
 from enum import Enum, unique
-
-from torch.nn import Module
-from tensorflow.python.keras.models import Model
-from sklearn.base import BaseEstimator
 
 
 @unique
@@ -41,7 +37,7 @@ class TileDBModel(abc.ABC):
         uri: str,
         namespace: str = None,
         ctx: tiledb.Ctx = None,
-        model: Union[Module, Model, BaseEstimator] = None,
+        model=None,
     ):
         """
         Base class for saving machine learning models as TileDB arrays
