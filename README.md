@@ -100,7 +100,7 @@ TileDB-ML can be installed:
 
       pip install git+https://github.com/TileDB-Inc/TileDB-ML.git@master
 
-- Soon from PyPi:
+- from PyPi:
 
 [comment]: <> (TileDB-ML is available from either [PyPI]&#40;https://test.pypi.org/project/tiledb-ml/0.1.2.2/&#41; with ``pip``:)
 
