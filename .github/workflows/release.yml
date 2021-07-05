@@ -14,6 +14,7 @@ jobs:
     - name: Build package
       run: pip install wheel && python setup.py sdist bdist_wheel && ls -l dist
     - name: Publish package to TestPyPI
+      if: "github.event.release.prerelease"
       uses: pypa/gh-action-pypi-publish@master
       with:
         user: __token__
