@@ -3,7 +3,6 @@
 import abc
 import os
 import tiledb
-import json
 import platform
 
 from typing import Optional
@@ -99,7 +98,7 @@ class TileDBModel(abc.ABC):
             )
         else:
             for key, value in {**meta, **self._file_properties}.items():
-                array.meta[key] = json.dumps(value).encode("utf8")
+                array.meta[key] = value
 
     def get_cloud_uri(self, uri: str) -> str:
         from tiledb.ml._cloud_utils import get_s3_prefix
