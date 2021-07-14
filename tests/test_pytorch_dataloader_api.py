@@ -177,6 +177,61 @@ class TestPytorchDenseDataloader:
             assert len(unique_inputs) - 1 == batchindx
             assert len(unique_labels) - 1 == batchindx
 
+    def test_no_workers_info(self, tmpdir, input_shape, workers, mocker):
+        mocker.patch("torch.utils.data.get_worker_info", return_value=None)
+
+        tiledb_uri_x = os.path.join(tmpdir, "x")
+        tiledb_uri_y = os.path.join(tmpdir, "y")
+
+        dataset_shape_x = (ROWS,) + input_shape
+        dataset_shape_y = (ROWS,)
+
+        ingest_in_tiledb(
+            uri=tiledb_uri_x,
+            data=np.random.rand(*dataset_shape_x),
+            batch_size=BATCH_SIZE,
+            sparse=False,
+        )
+        ingest_in_tiledb(
+            uri=tiledb_uri_y,
+            data=np.random.randint(low=0, high=NUM_OF_CLASSES, size=dataset_shape_y),
+            batch_size=BATCH_SIZE,
+            sparse=False,
+        )
+
+        with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
+
+            tiledb_dataset = PyTorchTileDBDenseDataset(
+                x_array=x, y_array=y, batch_size=BATCH_SIZE
+            )
+
+            assert isinstance(tiledb_dataset, torch.utils.data.IterableDataset)
+
+            train_loader = torch.utils.data.DataLoader(
+                tiledb_dataset, batch_size=None, num_workers=workers
+            )
+
+            unique_inputs = []
+            unique_labels = []
+
+            for batchindx, data in enumerate(train_loader):
+                # Keep unique X tensors
+                if not any(
+                    np.array_equal(data[0].numpy(), unique_input)
+                    for unique_input in unique_inputs
+                ):
+                    unique_inputs.append(data[0].numpy())
+
+                # Keep unique Y tensors
+                if not any(
+                    np.array_equal(data[1].numpy(), unique_label)
+                    for unique_label in unique_labels
+                ):
+                    unique_labels.append(data[1].numpy())
+
+            assert len(unique_inputs) - 1 == batchindx
+            assert len(unique_labels) - 1 == batchindx
+
     def test_dataset_length(self, tmpdir, input_shape, workers):
         tiledb_uri_x = os.path.join(tmpdir, "x")
         tiledb_uri_y = os.path.join(tmpdir, "y")

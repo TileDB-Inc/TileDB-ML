@@ -36,12 +36,30 @@ class TestSklearnModel:
             ]
         )
 
-    def test_preview(self, tmpdir, net):
+    def test_preview(self, tmpdir, net, mocker):
         # With model as argument
         tiledb_array = os.path.join(tmpdir, "test_array")
         model = net()
         tiledb_sklearn_obj = SklearnTileDBModel(uri=tiledb_array, model=model)
         assert type(tiledb_sklearn_obj.preview()) == str
+        tiledb_sklearn_obj_none = SklearnTileDBModel(uri=tiledb_array, model=None)
+        assert tiledb_sklearn_obj_none.preview() == ""
+
+    def test_get_cloud_uri(self, tmpdir, net, mocker):
+        tiledb_array = os.path.join(tmpdir, "test_array")
+        model = net()
+        tiledb_sklearn_obj = SklearnTileDBModel(uri=tiledb_array, model=model)
+
+        mocker.patch("tiledb.ml._cloud_utils.get_s3_prefix", return_value=None)
+        with pytest.raises(ValueError):
+            tiledb_sklearn_obj.get_cloud_uri(tiledb_array)
+
+        mocker.patch("tiledb.ml._cloud_utils.get_s3_prefix", return_value="bar")
+        actual = tiledb_sklearn_obj.get_cloud_uri(tiledb_array)
+        expected = "tiledb://{}/{}".format(
+            tiledb_sklearn_obj.namespace, os.path.join("bar", tiledb_array)
+        )
+        assert actual == expected
 
     def test_file_properties(self, tmpdir, net):
         model = net()

@@ -406,6 +406,44 @@ class TestTensorflowKerasModel:
                 )
                 tiledb_model_obj.preview()
 
+        # When model is None then preview returns empty string
+        tiledb_model_obj_none = TensorflowKerasTileDBModel(uri=tiledb_uri, model=None)
+        assert tiledb_model_obj_none.preview() == ""
+
+    def test_get_cloud_uri(self, tmpdir, api, loss, optimizer, metrics, mocker):
+        model = (
+            api(num_hidden=1, num_classes=2, input_dim=3)
+            if api != testing_utils.get_small_subclass_mlp
+            else api(num_hidden=1, num_classes=2)
+        )
+
+        tiledb_uri = os.path.join(tmpdir, "model_array")
+
+        # Compiles the model if optimizer is present
+        if optimizer:
+            model.compile(loss=loss, optimizer=optimizer, metrics=[metrics])
+
+        mocker.patch("tiledb.ml._cloud_utils.get_s3_prefix", return_value=None)
+        # With model given as argument
+        if model.built:
+            tiledb_model_obj = TensorflowKerasTileDBModel(uri=tiledb_uri, model=model)
+            with pytest.raises(ValueError):
+                tiledb_model_obj.get_cloud_uri(tiledb_uri)
+
+            mocker.patch("tiledb.ml._cloud_utils.get_s3_prefix", return_value="bar")
+            actual = tiledb_model_obj.get_cloud_uri(tiledb_uri)
+            expected = "tiledb://{}/{}".format(
+                tiledb_model_obj.namespace, os.path.join("bar", tiledb_uri)
+            )
+            assert actual == expected
+
+        else:
+            with pytest.raises(ValueError):
+                tiledb_model_obj = TensorflowKerasTileDBModel(
+                    uri=tiledb_uri, model=model
+                )
+                tiledb_model_obj.get_cloud_uri(tiledb_uri)
+
 
 def test_file_properties(tmpdir):
     model = keras.models.Sequential()
@@ -482,3 +520,9 @@ def test_exception_raise_file_property_in_meta_error(tmpdir):
         tiledb_obj.save(
             meta={"TILEDB_ML_MODEL_ML_FRAMEWORK": "TILEDB_ML_MODEL_ML_FRAMEWORK"},
         )
+
+
+#
+# def test_serialize_model_weights()
+# def test_save_unsupported_class()
+# def test_load_unsupported_class()

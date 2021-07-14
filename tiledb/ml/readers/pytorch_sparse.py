@@ -2,7 +2,6 @@
 import numpy as np
 import tiledb
 import torch
-import math
 
 
 class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset):
@@ -69,10 +68,12 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset):
             iter_end = rows
         else:
             # Multiple workers - split workload
-            per_worker = math.ceil(rows / worker_info.num_workers)
-            worker_id = worker_info.id
-            iter_start = worker_id * per_worker
-            iter_end = min(iter_start + per_worker, rows)
+            # TODO: https://github.com/pytorch/pytorch/issues/20248
+            # per_worker = math.ceil(rows / worker_info.num_workers)
+            # worker_id = worker_info.id
+            # iter_start = worker_id * per_worker
+            # iter_end = min(iter_start + per_worker, rows)
+            raise NotImplementedError("https://github.com/pytorch/pytorch/issues/20248")
 
         y_attr_name = self.y.schema.attr(0).name
 
