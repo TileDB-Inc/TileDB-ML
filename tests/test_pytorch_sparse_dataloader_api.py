@@ -189,7 +189,7 @@ class TestTileDBSparsePyTorchDataloaderAPI:
 
             assert isinstance(tiledb_dataset, torch.utils.data.IterableDataset)
 
-            multiple_workers = 5
+            multiple_workers = 2
             train_loader = torch.utils.data.DataLoader(
                 tiledb_dataset, batch_size=None, num_workers=multiple_workers
             )

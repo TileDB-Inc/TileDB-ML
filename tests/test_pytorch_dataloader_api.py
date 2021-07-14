@@ -208,7 +208,7 @@ class TestPytorchDenseDataloader:
             assert isinstance(tiledb_dataset, torch.utils.data.IterableDataset)
 
             train_loader = torch.utils.data.DataLoader(
-                tiledb_dataset, batch_size=None, num_workers=workers
+                tiledb_dataset, batch_size=None, num_workers=0
             )
 
             unique_inputs = []
