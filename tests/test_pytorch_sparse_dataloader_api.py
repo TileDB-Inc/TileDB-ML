@@ -208,7 +208,7 @@ class TestTileDBSparsePyTorchDataloaderAPI:
             for epoch in range(1):
                 # TODO: After TILEDB-PY release for support on SparseArray pickle this error should change to not
                 # NotImplementedError until the https://github.com/pytorch/pytorch/issues/20248 is resolved
-                with pytest.raises(TypeError):
+                with pytest.raises(NotImplementedError):
                     for inputs, labels in train_loader:
                         # zero the parameter gradients
                         optimizer.zero_grad()
