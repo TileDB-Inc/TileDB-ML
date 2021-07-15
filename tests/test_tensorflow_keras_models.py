@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 import platform
 import io
+import pickle
 
 import tensorflow as tf
 from tensorflow.python.keras.backend import batch_get_value
@@ -522,7 +523,33 @@ def test_exception_raise_file_property_in_meta_error(tmpdir):
         )
 
 
-#
-# def test_serialize_model_weights()
-# def test_save_unsupported_class()
-# def test_load_unsupported_class()
+def test_serialize_model_weights(tmpdir):
+    model = keras.models.Sequential()
+    model.add(keras.layers.Flatten(input_shape=(10, 10)))
+    tiledb_array = os.path.join(tmpdir, "model_array")
+    tiledb_obj = TensorflowKerasTileDBModel(uri=tiledb_array, model=model)
+    assert tiledb_obj._serialize_model_weights() == pickle.dumps(
+        model.get_weights(), protocol=4
+    )
+
+
+def test_save_unsupported_class(tmpdir, mocker):
+    model = mocker.patch("keras.models", return_value=mocker.Mock(model="test"))
+    model.add(keras.layers.Flatten(input_shape=(10, 10)))
+    tiledb_array = os.path.join(tmpdir, "model_array")
+    tiledb_obj = TensorflowKerasTileDBModel(uri=tiledb_array, model=model)
+    with pytest.raises(NotImplementedError):
+        tiledb_obj.save()
+
+
+def test_load_unsupported_class(tmpdir, mocker):
+    mocker.patch(
+        "json.loads", return_value=mocker.MagicMock(model_config={"class_name": "test"})
+    )
+    model = keras.models.Sequential()
+    model.add(keras.layers.Flatten(input_shape=(10, 10)))
+    tiledb_array = os.path.join(tmpdir, "model_array")
+    tiledb_obj = TensorflowKerasTileDBModel(uri=tiledb_array, model=model)
+    tiledb_obj.save()
+    with pytest.raises(NotImplementedError):
+        tiledb_obj.load()

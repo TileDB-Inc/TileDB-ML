@@ -208,7 +208,7 @@ class TestTileDBSparsePyTorchDataloaderAPI:
             for epoch in range(1):
                 # TODO: After TILEDB-PY release for support on SparseArray pickle this error should change to not
                 # NotImplementedError until the https://github.com/pytorch/pytorch/issues/20248 is resolved
-                with pytest.raises(NotImplementedError):
+                with pytest.raises(Exception):
                     for inputs, labels in train_loader:
                         # zero the parameter gradients
                         optimizer.zero_grad()
@@ -354,3 +354,37 @@ class TestTileDBSparsePyTorchDataloaderAPI:
                     optimizer.zero_grad()
                     # forward + backward + optimize
                     net(inputs)
+
+    def test_tiledb_pytorch_sparse_sparse_label_data(
+        self, tmpdir, input_shape, workers
+    ):
+        dataset_shape_x = (ROWS, input_shape)
+        dataset_shape_y = (ROWS, (NUM_OF_CLASSES,))
+
+        tiledb_uri_x = os.path.join(tmpdir, "x")
+        tiledb_uri_y = os.path.join(tmpdir, "y")
+
+        ingest_in_tiledb(
+            uri=tiledb_uri_x,
+            data=create_sparse_array_one_hot_2d(*dataset_shape_x),
+            batch_size=BATCH_SIZE,
+            sparse=True,
+        )
+        ingest_in_tiledb(
+            uri=tiledb_uri_y,
+            data=create_sparse_array_one_hot_2d(*dataset_shape_y),
+            batch_size=BATCH_SIZE,
+            sparse=True,
+        )
+
+        with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
+
+            tiledb_dataset = PyTorchTileDBSparseDataset(
+                x_array=x, y_array=y, batch_size=BATCH_SIZE
+            )
+
+            generated_data = next(tiledb_dataset.__iter__())
+            assert generated_data[0].layout == torch.sparse_coo
+            assert generated_data[1].layout == torch.sparse_coo
+            assert generated_data[0].size() == (BATCH_SIZE, *input_shape)
+            assert generated_data[1].size() == (BATCH_SIZE, NUM_OF_CLASSES)
