@@ -39,7 +39,7 @@ jobs:
       shell: bash
 
     - name: 'Run tests'
-      id: stats
+      id: tests
       if: ${{ matrix.os != 'macos-latest' && matrix.python-version != '3.6' }}
       shell: bash
       run: |
