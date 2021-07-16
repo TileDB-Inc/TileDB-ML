@@ -177,9 +177,7 @@ class TestPytorchDenseDataloader:
             assert len(unique_inputs) - 1 == batchindx
             assert len(unique_labels) - 1 == batchindx
 
-    def test_pytorch_api_returns_no_workers_info(
-        self, tmpdir, input_shape, workers, mocker
-    ):
+    def test_single_worker_data_ingestion(self, tmpdir, input_shape, workers, mocker):
         mocker.patch("torch.utils.data.get_worker_info", return_value=None)
 
         tiledb_uri_x = os.path.join(tmpdir, "x")
