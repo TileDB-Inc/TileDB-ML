@@ -30,15 +30,15 @@ ROWS = 1000
 
 @pytest.fixture(
     params=[
-        # {
-        #     "input_shape": (10,),
-        # },
+        {
+            "input_shape": (10,),
+        },
         {
             "input_shape": (10, 3),
         },
-        # {
-        #     "input_shape": (10, 10, 3),
-        # },
+        {
+            "input_shape": (10, 10, 3),
+        },
     ]
 )
 def model(request):
