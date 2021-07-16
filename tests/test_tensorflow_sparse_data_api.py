@@ -322,7 +322,8 @@ class TestTileDBTensorflowSparseDataAPI:
                 )
             )
 
-            assert type(generated_data[0]) == tf.sparse.SparseTensor
+            assert isinstance(generated_data[0], tf.sparse.SparseTensor)
+            assert isinstance(generated_data[1], np.ndarray)
             assert generated_data[1].shape == (BATCH_SIZE, NUM_OF_CLASSES)
 
             # Coords should be equal to batch for both x and y
