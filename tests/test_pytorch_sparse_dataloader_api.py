@@ -47,7 +47,7 @@ class Net(nn.Module):
 # We test for single and multiple workers
 @pytest.mark.parametrize(
     "workers",
-    [0],
+    [0, 1],
 )
 class TestTileDBSparsePyTorchDataloaderAPI:
     def test_tiledb_pytorch_sparse_data_api_train_with_multiple_dim_data(
@@ -98,64 +98,19 @@ class TestTileDBSparsePyTorchDataloaderAPI:
 
             # loop over the dataset multiple times
             for epoch in range(1):
-                for inputs, labels in train_loader:
-                    # zero the parameter gradients
-                    optimizer.zero_grad()
-                    # forward + backward + optimize
-                    outputs = net(inputs)
-                    loss = criterion(outputs, labels.type(torch.LongTensor))
-                    loss.backward()
-                    optimizer.step()
-
-    def test_multiple_workers_unsupported(self, tmpdir, input_shape, workers):
-
-        dataset_shape_x = (ROWS, input_shape)
-        dataset_shape_y = (ROWS,)
-
-        tiledb_uri_x = os.path.join(tmpdir, "x")
-        tiledb_uri_y = os.path.join(tmpdir, "y")
-
-        ingest_in_tiledb(
-            uri=tiledb_uri_x,
-            data=create_sparse_array_one_hot_2d(*dataset_shape_x),
-            batch_size=BATCH_SIZE,
-            sparse=True,
-        )
-        ingest_in_tiledb(
-            uri=tiledb_uri_y,
-            data=np.random.randint(low=0, high=NUM_OF_CLASSES, size=dataset_shape_y),
-            batch_size=BATCH_SIZE,
-            sparse=False,
-        )
-
-        with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
-
-            tiledb_dataset = PyTorchTileDBSparseDataset(
-                x_array=x, y_array=y, batch_size=BATCH_SIZE
-            )
-
-            assert isinstance(tiledb_dataset, torch.utils.data.IterableDataset)
-
-            multiple_workers = 2
-            train_loader = torch.utils.data.DataLoader(
-                tiledb_dataset, batch_size=None, num_workers=multiple_workers
-            )
-
-            # Train network
-            net = Net(shape=dataset_shape_x[1:])
-            criterion = torch.nn.CrossEntropyLoss()
-            optimizer = optim.Adam(
-                net.parameters(),
-                lr=0.001,
-                betas=(0.9, 0.999),
-                eps=1e-08,
-            )
-
-            # loop over the dataset multiple times
-            for epoch in range(1):
-                # TODO: After TILEDB-PY release for support on SparseArray pickle this error should change to not
-                # NotImplementedError until the https://github.com/pytorch/pytorch/issues/20248 is resolved
-                with pytest.raises(Exception):
+                if workers != 0:
+                    # TODO: After TILEDB-PY release for support on SparseArray pickle this error should change to not
+                    # NotImplementedError until the https://github.com/pytorch/pytorch/issues/20248 is resolved
+                    with pytest.raises(Exception):
+                        for inputs, labels in train_loader:
+                            # zero the parameter gradients
+                            optimizer.zero_grad()
+                            # forward + backward + optimize
+                            outputs = net(inputs)
+                            loss = criterion(outputs, labels.type(torch.LongTensor))
+                            loss.backward()
+                            optimizer.step()
+                else:
                     for inputs, labels in train_loader:
                         # zero the parameter gradients
                         optimizer.zero_grad()
