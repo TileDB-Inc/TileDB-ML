@@ -147,7 +147,7 @@ class TestTileDBTensorflowDataAPI:
 
             assert len(tiledb_dataset) == ROWS
 
-    def test_dataset_generator(self, tmpdir, model):
+    def test_dataset_generator_batch_output(self, tmpdir, model):
         array_uuid = str(uuid.uuid4())
         tiledb_uri_x = os.path.join(tmpdir, "x" + array_uuid)
         tiledb_uri_y = os.path.join(tmpdir, "y" + array_uuid)

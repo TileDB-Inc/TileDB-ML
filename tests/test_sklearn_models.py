@@ -36,7 +36,7 @@ class TestSklearnModel:
             ]
         )
 
-    def test_preview(self, tmpdir, net, mocker):
+    def test_preview(self, tmpdir, net):
         # With model as argument
         tiledb_array = os.path.join(tmpdir, "test_array")
         model = net()

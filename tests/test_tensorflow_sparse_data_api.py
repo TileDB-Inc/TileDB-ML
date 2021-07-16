@@ -41,7 +41,7 @@ def model(request):
 
 
 class TestTileDBTensorflowSparseDataAPI:
-    def test_tiledb_tf_sparse_data_api_with_with_sparse_data_sparse_label(
+    def test_tiledb_tf_sparse_data_api_with_sparse_data_sparse_label(
         self, tmpdir, model
     ):
         array_uuid = str(uuid.uuid4())
@@ -260,7 +260,7 @@ class TestTileDBTensorflowSparseDataAPI:
             )
             model.fit(tiledb_dataset, verbose=0, epochs=2)
 
-    def test_generator_sparse_sparse(self, tmpdir, model):
+    def test_generator_sparse_x_sparse_y_batch_output(self, tmpdir, model):
         array_uuid = str(uuid.uuid4())
         tiledb_uri_x = os.path.join(tmpdir, "x" + array_uuid)
         tiledb_uri_y = os.path.join(tmpdir, "y" + array_uuid)
@@ -294,7 +294,7 @@ class TestTileDBTensorflowSparseDataAPI:
             assert generated_data[0].indices.shape[0] == BATCH_SIZE
             assert generated_data[1].indices.shape[0] == BATCH_SIZE
 
-    def test_generator_sparse_dense(self, tmpdir, model):
+    def test_generator_sparse_x_dense_y_batch_output(self, tmpdir, model):
         array_uuid = str(uuid.uuid4())
         tiledb_uri_x = os.path.join(tmpdir, "x" + array_uuid)
         tiledb_uri_y = os.path.join(tmpdir, "y" + array_uuid)
