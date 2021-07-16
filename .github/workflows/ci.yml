@@ -44,7 +44,7 @@ jobs:
       shell: bash
       run: |
         pip install pytest-mock pytest-cov
-        pytest --cov-report term:skip-covered --cov=tiledb tests/
+        pytest tests/
         REF=${{ github.ref }}
         echo "github.ref: $REF"
         IFS='/' read -ra PATHS <<< "$REF"
