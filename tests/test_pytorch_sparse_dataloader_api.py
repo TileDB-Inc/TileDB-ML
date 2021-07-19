@@ -95,7 +95,7 @@ class TestTileDBSparsePyTorchDataloaderAPI:
             )
 
             # loop over the dataset multiple times
-            if workers != 0:
+            if workers > 0:
                 # TODO: After TILEDB-PY release for support on SparseArray pickle this error should change to not
                 # NotImplementedError until the https://github.com/pytorch/pytorch/issues/20248 is resolved
                 with pytest.raises(Exception):
