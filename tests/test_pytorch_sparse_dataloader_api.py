@@ -47,11 +47,11 @@ class Net(nn.Module):
 # We test for single and multiple workers
 @pytest.mark.parametrize(
     "workers",
-    [0],
+    [0, 1],
 )
 class TestTileDBSparsePyTorchDataloaderAPI:
     def test_tiledb_pytorch_sparse_data_api_train_with_multiple_dim_data(
-        self, tmpdir, input_shape, workers
+        self, tmpdir, input_shape, workers, mocker
     ):
         dataset_shape_x = (ROWS, input_shape)
         dataset_shape_y = (ROWS,)
@@ -84,7 +84,7 @@ class TestTileDBSparsePyTorchDataloaderAPI:
                 tiledb_dataset, batch_size=None, num_workers=workers
             )
 
-            # Train network
+            # Νetwork
             net = Net(shape=dataset_shape_x[1:])
             criterion = torch.nn.CrossEntropyLoss()
             optimizer = optim.Adam(
@@ -95,15 +95,31 @@ class TestTileDBSparsePyTorchDataloaderAPI:
             )
 
             # loop over the dataset multiple times
-            for epoch in range(1):
-                for inputs, labels in train_loader:
-                    # zero the parameter gradients
-                    optimizer.zero_grad()
-                    # forward + backward + optimize
-                    outputs = net(inputs)
-                    loss = criterion(outputs, labels.type(torch.LongTensor))
-                    loss.backward()
-                    optimizer.step()
+            if workers > 0:
+                # TODO: After TILEDB-PY release for support on SparseArray pickle this error should change to not
+                # NotImplementedError until the https://github.com/pytorch/pytorch/issues/20248 is resolved
+                with pytest.raises(Exception):
+                    for epoch in range(1):
+                        for inputs, labels in train_loader:
+                            # zero the parameter gradients
+                            optimizer.zero_grad()
+                            # forward + backward + optimize
+                            outputs = net(inputs)
+                            loss = criterion(outputs, labels.type(torch.LongTensor))
+                            loss.backward()
+                            optimizer.step()
+            else:
+                mocker.patch("torch.utils.data.get_worker_info", return_value=None)
+
+                for epoch in range(1):
+                    for inputs, labels in train_loader:
+                        # zero the parameter gradients
+                        optimizer.zero_grad()
+                        # forward + backward + optimize
+                        outputs = net(inputs)
+                        loss = criterion(outputs, labels.type(torch.LongTensor))
+                        loss.backward()
+                        optimizer.step()
 
     def test_except_with_diff_number_of_x_y_sparse_rows(
         self, tmpdir, input_shape, workers
@@ -241,3 +257,37 @@ class TestTileDBSparsePyTorchDataloaderAPI:
                     optimizer.zero_grad()
                     # forward + backward + optimize
                     net(inputs)
+
+    def test_tiledb_pytorch_sparse_sparse_label_data(
+        self, tmpdir, input_shape, workers
+    ):
+        dataset_shape_x = (ROWS, input_shape)
+        dataset_shape_y = (ROWS, (NUM_OF_CLASSES,))
+
+        tiledb_uri_x = os.path.join(tmpdir, "x")
+        tiledb_uri_y = os.path.join(tmpdir, "y")
+
+        ingest_in_tiledb(
+            uri=tiledb_uri_x,
+            data=create_sparse_array_one_hot_2d(*dataset_shape_x),
+            batch_size=BATCH_SIZE,
+            sparse=True,
+        )
+        ingest_in_tiledb(
+            uri=tiledb_uri_y,
+            data=create_sparse_array_one_hot_2d(*dataset_shape_y),
+            batch_size=BATCH_SIZE,
+            sparse=True,
+        )
+
+        with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
+
+            tiledb_dataset = PyTorchTileDBSparseDataset(
+                x_array=x, y_array=y, batch_size=BATCH_SIZE
+            )
+
+            generated_data = next(tiledb_dataset.__iter__())
+            assert generated_data[0].layout == torch.sparse_coo
+            assert generated_data[1].layout == torch.sparse_coo
+            assert generated_data[0].size() == (BATCH_SIZE, *input_shape)
+            assert generated_data[1].size() == (BATCH_SIZE, NUM_OF_CLASSES)

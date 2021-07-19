@@ -38,8 +38,23 @@ jobs:
       run: pip install -e .[full]
       shell: bash
 
+    - name: 'Run tests'
+      id: tests
+      if: ${{ matrix.os != 'macos-latest' || matrix.python-version != '3.6' }}
+      shell: bash
+      run: |
+        pip install pytest-mock pytest-cov
+        pytest tests/
+        REF=${{ github.ref }}
+        echo "github.ref: $REF"
+        IFS='/' read -ra PATHS <<< "$REF"
+        BRANCH_NAME="${PATHS[1]}_${PATHS[2]}"
+        echo $BRANCH_NAME
+        echo "BRANCH=$(echo ${BRANCH_NAME})" >> $GITHUB_ENV
+
     - name: 'Run test coverage statistics'
       id: stats
+      if: ${{ matrix.os == 'macos-latest' && matrix.python-version == '3.6' }}
       shell: bash
       run: |
         pip install pytest-mock pytest-cov

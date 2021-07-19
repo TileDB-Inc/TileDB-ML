@@ -41,7 +41,7 @@ def model(request):
 
 
 class TestTileDBTensorflowSparseDataAPI:
-    def test_tiledb_tf_sparse_data_api_with_with_sparse_data_sparse_label(
+    def test_tiledb_tf_sparse_data_api_with_sparse_data_sparse_label(
         self, tmpdir, model
     ):
         array_uuid = str(uuid.uuid4())
@@ -71,6 +71,34 @@ class TestTileDBTensorflowSparseDataAPI:
 
             assert isinstance(tiledb_dataset, tf.data.Dataset)
             model.fit(tiledb_dataset, verbose=0, epochs=2)
+
+    def test_tiledb_tf_sparse_data_api_with_with_dense_data_except(self, tmpdir, model):
+        array_uuid = str(uuid.uuid4())
+        tiledb_uri_x = os.path.join(tmpdir, "x" + array_uuid)
+        tiledb_uri_y = os.path.join(tmpdir, "y" + array_uuid)
+
+        dataset_shape_x = (ROWS,) + model.input_shape[1:]
+        dataset_shape_y = (ROWS, (NUM_OF_CLASSES,))
+
+        ingest_in_tiledb(
+            uri=tiledb_uri_x,
+            data=np.random.rand(*dataset_shape_x),
+            batch_size=BATCH_SIZE,
+            sparse=False,
+        )
+
+        ingest_in_tiledb(
+            uri=tiledb_uri_y,
+            data=create_sparse_array_one_hot_2d(dataset_shape_y[0], dataset_shape_y[1]),
+            batch_size=BATCH_SIZE,
+            sparse=True,
+        )
+
+        with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
+            with pytest.raises(TypeError):
+                TensorflowTileDBSparseDataset(
+                    x_array=x, y_array=y, batch_size=BATCH_SIZE
+                )
 
     def test_tiledb_tf_sparse_data_api_with_sparse_data_dense_label(
         self, tmpdir, model
@@ -231,3 +259,72 @@ class TestTileDBTensorflowSparseDataAPI:
                 x_array=x, y_array=y, batch_size=BATCH_SIZE
             )
             model.fit(tiledb_dataset, verbose=0, epochs=2)
+
+    def test_generator_sparse_x_sparse_y_batch_output(self, tmpdir, model):
+        array_uuid = str(uuid.uuid4())
+        tiledb_uri_x = os.path.join(tmpdir, "x" + array_uuid)
+        tiledb_uri_y = os.path.join(tmpdir, "y" + array_uuid)
+
+        dataset_shape_x = (ROWS, model.input_shape[1:])
+        dataset_shape_y = (ROWS, (NUM_OF_CLASSES,))
+
+        ingest_in_tiledb(
+            uri=tiledb_uri_x,
+            data=create_sparse_array_one_hot_2d(dataset_shape_x[0], dataset_shape_x[1]),
+            batch_size=BATCH_SIZE,
+            sparse=True,
+        )
+        ingest_in_tiledb(
+            uri=tiledb_uri_y,
+            data=create_sparse_array_one_hot_2d(dataset_shape_y[0], dataset_shape_y[1]),
+            batch_size=BATCH_SIZE,
+            sparse=True,
+        )
+
+        with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
+            generated_data = next(
+                TensorflowTileDBSparseDataset._generator_sparse_sparse(
+                    x=x, y=y, rows=ROWS, batch_size=BATCH_SIZE
+                )
+            )
+            assert type(generated_data[0]) == tf.sparse.SparseTensor
+            assert type(generated_data[1]) == tf.sparse.SparseTensor
+
+            # Coords should be equal to batch for both x and y
+            assert generated_data[0].indices.shape[0] == BATCH_SIZE
+            assert generated_data[1].indices.shape[0] == BATCH_SIZE
+
+    def test_generator_sparse_x_dense_y_batch_output(self, tmpdir, model):
+        array_uuid = str(uuid.uuid4())
+        tiledb_uri_x = os.path.join(tmpdir, "x" + array_uuid)
+        tiledb_uri_y = os.path.join(tmpdir, "y" + array_uuid)
+
+        dataset_shape_x = (ROWS, model.input_shape[1:])
+        dataset_shape_y = (ROWS, NUM_OF_CLASSES)
+
+        ingest_in_tiledb(
+            uri=tiledb_uri_x,
+            data=create_sparse_array_one_hot_2d(dataset_shape_x[0], dataset_shape_x[1]),
+            batch_size=BATCH_SIZE,
+            sparse=True,
+        )
+        ingest_in_tiledb(
+            uri=tiledb_uri_y,
+            data=np.random.rand(*dataset_shape_y),
+            batch_size=BATCH_SIZE,
+            sparse=False,
+        )
+
+        with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
+            generated_data = next(
+                TensorflowTileDBSparseDataset._generator_sparse_dense(
+                    x=x, y=y, rows=ROWS, batch_size=BATCH_SIZE
+                )
+            )
+
+            assert isinstance(generated_data[0], tf.sparse.SparseTensor)
+            assert isinstance(generated_data[1], np.ndarray)
+            assert generated_data[1].shape == (BATCH_SIZE, NUM_OF_CLASSES)
+
+            # Coords should be equal to batch for both x and y
+            assert generated_data[0].indices.shape[0] == BATCH_SIZE

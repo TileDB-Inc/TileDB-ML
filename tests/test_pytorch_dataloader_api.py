@@ -44,7 +44,7 @@ class Net(nn.Module):
 # We test for single and multiple workers
 @pytest.mark.parametrize(
     "workers",
-    [1, 2, 3, 4, 5],
+    [1, 2, 3],
 )
 class TestPytorchDenseDataloader:
     def test_tiledb_pytorch_data_api_train_with_multiple_dim_data(
@@ -121,9 +121,9 @@ class TestPytorchDenseDataloader:
             with pytest.raises(ValueError):
                 PyTorchTileDBDenseDataset(x_array=x, y_array=y, batch_size=BATCH_SIZE)
 
-    def test_no_duplicates_with_multiple_workers(self, tmpdir, input_shape, workers):
-        if workers == 1 or len(input_shape) != 2:
-            pytest.skip()
+    def test_no_duplicates_with_multiple_workers(
+        self, tmpdir, input_shape, workers, mocker
+    ):
 
         tiledb_uri_x = os.path.join(tmpdir, "x")
         tiledb_uri_y = os.path.join(tmpdir, "y")
@@ -151,6 +151,9 @@ class TestPytorchDenseDataloader:
             )
 
             assert isinstance(tiledb_dataset, torch.utils.data.IterableDataset)
+
+            if workers == 1:
+                mocker.patch("torch.utils.data.get_worker_info", return_value=None)
 
             train_loader = torch.utils.data.DataLoader(
                 tiledb_dataset, batch_size=None, num_workers=workers
