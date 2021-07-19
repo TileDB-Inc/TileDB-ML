@@ -80,13 +80,11 @@ class TestTileDBSparsePyTorchDataloaderAPI:
 
             assert isinstance(tiledb_dataset, torch.utils.data.IterableDataset)
 
-            mocker.patch("torch.utils.data.get_worker_info", return_value=None)
-
             train_loader = torch.utils.data.DataLoader(
                 tiledb_dataset, batch_size=None, num_workers=workers
             )
 
-            # Train network
+            # Νetwork
             net = Net(shape=dataset_shape_x[1:])
             criterion = torch.nn.CrossEntropyLoss()
             optimizer = optim.Adam(
@@ -97,11 +95,11 @@ class TestTileDBSparsePyTorchDataloaderAPI:
             )
 
             # loop over the dataset multiple times
-            for epoch in range(1):
-                if workers != 0:
-                    # TODO: After TILEDB-PY release for support on SparseArray pickle this error should change to not
-                    # NotImplementedError until the https://github.com/pytorch/pytorch/issues/20248 is resolved
-                    with pytest.raises(Exception):
+            if workers != 0:
+                # TODO: After TILEDB-PY release for support on SparseArray pickle this error should change to not
+                # NotImplementedError until the https://github.com/pytorch/pytorch/issues/20248 is resolved
+                with pytest.raises(Exception):
+                    for epoch in range(1):
                         for inputs, labels in train_loader:
                             # zero the parameter gradients
                             optimizer.zero_grad()
@@ -110,7 +108,10 @@ class TestTileDBSparsePyTorchDataloaderAPI:
                             loss = criterion(outputs, labels.type(torch.LongTensor))
                             loss.backward()
                             optimizer.step()
-                else:
+            else:
+                mocker.patch("torch.utils.data.get_worker_info", return_value=None)
+
+                for epoch in range(1):
                     for inputs, labels in train_loader:
                         # zero the parameter gradients
                         optimizer.zero_grad()
