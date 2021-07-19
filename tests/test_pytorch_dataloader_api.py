@@ -44,7 +44,7 @@ class Net(nn.Module):
 # We test for single and multiple workers
 @pytest.mark.parametrize(
     "workers",
-    [1, 2, 3, 4, 5],
+    [1, 2, 3],
 )
 class TestPytorchDenseDataloader:
     def test_tiledb_pytorch_data_api_train_with_multiple_dim_data(
