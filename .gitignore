@@ -12,3 +12,6 @@ __pycache__/
 
 # setuptools-scm
 tiledb/ml/version.py
+
+# Unit test / coverage reports
+.coverage
