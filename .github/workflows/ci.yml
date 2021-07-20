@@ -70,7 +70,7 @@ jobs:
 
     - name: 'Create Test Coverage Badge'
       if: ${{ matrix.os == 'macos-latest' && matrix.python-version == '3.6' }}
-      uses: schneegans/dynamic-badges-action@v1.0.0
+      uses: psf/black@21.7b0
       with:
         auth: ${{ secrets.COVERAGE_SECRET }}
         gistID: 2506f6c9d3375e2d636cf594340d11bf
