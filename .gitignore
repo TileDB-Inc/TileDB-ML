@@ -9,3 +9,9 @@ dist/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
+
+# setuptools-scm
+tiledb/ml/version.py
+
+# Unit test / coverage reports
+.coverage
