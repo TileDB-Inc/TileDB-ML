@@ -94,6 +94,7 @@ TileDB-ML can be installed:
       # on TileDB-Cloud try one of the follwoing.
       pip install -e .[tensorflow_cloud]
       pip install -e .[pytorch_cloud]
+      pip install -e .[sklearn_cloud]
 
 - with pip from git:
 
