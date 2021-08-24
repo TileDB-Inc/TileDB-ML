@@ -2,6 +2,7 @@
 import tiledb
 import tensorflow as tf
 from tensorflow.python.data.ops.dataset_ops import FlatMapDataset
+from typing import List
 
 
 class TensorflowTileDBDenseDataset(FlatMapDataset):
@@ -10,7 +11,14 @@ class TensorflowTileDBDenseDataset(FlatMapDataset):
     Tensorflow Data API, by employing generators.
     """
 
-    def __new__(cls, x_array: tiledb.Array, y_array: tiledb.Array, batch_size: int):
+    def __new__(
+        cls,
+        x_array: tiledb.Array,
+        y_array: tiledb.Array,
+        x_attributes: List[str],
+        y_attributes: List[str],
+        batch_size: int,
+    ):
         """
         Returns a Tensorflow Dataset object which loads data from TileDB arrays by employing a generator.
         :param x_array: TileDB Dense Array. Array that contains features.
@@ -39,17 +47,20 @@ class TensorflowTileDBDenseDataset(FlatMapDataset):
         x_shape = (None,) + x_array.schema.domain.shape[1:]
         y_shape = (None,) + y_array.schema.domain.shape[1:]
 
-        # Get x and y data types
-        x_dtype = x_array.schema.attr(0).dtype
-        y_dtype = y_array.schema.attr(0).dtype
+        # Create x and y signatures
+        x_signature = [
+            tf.TensorSpec(shape=x_shape, dtype=x_array.schema.attr(attr).dtype)
+            for attr in x_attributes
+        ]
+        y_signature = [
+            tf.TensorSpec(shape=y_shape, dtype=y_array.schema.attr(attr).dtype)
+            for attr in y_attributes
+        ]
 
         obj = tf.data.Dataset.from_generator(
             generator=cls._generator,
-            output_signature=(
-                tf.TensorSpec(shape=x_shape, dtype=x_dtype),
-                tf.TensorSpec(shape=y_shape, dtype=y_dtype),
-            ),
-            args=(x_array, y_array, rows, batch_size),
+            output_signature=tuple(x_signature + y_signature),
+            args=(x_array, y_array, x_attributes, y_attributes, rows, batch_size),
         )
 
         # Class reassignment in order to be able to override __len__().
@@ -59,12 +70,24 @@ class TensorflowTileDBDenseDataset(FlatMapDataset):
 
     # We also have to define __init__, in order to be able to override __len__().  We also need the same
     # signature with __new__()
-    def __init__(self, x_array: tiledb.Array, y_array: tiledb.Array, batch_size: int):
+    def __init__(
+        self,
+        x_array: tiledb.Array,
+        y_array: tiledb.Array,
+        x_attributes: List[str],
+        y_attributes: List[str],
+        batch_size: int,
+    ):
         self.length = x_array.schema.domain.shape[0]
 
     @staticmethod
     def _generator(
-        x: tiledb.Array, y: tiledb.Array, rows: int, batch_size: int
+        x: tiledb.Array,
+        y: tiledb.Array,
+        x_attributes: List[str],
+        y_attributes: List[str],
+        rows: int,
+        batch_size: int,
     ) -> tuple:
         """
         A generator function that yields the next training batch.
@@ -77,7 +100,10 @@ class TensorflowTileDBDenseDataset(FlatMapDataset):
         # Loop over batches
         for offset in range(0, rows, batch_size):
             # Yield the next training batch
-            yield x[offset : offset + batch_size], y[offset : offset + batch_size]
+            yield tuple(
+                [x[offset : offset + batch_size][attr] for attr in x_attributes]
+                + [y[offset : offset + batch_size][attr] for attr in y_attributes]
+            )
 
     def __len__(self):
         return self.length
