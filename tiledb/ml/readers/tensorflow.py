@@ -70,7 +70,7 @@ class TensorflowTileDBDenseDataset(FlatMapDataset):
 
         obj = tf.data.Dataset.from_generator(
             generator=generator_,
-            output_signature=tuple(x_signature + y_signature),
+            output_signature=x_signature + y_signature,
         )
 
         # Class reassignment in order to be able to override __len__().
