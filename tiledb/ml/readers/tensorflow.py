@@ -3,6 +3,7 @@ import tiledb
 import tensorflow as tf
 from tensorflow.python.data.ops.dataset_ops import FlatMapDataset
 from typing import List
+from functools import partial
 
 
 class TensorflowTileDBDenseDataset(FlatMapDataset):
@@ -47,20 +48,29 @@ class TensorflowTileDBDenseDataset(FlatMapDataset):
         x_shape = (None,) + x_array.schema.domain.shape[1:]
         y_shape = (None,) + y_array.schema.domain.shape[1:]
 
-        # Create x and y signatures
-        x_signature = [
+        # Signatures
+        x_signature = tuple(
             tf.TensorSpec(shape=x_shape, dtype=x_array.schema.attr(attr).dtype)
             for attr in x_attributes
-        ]
-        y_signature = [
+        )
+        y_signature = tuple(
             tf.TensorSpec(shape=y_shape, dtype=y_array.schema.attr(attr).dtype)
             for attr in y_attributes
-        ]
+        )
+
+        generator_ = partial(
+            cls._generator,
+            x=x_array,
+            y=y_array,
+            x_attributes=x_attributes,
+            y_attributes=y_attributes,
+            rows=rows,
+            batch_size=batch_size,
+        )
 
         obj = tf.data.Dataset.from_generator(
-            generator=cls._generator,
+            generator=generator_,
             output_signature=tuple(x_signature + y_signature),
-            args=(x_array, y_array, x_attributes, y_attributes, rows, batch_size),
         )
 
         # Class reassignment in order to be able to override __len__().
@@ -99,10 +109,12 @@ class TensorflowTileDBDenseDataset(FlatMapDataset):
         """
         # Loop over batches
         for offset in range(0, rows, batch_size):
+            x_slice = x[offset : offset + batch_size]
+            y_slice = y[offset : offset + batch_size]
+
             # Yield the next training batch
-            yield tuple(
-                [x[offset : offset + batch_size][attr] for attr in x_attributes]
-                + [y[offset : offset + batch_size][attr] for attr in y_attributes]
+            yield tuple(x_slice[attr] for attr in x_attributes) + tuple(
+                y_slice[attr] for attr in y_attributes
             )
 
     def __len__(self):

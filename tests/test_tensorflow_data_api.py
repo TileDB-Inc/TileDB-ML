@@ -83,7 +83,11 @@ class TestTileDBTensorflowDataAPI:
         with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
 
             tiledb_dataset = TensorflowTileDBDenseDataset(
-                x_array=x, y_array=y, batch_size=BATCH_SIZE
+                x_array=x,
+                y_array=y,
+                x_attributes=["features"],
+                y_attributes=["features"],
+                batch_size=BATCH_SIZE,
             )
 
             assert isinstance(tiledb_dataset, tf.data.Dataset)

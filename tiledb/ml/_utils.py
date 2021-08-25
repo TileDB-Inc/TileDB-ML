@@ -17,7 +17,10 @@ def ingest_in_tiledb(data: np.array, batch_size: int, uri: str, sparse: bool):
     schema = tiledb.ArraySchema(
         domain=tiledb.Domain(*dims),
         sparse=sparse,
-        attrs=[tiledb.Attr(name="features", dtype=np.float32)],
+        attrs=[
+            tiledb.Attr(name="features", dtype=np.float32),
+            tiledb.Attr(name="features2", dtype=np.float32),
+        ],
     )
 
     # Create the (empty) array on disk.
@@ -26,7 +29,7 @@ def ingest_in_tiledb(data: np.array, batch_size: int, uri: str, sparse: bool):
     # Ingest
     with tiledb.open(uri, "w") as tiledb_array:
         idx = np.nonzero(data) if sparse else slice(None)
-        tiledb_array[idx] = {"features": data[idx]}
+        tiledb_array[idx] = {"features": data[idx], "features2": data[idx]}
 
 
 def create_sparse_array_one_hot_2d(rows: int, cols: tuple) -> np.ndarray:
