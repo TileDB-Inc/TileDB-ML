@@ -5,14 +5,7 @@ import tiledb
 import numpy as np
 import uuid
 import pytest
-
 import tensorflow as tf
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import (
-    Dense,
-    Flatten,
-    Dropout,
-)
 
 from tiledb.ml.readers.tensorflow import TensorflowTileDBDenseDataset
 from tiledb.ml._utils import ingest_in_tiledb
@@ -28,43 +21,28 @@ BATCH_SIZE = 32
 ROWS = 1000
 
 
-@pytest.fixture(
-    params=[
-        {
-            "input_shape": (10,),
-        },
-        {
-            "input_shape": (10, 3),
-        },
-        {
-            "input_shape": (10, 10, 3),
-        },
-    ]
+@pytest.mark.parametrize(
+    "input_shape",
+    [
+        (10,),
+        (10, 3),
+        (10, 10, 3),
+    ],
 )
-def model(request):
-    model = Sequential()
-    model.add(tf.keras.Input(shape=request.param["input_shape"]))
-    model.add(Flatten())
-    model.add(Dense(64))
-    model.add(Dropout(0.5))
-    model.add(Dense(NUM_OF_CLASSES))
-
-    model.compile(
-        loss="categorical_crossentropy",
-        optimizer="rmsprop",
-        metrics=["accuracy"],
-    )
-
-    return model
-
-
+# We test for single and multiple attributes
+@pytest.mark.parametrize(
+    "num_of_attributes",
+    [1, 2, 3],
+)
 class TestTileDBTensorflowDataAPI:
-    def test_tiledb_tf_data_api_with_multiple_dim_data(self, tmpdir, model):
+    def test_tiledb_tf_data_api_with_multiple_dim_data(
+        self, tmpdir, input_shape, num_of_attributes
+    ):
         array_uuid = str(uuid.uuid4())
         tiledb_uri_x = os.path.join(tmpdir, "x" + array_uuid)
         tiledb_uri_y = os.path.join(tmpdir, "y" + array_uuid)
 
-        dataset_shape_x = (ROWS,) + model.input_shape[1:]
+        dataset_shape_x = (ROWS,) + input_shape[1:]
         dataset_shape_y = (ROWS, NUM_OF_CLASSES)
 
         ingest_in_tiledb(
@@ -72,35 +50,40 @@ class TestTileDBTensorflowDataAPI:
             data=np.random.rand(*dataset_shape_x),
             batch_size=BATCH_SIZE,
             sparse=False,
+            num_of_attributes=num_of_attributes,
         )
         ingest_in_tiledb(
             uri=tiledb_uri_y,
             data=np.random.rand(*dataset_shape_y),
             batch_size=BATCH_SIZE,
             sparse=False,
+            num_of_attributes=num_of_attributes,
         )
 
         with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
-
             tiledb_dataset = TensorflowTileDBDenseDataset(
                 x_array=x,
                 y_array=y,
-                x_attributes=["features"],
-                y_attributes=["features"],
+                x_attribute_names=[
+                    "features_" + str(attr) for attr in range(num_of_attributes)
+                ],
+                y_attribute_names=[
+                    "features_" + str(attr) for attr in range(num_of_attributes)
+                ],
                 batch_size=BATCH_SIZE,
             )
 
             assert isinstance(tiledb_dataset, tf.data.Dataset)
 
-            model.fit(tiledb_dataset, verbose=0, epochs=1)
-
-    def test_except_with_diff_number_of_x_y_rows(self, tmpdir, model):
+    def test_except_with_diff_number_of_x_y_rows(
+        self, tmpdir, input_shape, num_of_attributes
+    ):
         array_uuid = str(uuid.uuid4())
         tiledb_uri_x = os.path.join(tmpdir, "x" + array_uuid)
         tiledb_uri_y = os.path.join(tmpdir, "y" + array_uuid)
 
         # Add one extra row on X
-        dataset_shape_x = (ROWS + 1,) + model.input_shape[1:]
+        dataset_shape_x = (ROWS + 1,) + input_shape[1:]
         dataset_shape_y = (ROWS, NUM_OF_CLASSES)
 
         ingest_in_tiledb(
@@ -108,27 +91,37 @@ class TestTileDBTensorflowDataAPI:
             data=np.random.rand(*dataset_shape_x),
             batch_size=BATCH_SIZE,
             sparse=False,
+            num_of_attributes=num_of_attributes,
         )
         ingest_in_tiledb(
             uri=tiledb_uri_y,
             data=np.random.rand(*dataset_shape_y),
             batch_size=BATCH_SIZE,
             sparse=False,
+            num_of_attributes=num_of_attributes,
         )
 
         with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
             with pytest.raises(Exception):
                 TensorflowTileDBDenseDataset(
-                    x_array=x, y_array=y, batch_size=BATCH_SIZE
+                    x_array=x,
+                    y_array=y,
+                    x_attribute_names=[
+                        "features_" + str(attr) for attr in range(num_of_attributes)
+                    ],
+                    y_attribute_names=[
+                        "features_" + str(attr) for attr in range(num_of_attributes)
+                    ],
+                    batch_size=BATCH_SIZE,
                 )
 
-    def test_dataset_length(self, tmpdir, model):
+    def test_dataset_length(self, tmpdir, input_shape, num_of_attributes):
         array_uuid = str(uuid.uuid4())
         tiledb_uri_x = os.path.join(tmpdir, "x" + array_uuid)
         tiledb_uri_y = os.path.join(tmpdir, "y" + array_uuid)
 
         # Add one extra row on X
-        dataset_shape_x = (ROWS,) + model.input_shape[1:]
+        dataset_shape_x = (ROWS,) + input_shape[1:]
         dataset_shape_y = (ROWS, NUM_OF_CLASSES)
 
         ingest_in_tiledb(
@@ -136,28 +129,40 @@ class TestTileDBTensorflowDataAPI:
             data=np.random.rand(*dataset_shape_x),
             batch_size=BATCH_SIZE,
             sparse=False,
+            num_of_attributes=num_of_attributes,
         )
         ingest_in_tiledb(
             uri=tiledb_uri_y,
             data=np.random.rand(*dataset_shape_y),
             batch_size=BATCH_SIZE,
             sparse=False,
+            num_of_attributes=num_of_attributes,
         )
 
         with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
             tiledb_dataset = TensorflowTileDBDenseDataset(
-                x_array=x, y_array=y, batch_size=BATCH_SIZE
+                x_array=x,
+                y_array=y,
+                x_attribute_names=[
+                    "features_" + str(attr) for attr in range(num_of_attributes)
+                ],
+                y_attribute_names=[
+                    "features_" + str(attr) for attr in range(num_of_attributes)
+                ],
+                batch_size=BATCH_SIZE,
             )
 
             assert len(tiledb_dataset) == ROWS
 
-    def test_dataset_generator_batch_output(self, tmpdir, model):
+    def test_dataset_generator_batch_output(
+        self, tmpdir, input_shape, num_of_attributes
+    ):
         array_uuid = str(uuid.uuid4())
         tiledb_uri_x = os.path.join(tmpdir, "x" + array_uuid)
         tiledb_uri_y = os.path.join(tmpdir, "y" + array_uuid)
 
         # Add one extra row on X
-        dataset_shape_x = (ROWS,) + model.input_shape[1:]
+        dataset_shape_x = (ROWS,) + input_shape[1:]
         dataset_shape_y = (ROWS, NUM_OF_CLASSES)
 
         ingest_in_tiledb(
@@ -165,20 +170,41 @@ class TestTileDBTensorflowDataAPI:
             data=np.random.rand(*dataset_shape_x),
             batch_size=BATCH_SIZE,
             sparse=False,
+            num_of_attributes=num_of_attributes,
         )
         ingest_in_tiledb(
             uri=tiledb_uri_y,
             data=np.random.rand(*dataset_shape_y),
             batch_size=BATCH_SIZE,
             sparse=False,
+            num_of_attributes=num_of_attributes,
         )
 
         with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
+
+            attribute_names = [
+                "features_" + str(attr) for attr in range(num_of_attributes)
+            ]
+
             generated_data = next(
-                TensorflowTileDBDenseDataset._generator(x, y, ROWS, BATCH_SIZE)
+                TensorflowTileDBDenseDataset._generator(
+                    x=x,
+                    y=y,
+                    x_attribute_names=attribute_names,
+                    y_attribute_names=attribute_names,
+                    rows=ROWS,
+                    batch_size=BATCH_SIZE,
+                )
             )
-            assert generated_data[0]["features"].shape == (
-                BATCH_SIZE,
-                *model.input_shape[1:],
-            )
-            assert generated_data[1]["features"].shape == (BATCH_SIZE, NUM_OF_CLASSES)
+
+            assert len(generated_data) == 2 * num_of_attributes
+
+            for attr in range(num_of_attributes):
+                assert generated_data[attr].shape == (
+                    BATCH_SIZE,
+                    *input_shape[1:],
+                )
+                assert generated_data[num_of_attributes + attr].shape == (
+                    BATCH_SIZE,
+                    NUM_OF_CLASSES,
+                )

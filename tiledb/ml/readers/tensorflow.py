@@ -16,14 +16,16 @@ class TensorflowTileDBDenseDataset(FlatMapDataset):
         cls,
         x_array: tiledb.Array,
         y_array: tiledb.Array,
-        x_attributes: List[str],
-        y_attributes: List[str],
+        x_attribute_names: List[str],
+        y_attribute_names: List[str],
         batch_size: int,
     ):
         """
         Returns a Tensorflow Dataset object which loads data from TileDB arrays by employing a generator.
         :param x_array: TileDB Dense Array. Array that contains features.
         :param y_array: TileDB Dense Array. Array that contains labels.
+        :param x_attribute_names: List of str. A list that contains the attribute names of TileDB array x.
+        :param y_attribute_names: List of str. A list that contains the attribute names of TileDB array y.
         :param batch_size: Integer. The size of the batch that the implemented _generator method will return.
         For optimal reads from a TileDB array, it is recommended to set the batch size equal to the tile extent of the
         dimension we query (here, we always query the first dimension of a TileDB array) in order to get a slice (batch)
@@ -48,22 +50,22 @@ class TensorflowTileDBDenseDataset(FlatMapDataset):
         x_shape = (None,) + x_array.schema.domain.shape[1:]
         y_shape = (None,) + y_array.schema.domain.shape[1:]
 
-        # Signatures
+        # Signatures for x and y
         x_signature = tuple(
             tf.TensorSpec(shape=x_shape, dtype=x_array.schema.attr(attr).dtype)
-            for attr in x_attributes
+            for attr in x_attribute_names
         )
         y_signature = tuple(
             tf.TensorSpec(shape=y_shape, dtype=y_array.schema.attr(attr).dtype)
-            for attr in y_attributes
+            for attr in y_attribute_names
         )
 
         generator_ = partial(
             cls._generator,
             x=x_array,
             y=y_array,
-            x_attributes=x_attributes,
-            y_attributes=y_attributes,
+            x_attribute_names=x_attribute_names,
+            y_attribute_names=y_attribute_names,
             rows=rows,
             batch_size=batch_size,
         )
@@ -84,8 +86,8 @@ class TensorflowTileDBDenseDataset(FlatMapDataset):
         self,
         x_array: tiledb.Array,
         y_array: tiledb.Array,
-        x_attributes: List[str],
-        y_attributes: List[str],
+        x_attribute_names: List[str],
+        y_attribute_names: List[str],
         batch_size: int,
     ):
         self.length = x_array.schema.domain.shape[0]
@@ -94,8 +96,8 @@ class TensorflowTileDBDenseDataset(FlatMapDataset):
     def _generator(
         x: tiledb.Array,
         y: tiledb.Array,
-        x_attributes: List[str],
-        y_attributes: List[str],
+        x_attribute_names: List[str],
+        y_attribute_names: List[str],
         rows: int,
         batch_size: int,
     ) -> tuple:
@@ -103,6 +105,8 @@ class TensorflowTileDBDenseDataset(FlatMapDataset):
         A generator function that yields the next training batch.
         :param x: TileDB array. An opened TileDB array which contains features.
         :param y: TileDB array. An opened TileDB array which contains labels.
+        :param x_attribute_names: List of str. A list that contains the attribute names of TileDB array x.
+        :param y_attribute_names: List of str. A list that contains the attribute names of TileDB array y.
         :param rows: Integer. The number of observations in x, y datasets.
         :param batch_size: Integer. Size of batch, i.e., number of rows returned per call.
         :return: Tuple. Tuple that contains x and y batches.
@@ -113,8 +117,8 @@ class TensorflowTileDBDenseDataset(FlatMapDataset):
             y_slice = y[offset : offset + batch_size]
 
             # Yield the next training batch
-            yield tuple(x_slice[attr] for attr in x_attributes) + tuple(
-                y_slice[attr] for attr in y_attributes
+            yield tuple(x_slice[attr] for attr in x_attribute_names) + tuple(
+                y_slice[attr] for attr in y_attribute_names
             )
 
     def __len__(self):

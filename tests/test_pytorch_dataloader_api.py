@@ -46,9 +46,13 @@ class Net(nn.Module):
     "workers",
     [1, 2, 3],
 )
+@pytest.mark.parametrize(
+    "num_of_attributes",
+    [1],
+)
 class TestPytorchDenseDataloader:
     def test_tiledb_pytorch_data_api_train_with_multiple_dim_data(
-        self, tmpdir, input_shape, workers
+        self, tmpdir, input_shape, workers, num_of_attributes
     ):
         dataset_shape_x = (ROWS,) + input_shape
         dataset_shape_y = (ROWS,)
@@ -61,12 +65,14 @@ class TestPytorchDenseDataloader:
             data=np.random.rand(*dataset_shape_x),
             batch_size=BATCH_SIZE,
             sparse=False,
+            num_of_attributes=num_of_attributes,
         )
         ingest_in_tiledb(
             uri=tiledb_uri_y,
             data=np.random.randint(low=0, high=NUM_OF_CLASSES, size=dataset_shape_y),
             batch_size=BATCH_SIZE,
             sparse=False,
+            num_of_attributes=num_of_attributes,
         )
 
         with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
@@ -96,7 +102,9 @@ class TestPytorchDenseDataloader:
                     loss.backward()
                     optimizer.step()
 
-    def test_except_with_diff_number_of_x_y_rows(self, tmpdir, input_shape, workers):
+    def test_except_with_diff_number_of_x_y_rows(
+        self, tmpdir, input_shape, workers, num_of_attributes
+    ):
         tiledb_uri_x = os.path.join(tmpdir, "x")
         tiledb_uri_y = os.path.join(tmpdir, "y")
 
@@ -109,12 +117,14 @@ class TestPytorchDenseDataloader:
             data=np.random.rand(*dataset_shape_x),
             batch_size=BATCH_SIZE,
             sparse=False,
+            num_of_attributes=num_of_attributes,
         )
         ingest_in_tiledb(
             uri=tiledb_uri_y,
             data=np.random.rand(*dataset_shape_y),
             batch_size=BATCH_SIZE,
             sparse=False,
+            num_of_attributes=num_of_attributes,
         )
 
         with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
@@ -122,7 +132,7 @@ class TestPytorchDenseDataloader:
                 PyTorchTileDBDenseDataset(x_array=x, y_array=y, batch_size=BATCH_SIZE)
 
     def test_no_duplicates_with_multiple_workers(
-        self, tmpdir, input_shape, workers, mocker
+        self, tmpdir, input_shape, workers, mocker, num_of_attributes
     ):
 
         tiledb_uri_x = os.path.join(tmpdir, "x")
@@ -136,12 +146,14 @@ class TestPytorchDenseDataloader:
             data=np.random.rand(*dataset_shape_x),
             batch_size=BATCH_SIZE,
             sparse=False,
+            num_of_attributes=num_of_attributes,
         )
         ingest_in_tiledb(
             uri=tiledb_uri_y,
             data=np.random.randint(low=0, high=NUM_OF_CLASSES, size=dataset_shape_y),
             batch_size=BATCH_SIZE,
             sparse=False,
+            num_of_attributes=num_of_attributes,
         )
 
         with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
@@ -180,7 +192,7 @@ class TestPytorchDenseDataloader:
             assert len(unique_inputs) - 1 == batchindx
             assert len(unique_labels) - 1 == batchindx
 
-    def test_dataset_length(self, tmpdir, input_shape, workers):
+    def test_dataset_length(self, tmpdir, input_shape, workers, num_of_attributes):
         tiledb_uri_x = os.path.join(tmpdir, "x")
         tiledb_uri_y = os.path.join(tmpdir, "y")
 
@@ -192,12 +204,14 @@ class TestPytorchDenseDataloader:
             data=np.random.rand(*dataset_shape_x),
             batch_size=BATCH_SIZE,
             sparse=False,
+            num_of_attributes=num_of_attributes,
         )
         ingest_in_tiledb(
             uri=tiledb_uri_y,
             data=np.random.randint(low=0, high=NUM_OF_CLASSES, size=dataset_shape_y),
             batch_size=BATCH_SIZE,
             sparse=False,
+            num_of_attributes=num_of_attributes,
         )
 
         with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
