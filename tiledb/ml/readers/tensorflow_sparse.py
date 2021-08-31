@@ -69,6 +69,8 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
                 cls._generator_sparse_sparse,
                 x=x_array,
                 y=y_array,
+                x_attribute_names=x_attribute_names,
+                y_attribute_names=y_attribute_names,
                 rows=rows,
                 batch_size=batch_size,
             )
@@ -94,6 +96,8 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
                 cls._generator_sparse_dense,
                 x=x_array,
                 y=y_array,
+                x_attribute_names=x_attribute_names,
+                y_attribute_names=y_attribute_names,
                 rows=rows,
                 batch_size=batch_size,
             )
