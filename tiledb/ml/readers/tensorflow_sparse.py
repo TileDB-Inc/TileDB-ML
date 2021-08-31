@@ -149,21 +149,14 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
         :return: Tuple. Tuple that contains x and y batches.
         """
 
-        # x_shape = x.schema.domain.shape[1:]
-        # y_shape = y.schema.domain.shape[1:]
+        x_shape = x.schema.domain.shape[1:]
+        y_shape = y.schema.domain.shape[1:]
 
         # Loop over batches
         # https://github.com/tensorflow/tensorflow/issues/44565
         for offset in range(0, rows, batch_size):
             x_batch = x[offset : offset + batch_size]
             y_batch = y[offset : offset + batch_size]
-
-            # TODO: Both for dense case support multiple attributes
-            # values_x = list(x_batch.items())[0][1]
-            # values_y = list(y_batch.items())[0][1]
-
-            # x_data = np.array(values_x).ravel()
-            # y_data = np.array(values_y).ravel()
 
             # Transform to TF COO format x, y data
             x_coords = []
@@ -185,40 +178,53 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
 
             cls.__check_row_dims(x_coords[0], y_coords[0], sparse=True)
 
-            # yield tf.sparse.SparseTensor(
-            #     indices=constant_op.constant(list(zip(*x_coords)), dtype=tf.int64),
-            #     values=constant_op.constant(x_data, dtype=x.schema.attr(attr).dtype),
-            #     dense_shape=(batch_size, x_shape[0]),
-            # ), tf.sparse.SparseTensor(
-            #     indices=constant_op.constant(list(zip(*y_coords)), dtype=tf.int64),
-            #     values=constant_op.constant(y_data, dtype=y.schema.attr(attr).dtype),
-            #     dense_shape=(batch_size, y_shape[0]),
-            # )
+            yield tuple(
+                tf.sparse.SparseTensor(
+                    indices=constant_op.constant(list(zip(*x_coords)), dtype=tf.int64),
+                    values=constant_op.constant(
+                        x_batch[attr].ravel(), dtype=x.schema.attr(attr).dtype
+                    ),
+                    dense_shape=(batch_size, x_shape[0]),
+                )
+                for attr in x_attribute_names
+            ) + tuple(
+                tf.sparse.SparseTensor(
+                    indices=constant_op.constant(list(zip(*y_coords)), dtype=tf.int64),
+                    values=constant_op.constant(
+                        y_batch[attr].ravel(), dtype=y.schema.attr(attr).dtype
+                    ),
+                    dense_shape=(batch_size, y_shape[0]),
+                )
+                for attr in y_attribute_names
+            )
 
     @classmethod
     def _generator_sparse_dense(
-        cls, x: tiledb.Array, y: tiledb.Array, rows: int, batch_size: int
+        cls,
+        x: tiledb.Array,
+        y: tiledb.Array,
+        x_attribute_names: List[str],
+        y_attribute_names: List[str],
+        rows: int,
+        batch_size: int,
     ) -> tuple:
         """
         A generator function that yields the next training batch.
         :param x: TileDB Sparse array. An opened TileDB array which contains features.
         :param y: TileDB Dense array. An opened TileDB array which contains labels.
+        :param x_attribute_names: List of str. A list that contains the attribute names of TileDB array x.
+        :param y_attribute_names: List of str. A list that contains the attribute names of TileDB array y.
         :param rows: Integer. The number of observations in x, y datasets.
         :param batch_size: Integer. Size of batch, i.e., number of rows returned per call.
         :return: Tuple. Tuple that contains x and y batches.
         """
         x_shape = x.schema.domain.shape[1:]
-        x_dtype = x.schema.attr(0).dtype
 
         # Loop over batches
         # https://github.com/tensorflow/tensorflow/issues/44565
         for offset in range(0, rows, batch_size):
-            y_batch = y[offset : offset + batch_size]
             x_batch = x[offset : offset + batch_size]
-
-            # TODO: Both for dense case support multiple attributes
-            values_y = list(y_batch.items())[0][1]
-            values_x = list(x_batch.items())[0][1]
+            y_batch = y[offset : offset + batch_size]
 
             x_coords = []
             for i in range(0, x.schema.domain.ndim):
@@ -232,12 +238,17 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
             x_coords[0] -= x_coords[0].min()
 
             # for the check slice the row dimension of y dense array
-            cls.__check_row_dims(x_coords[0], values_y, sparse=False)
+            cls.__check_row_dims(
+                x_coords[0], y_batch[y_attribute_names[0]], sparse=False
+            )
 
-            x_data = np.array(values_x).flatten()
-
-            yield tf.sparse.SparseTensor(
-                indices=constant_op.constant(list(zip(*x_coords)), dtype=tf.int64),
-                values=constant_op.constant(x_data, dtype=x_dtype),
-                dense_shape=(batch_size, x_shape[0]),
-            ), values_y
+            yield tuple(
+                tf.sparse.SparseTensor(
+                    indices=constant_op.constant(list(zip(*x_coords)), dtype=tf.int64),
+                    values=constant_op.constant(
+                        x_batch[attr].flatten(), dtype=x.schema.attr(attr).dtype
+                    ),
+                    dense_shape=(batch_size, x_shape[0]),
+                )
+                for attr in x_attribute_names
+            ) + tuple(y_batch[attr] for attr in y_attribute_names)

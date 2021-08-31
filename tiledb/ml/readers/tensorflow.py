@@ -113,12 +113,12 @@ class TensorflowTileDBDenseDataset(FlatMapDataset):
         """
         # Loop over batches
         for offset in range(0, rows, batch_size):
-            x_slice = x[offset : offset + batch_size]
-            y_slice = y[offset : offset + batch_size]
+            x_batch = x[offset : offset + batch_size]
+            y_batch = y[offset : offset + batch_size]
 
             # Yield the next training batch
-            yield tuple(x_slice[attr] for attr in x_attribute_names) + tuple(
-                y_slice[attr] for attr in y_attribute_names
+            yield tuple(x_batch[attr] for attr in x_attribute_names) + tuple(
+                y_batch[attr] for attr in y_attribute_names
             )
 
     def __len__(self):

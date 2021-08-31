@@ -120,7 +120,6 @@ class TestTileDBTensorflowDataAPI:
         tiledb_uri_x = os.path.join(tmpdir, "x" + array_uuid)
         tiledb_uri_y = os.path.join(tmpdir, "y" + array_uuid)
 
-        # Add one extra row on X
         dataset_shape_x = (ROWS,) + input_shape[1:]
         dataset_shape_y = (ROWS, NUM_OF_CLASSES)
 
@@ -161,7 +160,6 @@ class TestTileDBTensorflowDataAPI:
         tiledb_uri_x = os.path.join(tmpdir, "x" + array_uuid)
         tiledb_uri_y = os.path.join(tmpdir, "y" + array_uuid)
 
-        # Add one extra row on X
         dataset_shape_x = (ROWS,) + input_shape[1:]
         dataset_shape_y = (ROWS, NUM_OF_CLASSES)
 
