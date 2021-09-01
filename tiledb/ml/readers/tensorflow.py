@@ -2,7 +2,7 @@
 import tiledb
 import tensorflow as tf
 from tensorflow.python.data.ops.dataset_ops import FlatMapDataset
-from typing import List
+from typing import List, Optional
 from functools import partial
 
 
@@ -16,17 +16,17 @@ class TensorflowTileDBDenseDataset(FlatMapDataset):
         cls,
         x_array: tiledb.Array,
         y_array: tiledb.Array,
-        x_attribute_names: List[str],
-        y_attribute_names: List[str],
         batch_size: int,
+        x_attribute_names: Optional[List[str]] = [],
+        y_attribute_names: Optional[List[str]] = [],
     ):
         """
         Returns a Tensorflow Dataset object which loads data from TileDB arrays by employing a generator.
         :param x_array: TileDB Dense Array. Array that contains features.
         :param y_array: TileDB Dense Array. Array that contains labels.
+        :param batch_size: Integer. The size of the batch that the implemented _generator method will return.
         :param x_attribute_names: List of str. A list that contains the attribute names of TileDB array x.
         :param y_attribute_names: List of str. A list that contains the attribute names of TileDB array y.
-        :param batch_size: Integer. The size of the batch that the implemented _generator method will return.
         For optimal reads from a TileDB array, it is recommended to set the batch size equal to the tile extent of the
         dimension we query (here, we always query the first dimension of a TileDB array) in order to get a slice (batch)
         of the data. For example, in case the tile extent of the first dimension of a TileDB array (x or y) is equal to
@@ -42,6 +42,17 @@ class TensorflowTileDBDenseDataset(FlatMapDataset):
                 "X and Y should have the same number of rows, i.e., the 1st dimension "
                 "of TileDB arrays X, Y should be of equal domain extent."
             )
+
+        # If a user doesn't pass explicit attribute names to return per batch, we return all attributes.
+        if not x_attribute_names:
+            x_attribute_names = [
+                x_array.schema.attr(idx).name for idx in range(x_array.schema.nattr)
+            ]
+
+        if not y_attribute_names:
+            y_attribute_names = [
+                y_array.schema.attr(idx).name for idx in range(y_array.schema.nattr)
+            ]
 
         # Get number of observations
         rows = x_array.schema.domain.shape[0]
@@ -86,9 +97,9 @@ class TensorflowTileDBDenseDataset(FlatMapDataset):
         self,
         x_array: tiledb.Array,
         y_array: tiledb.Array,
-        x_attribute_names: List[str],
-        y_attribute_names: List[str],
         batch_size: int,
+        x_attribute_names: Optional[List[str]] = [],
+        y_attribute_names: Optional[List[str]] = [],
     ):
         self.length = x_array.schema.domain.shape[0]
 

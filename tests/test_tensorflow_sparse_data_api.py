@@ -73,6 +73,15 @@ class TestTileDBTensorflowSparseDataAPI:
 
             assert isinstance(tiledb_dataset, tf.data.Dataset)
 
+            # Same test without attribute names explicitly provided by the user
+            tiledb_dataset = TensorflowTileDBSparseDataset(
+                x_array=x,
+                y_array=y,
+                batch_size=BATCH_SIZE,
+            )
+
+            assert isinstance(tiledb_dataset, tf.data.Dataset)
+
     def test_tiledb_tf_sparse_data_api_with_with_dense_data_except(
         self, tmpdir, input_shape, num_of_attributes
     ):
@@ -113,6 +122,15 @@ class TestTileDBTensorflowSparseDataAPI:
                     batch_size=BATCH_SIZE,
                 )
 
+        # Same test without attribute names explicitly provided by the user
+        with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
+            with pytest.raises(TypeError):
+                TensorflowTileDBSparseDataset(
+                    x_array=x,
+                    y_array=y,
+                    batch_size=BATCH_SIZE,
+                )
+
     def test_tiledb_tf_sparse_data_api_with_sparse_data_dense_label(
         self, tmpdir, input_shape, num_of_attributes
     ):
@@ -148,6 +166,15 @@ class TestTileDBTensorflowSparseDataAPI:
                 y_attribute_names=[
                     "features_" + str(attr) for attr in range(num_of_attributes)
                 ],
+                batch_size=BATCH_SIZE,
+            )
+
+            assert isinstance(tiledb_dataset, tf.data.Dataset)
+
+            # Same test without attribute names explicitly provided by the user
+            tiledb_dataset = TensorflowTileDBSparseDataset(
+                x_array=x,
+                y_array=y,
                 batch_size=BATCH_SIZE,
             )
 
@@ -199,6 +226,15 @@ class TestTileDBTensorflowSparseDataAPI:
             with pytest.raises(Exception):
                 next(tiledb_dataset)
 
+            # Same test without attribute names explicitly provided by the user
+            tiledb_dataset = TensorflowTileDBSparseDataset(
+                x_array=x,
+                y_array=y,
+                batch_size=BATCH_SIZE,
+            )
+            with pytest.raises(Exception):
+                next(tiledb_dataset)
+
     def test_sparse_except_with_diff_number_of_x_y_rows(
         self, tmpdir, input_shape, num_of_attributes
     ):
@@ -236,6 +272,15 @@ class TestTileDBTensorflowSparseDataAPI:
                     y_attribute_names=[
                         "features_" + str(attr) for attr in range(num_of_attributes)
                     ],
+                    batch_size=BATCH_SIZE,
+                )
+
+        # Same test without attribute names explicitly provided by the user
+        with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
+            with pytest.raises(Exception):
+                TensorflowTileDBSparseDataset(
+                    x_array=x,
+                    y_array=y,
                     batch_size=BATCH_SIZE,
                 )
 
@@ -277,6 +322,15 @@ class TestTileDBTensorflowSparseDataAPI:
                 y_attribute_names=[
                     "features_" + str(attr) for attr in range(num_of_attributes)
                 ],
+                batch_size=BATCH_SIZE,
+            )
+            with pytest.raises(Exception):
+                next(tiledb_dataset)
+
+            # Same test without attribute names explicitly provided by the user
+            tiledb_dataset = TensorflowTileDBSparseDataset(
+                x_array=x,
+                y_array=y,
                 batch_size=BATCH_SIZE,
             )
             with pytest.raises(Exception):

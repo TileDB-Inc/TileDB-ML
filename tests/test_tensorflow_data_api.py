@@ -75,6 +75,15 @@ class TestTileDBTensorflowDataAPI:
 
             assert isinstance(tiledb_dataset, tf.data.Dataset)
 
+            # Same test without attribute names explicitly provided by the user
+            tiledb_dataset = TensorflowTileDBDenseDataset(
+                x_array=x,
+                y_array=y,
+                batch_size=BATCH_SIZE,
+            )
+
+            assert isinstance(tiledb_dataset, tf.data.Dataset)
+
     def test_except_with_diff_number_of_x_y_rows(
         self, tmpdir, input_shape, num_of_attributes
     ):
@@ -115,6 +124,15 @@ class TestTileDBTensorflowDataAPI:
                     batch_size=BATCH_SIZE,
                 )
 
+        # Same test without attribute names explicitly provided by the user
+        with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
+            with pytest.raises(Exception):
+                TensorflowTileDBDenseDataset(
+                    x_array=x,
+                    y_array=y,
+                    batch_size=BATCH_SIZE,
+                )
+
     def test_dataset_length(self, tmpdir, input_shape, num_of_attributes):
         array_uuid = str(uuid.uuid4())
         tiledb_uri_x = os.path.join(tmpdir, "x" + array_uuid)
@@ -148,6 +166,15 @@ class TestTileDBTensorflowDataAPI:
                 y_attribute_names=[
                     "features_" + str(attr) for attr in range(num_of_attributes)
                 ],
+                batch_size=BATCH_SIZE,
+            )
+
+            assert len(tiledb_dataset) == ROWS
+
+            # Same test without attribute names explicitly provided by the user
+            tiledb_dataset = TensorflowTileDBDenseDataset(
+                x_array=x,
+                y_array=y,
                 batch_size=BATCH_SIZE,
             )
 
