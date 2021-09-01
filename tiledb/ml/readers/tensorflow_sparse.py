@@ -14,6 +14,11 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
     Tensorflow Data API, by employing generators.
     """
 
+    # We have to track the following issues on *working with sparse input*
+    # and *convert SparseTensor to Tensor* respectively.
+    # TODO: TF https://github.com/tensorflow/tensorflow/issues/47532
+    # TODO: TF https://github.com/tensorflow/tensorflow/issues/47931
+
     def __new__(
         cls,
         x_array: tiledb.Array,
