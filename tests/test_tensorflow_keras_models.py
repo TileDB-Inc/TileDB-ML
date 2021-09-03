@@ -26,6 +26,26 @@ from tiledb.ml.models.tensorflow_keras import TensorflowKerasTileDBModel
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 
+class ConfigSubclassModel(keras.Model):
+    def __init__(self, hidden_units):
+        super(ConfigSubclassModel, self).__init__()
+        self.hidden_units = hidden_units
+        self.dense_layers = [keras.layers.Dense(u) for u in hidden_units]
+
+    def call(self, inputs):
+        x = inputs
+        for layer in self.dense_layers:
+            x = layer(x)
+        return x
+
+    def get_config(self):
+        return {"hidden_units": self.hidden_units}
+
+    @classmethod
+    def from_config(cls, config):
+        return cls(**config)
+
+
 def test_load_tiledb_error_with_wrong_uri():
     tiledb_model_obj = TensorflowKerasTileDBModel(uri="dummy_uri")
     with pytest.raises(tiledb.TileDBError):
@@ -50,15 +70,15 @@ def test_load_tiledb_error_with_wrong_uri():
     [
         testing_utils.get_small_sequential_mlp,
         testing_utils.get_small_functional_mlp,
-        testing_utils.get_small_subclass_mlp,
+        ConfigSubclassModel,
     ],
 )
 class TestTensorflowKerasModel:
     def test_save_model_to_tiledb_array(self, tmpdir, api, loss, optimizer, metrics):
         model = (
             api(num_hidden=1, num_classes=2, input_dim=3)
-            if api != testing_utils.get_small_subclass_mlp
-            else api(num_hidden=1, num_classes=2)
+            if api != ConfigSubclassModel
+            else api(hidden_units=[16, 16, 10])
         )
 
         tiledb_uri = os.path.join(tmpdir, "model_array")
@@ -67,30 +87,19 @@ class TestTensorflowKerasModel:
         if optimizer:
             model.compile(loss=loss, optimizer=optimizer, metrics=[metrics])
 
-        model.build((1, 5))
+        if not model.built:
+            model.build(tuple(np.random.randint(20, size=2)))
         tiledb_model_obj = TensorflowKerasTileDBModel(uri=tiledb_uri, model=model)
         tiledb_model_obj.save(include_optimizer=True if optimizer else False)
         assert tiledb.array_exists(tiledb_uri)
-
-        # if model.built:
-        #     tiledb_model_obj = TensorflowKerasTileDBModel(uri=tiledb_uri, model=model)
-        #
-        #     if api != testing_utils.get_small_subclass_mlp:
-        #         tiledb_model_obj.save(include_optimizer=True if optimizer else False)
-        #         assert tiledb.array_exists(tiledb_uri)
-        #     else:
-        #         with pytest.raises(NotImplementedError):
-        #             tiledb_model_obj.save(
-        #                 include_optimizer=True if optimizer else False
-        #             )
 
     def test_save_model_to_tiledb_array_predictions(
         self, tmpdir, api, loss, optimizer, metrics
     ):
         model = (
             api(num_hidden=1, num_classes=2, input_dim=3)
-            if api != testing_utils.get_small_subclass_mlp
-            else api(num_hidden=1, num_classes=2)
+            if api != ConfigSubclassModel
+            else api(hidden_units=[16, 16, 10])
         )
 
         tiledb_uri = os.path.join(tmpdir, "model_array")
@@ -99,32 +108,34 @@ class TestTensorflowKerasModel:
         if optimizer:
             model.compile(loss=loss, optimizer=optimizer, metrics=[metrics])
 
-        if model.built:
-            tiledb_model_obj = TensorflowKerasTileDBModel(uri=tiledb_uri, model=model)
+        input_shape = tuple(np.random.randint(20, size=2))
+        if not model.built:
+            model.build(input_shape)
+        tiledb_model_obj = TensorflowKerasTileDBModel(uri=tiledb_uri, model=model)
+        tiledb_model_obj.save(include_optimizer=True if optimizer else False)
 
-            if api != testing_utils.get_small_subclass_mlp:
-                tiledb_model_obj.save(include_optimizer=True if optimizer else False)
-                loaded_model = tiledb_model_obj.load(compile_model=False)
-                data = np.random.rand(100, 3)
+        loaded_model = (
+            tiledb_model_obj.load(
+                compile_model=False,
+                custom_objects={"ConfigSubclassModel": ConfigSubclassModel},
+                input_shape=input_shape,
+            )
+            if api == ConfigSubclassModel
+            else tiledb_model_obj.load(compile_model=False)
+        )
 
-                # Assert model predictions are equal
-                np.testing.assert_array_equal(
-                    loaded_model.predict(data), model.predict(data)
-                )
-                # assert all([a == b for a, b in zip(loaded_model.predict(data), model.predict(data))])
-            else:
-                with pytest.raises(NotImplementedError):
-                    tiledb_model_obj.save(
-                        include_optimizer=True if optimizer else False
-                    )
+        data = np.random.rand(100, input_shape[-1] if api == ConfigSubclassModel else 3)
+
+        # Assert model predictions are equal
+        np.testing.assert_array_equal(loaded_model.predict(data), model.predict(data))
 
     def test_save_model_to_tiledb_array_weights(
         self, tmpdir, api, loss, optimizer, metrics
     ):
         model = (
             api(num_hidden=1, num_classes=2, input_dim=3)
-            if api != testing_utils.get_small_subclass_mlp
-            else api(num_hidden=1, num_classes=2)
+            if api != ConfigSubclassModel
+            else api(hidden_units=[16, 16, 10])
         )
 
         tiledb_uri = os.path.join(tmpdir, "model_array")
@@ -133,39 +144,40 @@ class TestTensorflowKerasModel:
         if optimizer:
             model.compile(loss=loss, optimizer=optimizer, metrics=[metrics])
 
-        if model.built:
-            tiledb_model_obj = TensorflowKerasTileDBModel(uri=tiledb_uri, model=model)
+        input_shape = tuple(np.random.randint(20, size=2))
+        if not model.built:
+            model.build(input_shape)
+        tiledb_model_obj = TensorflowKerasTileDBModel(uri=tiledb_uri, model=model)
 
-            if api != testing_utils.get_small_subclass_mlp:
-                tiledb_model_obj.save(include_optimizer=True if optimizer else False)
-                loaded_model = tiledb_model_obj.load(
-                    compile_model=True if optimizer else False
-                )
-                data = np.random.rand(100, 3)
+        tiledb_model_obj.save(include_optimizer=True if optimizer else False)
+        loaded_model = (
+            tiledb_model_obj.load(compile_model=True if optimizer else False)
+            if api != ConfigSubclassModel
+            else tiledb_model_obj.load(
+                compile_model=True if optimizer else False,
+                custom_objects={"ConfigSubclassModel": ConfigSubclassModel},
+                input_shape=input_shape,
+            )
+        )
 
-                if optimizer:
-                    model_opt_weights = batch_get_value(
-                        getattr(model.optimizer, "weights")
-                    )
-                    loaded_opt_weights = batch_get_value(
-                        getattr(loaded_model.optimizer, "weights")
-                    )
+        data = np.random.rand(100, input_shape[-1] if api == ConfigSubclassModel else 3)
 
-                    # Assert optimizer weights are equal
-                    for weight_model, weight_loaded_model in zip(
-                        model_opt_weights, loaded_opt_weights
-                    ):
-                        np.testing.assert_array_equal(weight_model, weight_loaded_model)
+        if optimizer:
+            model_opt_weights = batch_get_value(getattr(model.optimizer, "weights"))
+            loaded_opt_weights = batch_get_value(
+                getattr(loaded_model.optimizer, "weights")
+            )
 
-                    # Assert model predictions are equal
-                    np.testing.assert_array_equal(
-                        loaded_model.predict(data), model.predict(data)
-                    )
-            else:
-                with pytest.raises(NotImplementedError):
-                    tiledb_model_obj.save(
-                        include_optimizer=True if optimizer else False
-                    )
+            # Assert optimizer weights are equal
+            for weight_model, weight_loaded_model in zip(
+                model_opt_weights, loaded_opt_weights
+            ):
+                np.testing.assert_array_equal(weight_model, weight_loaded_model)
+
+            # Assert model predictions are equal
+            np.testing.assert_array_equal(
+                loaded_model.predict(data), model.predict(data)
+            )
 
     def test_save_load_with_dense_features(self, tmpdir, api, loss, optimizer, metrics):
         if optimizer is None:
@@ -387,8 +399,8 @@ class TestTensorflowKerasModel:
     def test_preview(self, tmpdir, api, loss, optimizer, metrics):
         model = (
             api(num_hidden=1, num_classes=2, input_dim=3)
-            if api != testing_utils.get_small_subclass_mlp
-            else api(num_hidden=1, num_classes=2)
+            if api != ConfigSubclassModel
+            else api(hidden_units=[16, 16, 10])
         )
 
         tiledb_uri = os.path.join(tmpdir, "model_array")
@@ -419,8 +431,8 @@ class TestTensorflowKerasModel:
     def test_get_cloud_uri(self, tmpdir, api, loss, optimizer, metrics, mocker):
         model = (
             api(num_hidden=1, num_classes=2, input_dim=3)
-            if api != testing_utils.get_small_subclass_mlp
-            else api(num_hidden=1, num_classes=2)
+            if api != ConfigSubclassModel
+            else api(hidden_units=[16, 16, 10])
         )
 
         tiledb_uri = os.path.join(tmpdir, "model_array")
@@ -431,24 +443,20 @@ class TestTensorflowKerasModel:
 
         mocker.patch("tiledb.ml._cloud_utils.get_s3_prefix", return_value=None)
         # With model given as argument
-        if model.built:
-            tiledb_model_obj = TensorflowKerasTileDBModel(uri=tiledb_uri, model=model)
-            with pytest.raises(ValueError):
-                tiledb_model_obj.get_cloud_uri(tiledb_uri)
+        input_shape = tuple(np.random.randint(20, size=2))
+        if not model.built:
+            # Subclass case
+            model.build(input_shape)
+        tiledb_model_obj = TensorflowKerasTileDBModel(uri=tiledb_uri, model=model)
+        with pytest.raises(ValueError):
+            tiledb_model_obj.get_cloud_uri(tiledb_uri)
 
-            mocker.patch("tiledb.ml._cloud_utils.get_s3_prefix", return_value="bar")
-            actual = tiledb_model_obj.get_cloud_uri(tiledb_uri)
-            expected = "tiledb://{}/{}".format(
-                tiledb_model_obj.namespace, os.path.join("bar", tiledb_uri)
-            )
-            assert actual == expected
-        #
-        # else:
-        #     tiledb_model_obj = TensorflowKerasTileDBModel(
-        #         uri=tiledb_uri, model=model
-        #     )
-        #     with pytest.raises(ValueError):
-        #         tiledb_model_obj.get_cloud_uri(tiledb_uri)
+        mocker.patch("tiledb.ml._cloud_utils.get_s3_prefix", return_value="bar")
+        actual = tiledb_model_obj.get_cloud_uri(tiledb_uri)
+        expected = "tiledb://{}/{}".format(
+            tiledb_model_obj.namespace, os.path.join("bar", tiledb_uri)
+        )
+        assert actual == expected
 
 
 def test_file_properties(tmpdir):

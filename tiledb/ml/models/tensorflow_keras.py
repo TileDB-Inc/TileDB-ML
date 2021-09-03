@@ -43,8 +43,7 @@ class TensorflowKerasTileDBModel(TileDBModel):
         :param update: Boolean. Whether we should update any existing TileDB array model at the target location.
         :param meta: Dict. Extra metadata to save in a TileDB array.
         """
-        # if isinstance(self.model, (Functional, Sequential)):
-        #     # Serialize model weights and optimizer (if needed)
+        # Used in this format only when model is Functional or Sequential
         model_weights = pickle.dumps(self.model.get_weights(), protocol=4)
 
         # Serialize model optimizer
@@ -223,6 +222,13 @@ class TensorflowKerasTileDBModel(TileDBModel):
                     filters=tiledb.FilterList([tiledb.ZstdFilter()]),
                     ctx=self.ctx,
                 ),
+                tiledb.Attr(
+                    name="optimizer_weights",
+                    dtype="S1",
+                    var=True,
+                    filters=tiledb.FilterList([tiledb.ZstdFilter()]),
+                    ctx=self.ctx,
+                ),
             ]
 
         schema = tiledb.ArraySchema(
@@ -274,6 +280,13 @@ class TensorflowKerasTileDBModel(TileDBModel):
                     "layer_name": np.array(layer_names),
                     "weight_values": np.array(weight_values),
                     "weight_names": np.array(weight_names),
+                    # TODO (TeamML) Fix array scheme to avoid optimizer_weight repetition. Nullable
+                    "optimizer_weights": np.array(
+                        [
+                            serialized_optimizer_weights
+                            for i in range(len(self.model.layers))
+                        ]
+                    ),
                 }
 
             # Insert all model metadata
