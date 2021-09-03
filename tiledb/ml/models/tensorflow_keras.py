@@ -15,7 +15,10 @@ from tensorflow.python.keras.engine.functional import Functional
 from tensorflow.python.keras import optimizer_v1
 from tensorflow.python.keras.saving import saving_utils
 from tensorflow.python.keras.saving.saved_model import json_utils
-
+from tensorflow.python.keras.utils import generic_utils
+from tensorflow.python.keras.saving import model_config as model_config_lib
+from tensorflow.python.keras import backend
+from tensorflow.python.keras.saving.hdf5_format import preprocess_weights_for_loading
 from .base import TileDBModel
 
 
@@ -40,13 +43,8 @@ class TensorflowKerasTileDBModel(TileDBModel):
         :param update: Boolean. Whether we should update any existing TileDB array model at the target location.
         :param meta: Dict. Extra metadata to save in a TileDB array.
         """
-        if not isinstance(self.model, (Functional, Sequential)):
-            raise NotImplementedError(
-                "No support for Subclassed models at the moment. Your "
-                "model should be either Sequential or Functional."
-            )
-
-        # Serialize model weights and optimizer (if needed)
+        # if isinstance(self.model, (Functional, Sequential)):
+        #     # Serialize model weights and optimizer (if needed)
         model_weights = pickle.dumps(self.model.get_weights(), protocol=4)
 
         # Serialize model optimizer
@@ -70,6 +68,11 @@ class TensorflowKerasTileDBModel(TileDBModel):
         compile_model: bool = False,
         custom_objects: Optional[dict] = None,
         timestamp: Optional[Tuple[int, int]] = None,
+        input_shape: Optional[
+            Tuple[
+                int,
+            ]
+        ] = None,
     ) -> Model:
         """
         Loads a Tensorflow model from a TileDB array.
@@ -78,27 +81,40 @@ class TensorflowKerasTileDBModel(TileDBModel):
         custom classes or functions to be considered during deserialization.
         :param timestamp: Tuple of int. In case we want to use TileDB time travelling, we can provide a range of
         timestamps in order to load fragments of the array which live in the specified time range.
+        :param input_shape:
         :return: Model. Tensorflow model.
         """
         model_array = tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp)
         model_array_results = model_array[:]
-        model_weights = pickle.loads(model_array_results["model_weights"].item(0))
         model_config = json.loads(model_array.meta["model_config"])
-
-        architecture = model_config["config"]
+        # architecture = model_config["config"]
         model_class = model_config["class_name"]
 
         if model_class == "Sequential":
+            architecture = model_config["config"]
             model = tf.keras.Sequential.from_config(architecture)
+            model_weights = pickle.loads(model_array_results["model_weights"].item(0))
+            model.set_weights(model_weights)
         elif model_class == "Functional":
+            architecture = model_config["config"]
             model = tf.keras.Model.from_config(architecture)
+            model_weights = pickle.loads(model_array_results["model_weights"].item(0))
+            model.set_weights(model_weights)
         else:
-            raise NotImplementedError(
-                "No support for Subclassed models at the moment. Your "
-                "model should be either Sequential or Functional."
-            )
+            with generic_utils.SharedObjectLoadingScope():
+                with generic_utils.CustomObjectScope(custom_objects or {}):
+                    if model_config is None:
+                        raise ValueError("No model found in config file.")
+                    if hasattr(model_config, "decode"):
+                        model_config = model_config.decode("utf-8")
+                    model = model_config_lib.model_from_config(
+                        model_config, custom_objects=custom_objects
+                    )
+                    if not model.built:
+                        model.build(input_shape)
 
-        model.set_weights(model_weights)
+                    # Load weights for layers
+                    self._load_custom_subclassed_model(model, model_array)
 
         if compile_model:
             optimizer_weights = pickle.loads(
@@ -153,28 +169,61 @@ class TensorflowKerasTileDBModel(TileDBModel):
         """
         Creates a TileDB array for a Tensorflow model
         """
+
         dom = tiledb.Domain(
             tiledb.Dim(
                 name="model", domain=(1, 1), tile=1, dtype=np.int32, ctx=self.ctx
+            )
+            if isinstance(self.model, (Functional, Sequential))
+            else tiledb.Dim(
+                name="model",
+                domain=(1, len(self.model.layers)),
+                tile=1,
+                dtype=np.int32,
+                ctx=self.ctx,
             ),
         )
-
-        attrs = [
-            tiledb.Attr(
-                name="model_weights",
-                dtype="S1",
-                var=True,
-                filters=tiledb.FilterList([tiledb.ZstdFilter()]),
-                ctx=self.ctx,
-            ),
-            tiledb.Attr(
-                name="optimizer_weights",
-                dtype="S1",
-                var=True,
-                filters=tiledb.FilterList([tiledb.ZstdFilter()]),
-                ctx=self.ctx,
-            ),
-        ]
+        if isinstance(self.model, (Functional, Sequential)):
+            attrs = [
+                tiledb.Attr(
+                    name="model_weights",
+                    dtype="S1",
+                    var=True,
+                    filters=tiledb.FilterList([tiledb.ZstdFilter()]),
+                    ctx=self.ctx,
+                ),
+                tiledb.Attr(
+                    name="optimizer_weights",
+                    dtype="S1",
+                    var=True,
+                    filters=tiledb.FilterList([tiledb.ZstdFilter()]),
+                    ctx=self.ctx,
+                ),
+            ]
+        else:
+            attrs = [
+                tiledb.Attr(
+                    name="weight_names",
+                    dtype="S1",
+                    var=True,
+                    filters=tiledb.FilterList([tiledb.ZstdFilter()]),
+                    ctx=self.ctx,
+                ),
+                tiledb.Attr(
+                    name="weight_values",
+                    dtype="S1",
+                    var=True,
+                    filters=tiledb.FilterList([tiledb.ZstdFilter()]),
+                    ctx=self.ctx,
+                ),
+                tiledb.Attr(
+                    name="layer_name",
+                    dtype="U1",
+                    var=True,
+                    filters=tiledb.FilterList([tiledb.ZstdFilter()]),
+                    ctx=self.ctx,
+                ),
+            ]
 
         schema = tiledb.ArraySchema(
             domain=dom,
@@ -202,11 +251,30 @@ class TensorflowKerasTileDBModel(TileDBModel):
         Writes Tensorflow model to a TileDB array.
         """
         with tiledb.open(self.uri, "w", ctx=self.ctx) as tf_model_tiledb:
-            # Insert weights and optimizer
-            tf_model_tiledb[:] = {
-                "model_weights": np.array([serialized_weights]),
-                "optimizer_weights": np.array([serialized_optimizer_weights]),
-            }
+
+            if isinstance(self.model, (Functional, Sequential)):
+                tf_model_tiledb[:] = {
+                    "model_weights": np.array([serialized_weights]),
+                    "optimizer_weights": np.array([serialized_optimizer_weights]),
+                }
+            else:
+                # Insert weights and optimizer
+                layer_names = []
+                weight_names = []
+                weight_values = []
+                for layer in sorted(self.model.layers, key=lambda x: x.name):
+                    weights = layer.trainable_weights + layer.non_trainable_weights
+                    weight_values.append(pickle.dumps(backend.batch_get_value(weights)))
+                    weight_names.append(
+                        pickle.dumps([w.name.encode("utf8") for w in weights])
+                    )
+                    layer_names.append(layer.name)
+
+                tf_model_tiledb[:] = {
+                    "layer_name": np.array(layer_names),
+                    "weight_values": np.array(weight_values),
+                    "weight_names": np.array(weight_names),
+                }
 
             # Insert all model metadata
             model_metadata = saving_utils.model_metadata(self.model, include_optimizer)
@@ -240,3 +308,82 @@ class TensorflowKerasTileDBModel(TileDBModel):
             return pickle.dumps(optimizer_weights, protocol=4)
         else:
             return b""
+
+    def _load_custom_subclassed_model(self, model, model_array):
+
+        if "keras_version" in model_array.meta:
+            original_keras_version = model_array.meta["keras_version"]
+            if hasattr(original_keras_version, "decode"):
+                original_keras_version = original_keras_version.decode("utf8")
+        else:
+            original_keras_version = "1"
+        if "backend" in model_array.meta:
+            original_backend = model_array.meta["backend"]
+            if hasattr(original_backend, "decode"):
+                original_backend = original_backend.decode("utf8")
+        else:
+            original_backend = None
+
+        # Load weights for layers
+        self._load_weights_from_tiledb(
+            model_array[:], model.layers, original_keras_version, original_backend
+        )
+
+    def _load_weights_from_tiledb(
+        self,
+        model_array_results,
+        symbolic_layers,
+        original_keras_version,
+        original_backend,
+    ):
+
+        filtered_layers = []
+        for layer in symbolic_layers:
+            weights = layer.trainable_weights + layer.non_trainable_weights
+            if weights:
+                filtered_layers.append(layer)
+
+        layer_names = model_array_results["layer_name"]
+        filtered_layer_names = []
+        for k, name in enumerate(layer_names):
+            layer_weight_names = pickle.loads(
+                model_array_results["weight_names"].item(k)
+            )
+            if layer_weight_names:
+                filtered_layer_names.append(name)
+        layer_names = filtered_layer_names
+        if len(layer_names) != len(filtered_layers):
+            raise ValueError(
+                "You are trying to load a weight file "
+                "containing "
+                + str(len(layer_names))
+                + " layers into a model with "
+                + str(len(filtered_layers))
+                + " layers."
+            )
+
+        weight_value_tuples = []
+        for k, name in enumerate(symbolic_layers):
+            symbolic_weights = name.trainable_weights + name.non_trainable_weights
+            weight_values = pickle.loads(model_array_results["weight_values"].item(k))
+            weight_values = preprocess_weights_for_loading(
+                name, weight_values, original_keras_version, original_backend
+            )
+            if len(weight_values) != len(symbolic_weights):
+                raise ValueError(
+                    "Layer #"
+                    + str(k)
+                    + ' (named "'
+                    + layer.name
+                    + '" in the current model) was found to '
+                    "correspond to layer " + name + " in the save file. "
+                    "However the new layer "
+                    + layer.name
+                    + " expects "
+                    + str(len(symbolic_weights))
+                    + " weights, but the saved weights have "
+                    + str(len(weight_values))
+                    + " elements."
+                )
+            weight_value_tuples += zip(symbolic_weights, weight_values)
+        backend.batch_set_value(weight_value_tuples)

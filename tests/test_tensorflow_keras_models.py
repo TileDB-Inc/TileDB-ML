@@ -67,17 +67,22 @@ class TestTensorflowKerasModel:
         if optimizer:
             model.compile(loss=loss, optimizer=optimizer, metrics=[metrics])
 
-        if model.built:
-            tiledb_model_obj = TensorflowKerasTileDBModel(uri=tiledb_uri, model=model)
+        model.build((1, 5))
+        tiledb_model_obj = TensorflowKerasTileDBModel(uri=tiledb_uri, model=model)
+        tiledb_model_obj.save(include_optimizer=True if optimizer else False)
+        assert tiledb.array_exists(tiledb_uri)
 
-            if api != testing_utils.get_small_subclass_mlp:
-                tiledb_model_obj.save(include_optimizer=True if optimizer else False)
-                assert tiledb.array_exists(tiledb_uri)
-            else:
-                with pytest.raises(NotImplementedError):
-                    tiledb_model_obj.save(
-                        include_optimizer=True if optimizer else False
-                    )
+        # if model.built:
+        #     tiledb_model_obj = TensorflowKerasTileDBModel(uri=tiledb_uri, model=model)
+        #
+        #     if api != testing_utils.get_small_subclass_mlp:
+        #         tiledb_model_obj.save(include_optimizer=True if optimizer else False)
+        #         assert tiledb.array_exists(tiledb_uri)
+        #     else:
+        #         with pytest.raises(NotImplementedError):
+        #             tiledb_model_obj.save(
+        #                 include_optimizer=True if optimizer else False
+        #             )
 
     def test_save_model_to_tiledb_array_predictions(
         self, tmpdir, api, loss, optimizer, metrics
