@@ -100,9 +100,7 @@ class TensorflowKerasTileDBModel(TileDBModel):
                         model.build(input_shape)
 
                     # Load weights for layers
-                    TensorflowKerasTileDBModel._load_custom_subclassed_model(
-                        model, model_array
-                    )
+                    self._load_custom_subclassed_model(model, model_array)
         else:
             architecture = model_config["config"]
             model = (
@@ -185,12 +183,14 @@ class TensorflowKerasTileDBModel(TileDBModel):
                 tiledb.Attr(
                     name="model_weights",
                     dtype="S1",
+                    var=True,
                     filters=tiledb.FilterList([tiledb.ZstdFilter()]),
                     ctx=self.ctx,
                 ),
                 tiledb.Attr(
                     name="optimizer_weights",
                     dtype="S1",
+                    var=True,
                     filters=tiledb.FilterList([tiledb.ZstdFilter()]),
                     ctx=self.ctx,
                 ),
@@ -201,6 +201,7 @@ class TensorflowKerasTileDBModel(TileDBModel):
                 tiledb.Attr(
                     name="weight_names",
                     dtype="S1",
+                    var=True,
                     filters=tiledb.FilterList([tiledb.ZstdFilter()]),
                     ctx=self.ctx,
                 ),
@@ -208,6 +209,7 @@ class TensorflowKerasTileDBModel(TileDBModel):
                 tiledb.Attr(
                     name="weight_values",
                     dtype="S1",
+                    var=True,
                     filters=tiledb.FilterList([tiledb.ZstdFilter()]),
                     ctx=self.ctx,
                 ),
@@ -215,6 +217,7 @@ class TensorflowKerasTileDBModel(TileDBModel):
                 tiledb.Attr(
                     name="layer_name",
                     dtype="U1",
+                    var=True,
                     filters=tiledb.FilterList([tiledb.ZstdFilter()]),
                     ctx=self.ctx,
                 ),
@@ -222,6 +225,7 @@ class TensorflowKerasTileDBModel(TileDBModel):
                 tiledb.Attr(
                     name="optimizer_weights",
                     dtype="S1",
+                    var=True,
                     filters=tiledb.FilterList([tiledb.ZstdFilter()]),
                     ctx=self.ctx,
                 ),
@@ -318,71 +322,68 @@ class TensorflowKerasTileDBModel(TileDBModel):
         else:
             return b""
 
-    @classmethod
-    def _load_custom_subclassed_model(cls, model, model_array):
-        pass
+    def _load_custom_subclassed_model(self, model, model_array):
 
+        if "keras_version" in model_array.meta:
+            original_keras_version = model_array.meta["keras_version"]
+            if hasattr(original_keras_version, "decode"):
+                original_keras_version = original_keras_version.decode("utf8")
+        else:
+            original_keras_version = "1"
+        if "backend" in model_array.meta:
+            original_backend = model_array.meta["backend"]
+            if hasattr(original_backend, "decode"):
+                original_backend = original_backend.decode("utf8")
+        else:
+            original_backend = None
 
-@staticmethod
-def _load_custom_subclassed_model(model, model_array):
-
-    if "keras_version" in model_array.meta:
-        original_keras_version = model_array.meta["keras_version"]
-        if hasattr(original_keras_version, "decode"):
-            original_keras_version = original_keras_version.decode("utf8")
-    else:
-        original_keras_version = "1"
-    if "backend" in model_array.meta:
-        original_backend = model_array.meta["backend"]
-        if hasattr(original_backend, "decode"):
-            original_backend = original_backend.decode("utf8")
-    else:
-        original_backend = None
-
-    # Load weights for layers
-    _load_weights_from_tiledb(
-        model_array[:], model.layers, original_keras_version, original_backend
-    )
-
-
-@staticmethod
-def _load_weights_from_tiledb(
-    model_array_results,
-    symbolic_layers,
-    original_keras_version,
-    original_backend,
-):
-    symbolic_layer_names = []
-    for layer in symbolic_layers:
-        weights = layer.trainable_weights + layer.non_trainable_weights
-        if weights:
-            symbolic_layer_names.append(layer)
-
-    read_layer_names = []
-    for k, name in enumerate(model_array_results["layer_name"]):
-        layer_weight_names = pickle.loads(model_array_results["weight_names"].item(k))
-        if layer_weight_names:
-            read_layer_names.append(name)
-
-    if len(read_layer_names) != len(symbolic_layer_names):
-        raise ValueError(
-            f"You are trying to load a weight file containing {len(read_layer_names)} layers"
-            f"into a model with {len(symbolic_layer_names)} layers"
+        # Load weights for layers
+        self._load_weights_from_tiledb(
+            model_array[:], model.layers, original_keras_version, original_backend
         )
 
-    weight_value_tuples = []
-    for k, name in enumerate(symbolic_layers):
-        symbolic_weight_names = name.trainable_weights + name.non_trainable_weights
-        read_weight_values = pickle.loads(model_array_results["weight_values"].item(k))
-        read_weight_values = preprocess_weights_for_loading(
-            name, read_weight_values, original_keras_version, original_backend
-        )
-        if len(read_weight_values) != len(symbolic_weight_names):
-            raise ValueError(
-                f'Layer #{k}  (named "{layer.name}" in the current model) was found to correspond to '
-                f"layer {name} in the save file. However the new layer {layer.name} expects "
-                f"{len(symbolic_weight_names)} weights, but the saved weights have {len(read_weight_values)} "
-                f"elements"
+    def _load_weights_from_tiledb(
+        self,
+        model_array_results,
+        symbolic_layers,
+        original_keras_version,
+        original_backend,
+    ):
+        symbolic_layer_names = []
+        for layer in symbolic_layers:
+            weights = layer.trainable_weights + layer.non_trainable_weights
+            if weights:
+                symbolic_layer_names.append(layer)
+
+        read_layer_names = []
+        for k, name in enumerate(model_array_results["layer_name"]):
+            layer_weight_names = pickle.loads(
+                model_array_results["weight_names"].item(k)
             )
-        weight_value_tuples += zip(symbolic_weight_names, read_weight_values)
-    backend.batch_set_value(weight_value_tuples)
+            if layer_weight_names:
+                read_layer_names.append(name)
+
+        if len(read_layer_names) != len(symbolic_layer_names):
+            raise ValueError(
+                f"You are trying to load a weight file containing {len(read_layer_names)} layers"
+                f"into a model with {len(symbolic_layer_names)} layers"
+            )
+
+        weight_value_tuples = []
+        for k, name in enumerate(symbolic_layers):
+            symbolic_weight_names = name.trainable_weights + name.non_trainable_weights
+            read_weight_values = pickle.loads(
+                model_array_results["weight_values"].item(k)
+            )
+            read_weight_values = preprocess_weights_for_loading(
+                name, read_weight_values, original_keras_version, original_backend
+            )
+            if len(read_weight_values) != len(symbolic_weight_names):
+                raise ValueError(
+                    f'Layer #{k}  (named "{layer.name}" in the current model) was found to correspond to '
+                    f"layer {name} in the save file. However the new layer {layer.name} expects "
+                    f"{len(symbolic_weight_names)} weights, but the saved weights have {len(read_weight_values)} "
+                    f"elements"
+                )
+            weight_value_tuples += zip(symbolic_weight_names, read_weight_values)
+        backend.batch_set_value(weight_value_tuples)
