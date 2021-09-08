@@ -80,65 +80,72 @@ class TensorflowKerasTileDBModel(TileDBModel):
         :param input_shape: Tuple of integers with the shape that the custom model expects as input
         :return: Model. Tensorflow model.
         """
-        model_array = tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp)
-        model_array_results = model_array[:]
-        model_config = json.loads(model_array.meta["model_config"])
-        model_class = model_config["class_name"]
 
-        if model_class != "Sequential" and model_class != "Functional":
-            with generic_utils.SharedObjectLoadingScope():
-                with generic_utils.CustomObjectScope(custom_objects or {}):
-                    if hasattr(model_config, "decode"):
-                        model_config = model_config.decode("utf-8")
-                    model = model_config_lib.model_from_config(
-                        model_config, custom_objects=custom_objects
-                    )
-                    if not model.built:
-                        model.build(input_shape)
+        with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
+            model_array_results = model_array[:]
+            model_config = json.loads(model_array.meta["model_config"])
+            model_class = model_config["class_name"]
 
-                    # Load weights for layers
-                    self._load_custom_subclassed_model(model, model_array)
-        else:
-            cls = tf.keras.Sequential if model_class == "Sequential" else tf.keras.Model
-            model = cls.from_config(model_config["config"])
-            model_weights = pickle.loads(model_array_results["model_weights"].item(0))
-            model.set_weights(model_weights)
+            if model_class != "Sequential" and model_class != "Functional":
+                with generic_utils.SharedObjectLoadingScope():
+                    with generic_utils.CustomObjectScope(custom_objects or {}):
+                        if hasattr(model_config, "decode"):
+                            model_config = model_config.decode("utf-8")
+                        model = model_config_lib.model_from_config(
+                            model_config, custom_objects=custom_objects
+                        )
+                        if not model.built:
+                            model.build(input_shape)
 
-        if compile_model:
-            optimizer_weights = pickle.loads(
-                model_array_results["optimizer_weights"].item(0)
-            )
-            training_config = json.loads(model_array.meta["training_config"])
-
-            # Compile model.
-            model.compile(
-                **saving_utils.compile_args_from_training_config(
-                    training_config, custom_objects
+                        # Load weights for layers
+                        self._load_custom_subclassed_model(model, model_array)
+            else:
+                cls = (
+                    tf.keras.Sequential
+                    if model_class == "Sequential"
+                    else tf.keras.Model
                 )
-            )
-            saving_utils.try_build_compiled_arguments(model)
+                model = cls.from_config(model_config["config"])
+                model_weights = pickle.loads(
+                    model_array_results["model_weights"].item(0)
+                )
+                model.set_weights(model_weights)
 
-            # Set optimizer weights.
-            if optimizer_weights:
-                try:
-                    model.optimizer._create_all_weights(model.trainable_variables)
-                except (NotImplementedError, AttributeError):
-                    logging.warning(
-                        "Error when creating the weights of optimizer {}, making it "
-                        "impossible to restore the saved optimizer state. As a result, "
-                        "your model is starting with a freshly initialized optimizer."
-                    )
+            if compile_model:
+                optimizer_weights = pickle.loads(
+                    model_array_results["optimizer_weights"].item(0)
+                )
+                training_config = json.loads(model_array.meta["training_config"])
 
-                try:
-                    model.optimizer.set_weights(optimizer_weights)
-                except ValueError:
-                    logging.warning(
-                        "Error in loading the saved optimizer "
-                        "state. As a result, your model is "
-                        "starting with a freshly initialized "
-                        "optimizer."
+                # Compile model.
+                model.compile(
+                    **saving_utils.compile_args_from_training_config(
+                        training_config, custom_objects
                     )
-        return model
+                )
+                saving_utils.try_build_compiled_arguments(model)
+
+                # Set optimizer weights.
+                if optimizer_weights:
+                    try:
+                        model.optimizer._create_all_weights(model.trainable_variables)
+                    except (NotImplementedError, AttributeError):
+                        logging.warning(
+                            "Error when creating the weights of optimizer {}, making it "
+                            "impossible to restore the saved optimizer state. As a result, "
+                            "your model is starting with a freshly initialized optimizer."
+                        )
+
+                    try:
+                        model.optimizer.set_weights(optimizer_weights)
+                    except ValueError:
+                        logging.warning(
+                            "Error in loading the saved optimizer "
+                            "state. As a result, your model is "
+                            "starting with a freshly initialized "
+                            "optimizer."
+                        )
+            return model
 
     def preview(self) -> str:
         """
