@@ -85,9 +85,6 @@ class TensorflowKerasTileDBModel(TileDBModel):
         model_config = json.loads(model_array.meta["model_config"])
         model_class = model_config["class_name"]
 
-        if model_config is None:
-            raise ValueError("No model found in config file.")
-
         if model_class != "Sequential" and model_class != "Functional":
             with generic_utils.SharedObjectLoadingScope():
                 with generic_utils.CustomObjectScope(custom_objects or {}):
@@ -102,12 +99,8 @@ class TensorflowKerasTileDBModel(TileDBModel):
                     # Load weights for layers
                     self._load_custom_subclassed_model(model, model_array)
         else:
-            architecture = model_config["config"]
-            model = (
-                tf.keras.Sequential.from_config(architecture)
-                if model_class == "Sequential"
-                else tf.keras.Model.from_config(architecture)
-            )
+            cls = tf.keras.Sequential if model_class == "Sequential" else tf.keras.Model
+            model = cls.from_config(model_config["config"])
             model_weights = pickle.loads(model_array_results["model_weights"].item(0))
             model.set_weights(model_weights)
 
@@ -365,8 +358,7 @@ class TensorflowKerasTileDBModel(TileDBModel):
 
         if len(read_layer_names) != len(symbolic_layer_names):
             raise ValueError(
-                f"You are trying to load a weight file containing {len(read_layer_names)} layers"
-                f"into a model with {len(symbolic_layer_names)} layers"
+                f"You are trying to load a weight file containing {len(read_layer_names)} layers into a model with {len(symbolic_layer_names)} layers"
             )
 
         weight_value_tuples = []
@@ -380,10 +372,7 @@ class TensorflowKerasTileDBModel(TileDBModel):
             )
             if len(read_weight_values) != len(symbolic_weight_names):
                 raise ValueError(
-                    f'Layer #{k}  (named "{layer.name}" in the current model) was found to correspond to '
-                    f"layer {name} in the save file. However the new layer {layer.name} expects "
-                    f"{len(symbolic_weight_names)} weights, but the saved weights have {len(read_weight_values)} "
-                    f"elements"
+                    f'Layer #{k}  (named "{layer.name}" in the current model) was found to correspond to layer {name} in the save file. However the new layer {layer.name} expects {len(symbolic_weight_names)} weights, but the saved weights have {len(read_weight_values)} elements'
                 )
             weight_value_tuples += zip(symbolic_weight_names, read_weight_values)
         backend.batch_set_value(weight_value_tuples)
