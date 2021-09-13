@@ -204,11 +204,11 @@ class TestPytorchDenseDataloader:
                 assert len(data) == 2 * num_of_attributes
 
                 for attr in range(num_of_attributes):
-                    assert data[attr].shape == (
+                    assert data[attr].shape <= (
                         BATCH_SIZE,
                         *input_shape[1:],
                     )
-                    assert data[num_of_attributes + attr].shape == (
+                    assert data[num_of_attributes + attr].shape <= (
                         BATCH_SIZE,
                         NUM_OF_CLASSES,
                     )
