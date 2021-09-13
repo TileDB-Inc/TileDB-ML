@@ -30,6 +30,11 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset):
         :param y_attribute_names: List of str. A list that contains the attribute names of TileDB array y.
         """
 
+        if type(x_array) is tiledb.DenseArray:
+            raise TypeError(
+                "PyTorchTileDBSparseDataset class should be used with tiledb.SparseArray representation"
+            )
+
         # Check that x and y have the same number of rows
         if x_array.schema.domain.shape[0] != y_array.schema.domain.shape[0]:
             raise ValueError(

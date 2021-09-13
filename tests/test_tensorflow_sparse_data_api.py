@@ -82,7 +82,7 @@ class TestTileDBTensorflowSparseDataAPI:
 
             assert isinstance(tiledb_dataset, tf.data.Dataset)
 
-    def test_tiledb_tf_sparse_data_api_with_with_dense_data_except(
+    def test_tiledb_tf_sparse_data_api_with_dense_data_sparse_label_except(
         self, tmpdir, input_shape, num_of_attributes
     ):
         array_uuid = str(uuid.uuid4())
