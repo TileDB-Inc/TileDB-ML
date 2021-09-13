@@ -2,6 +2,7 @@
 import tiledb
 import torch
 import math
+from typing import List, Optional
 
 
 class PyTorchTileDBDenseDataset(torch.utils.data.IterableDataset):
@@ -10,13 +11,22 @@ class PyTorchTileDBDenseDataset(torch.utils.data.IterableDataset):
     PyTorch Dataloader API.
     """
 
-    def __init__(self, x_array: tiledb.Array, y_array: tiledb.Array, batch_size: int):
+    def __init__(
+        self,
+        x_array: tiledb.Array,
+        y_array: tiledb.Array,
+        batch_size: int,
+        x_attribute_names: Optional[List[str]] = [],
+        y_attribute_names: Optional[List[str]] = [],
+    ):
         """
         Initialises a PyTorchTileDBDenseDataset that inherits from PyTorch IterableDataset.
         :param x_array: TileDB Dense Array. Array that contains features.
         :param y_array: TileDB Dense Array. Array that contains labels.
         :param batch_size: Integer. The size of the batch that the generator will return. Remember to set batch_size=None
         when calling the PyTorch Dataloader API, because batching is taking place inside the TileDB IterableDataset.
+        :param x_attribute_names: List of str. A list that contains the attribute names of TileDB array x.
+        :param y_attribute_names: List of str. A list that contains the attribute names of TileDB array y.
         For optimal reads from a TileDB array, it is recommended to set the batch size equal to the tile extent of the
         dimension we query (here, we always query the first dimension of a TileDB array) in order to get a slice (batch)
         of the data. For example, in case the tile extent of the first dimension of a TileDB array (x or y) is equal to
@@ -37,6 +47,19 @@ class PyTorchTileDBDenseDataset(torch.utils.data.IterableDataset):
         self.y = y_array
         self.batch_size = batch_size
 
+        # If a user doesn't pass explicit attribute names to return per batch, we return all attributes.
+        self.x_attribute_names = (
+            [x_array.schema.attr(idx).name for idx in range(x_array.schema.nattr)]
+            if not x_attribute_names
+            else x_attribute_names
+        )
+
+        self.y_attribute_names = (
+            [y_array.schema.attr(idx).name for idx in range(y_array.schema.nattr)]
+            if not y_attribute_names
+            else y_attribute_names
+        )
+
     def __iter__(self):
         worker_info = torch.utils.data.get_worker_info()
 
@@ -55,15 +78,14 @@ class PyTorchTileDBDenseDataset(torch.utils.data.IterableDataset):
             iter_start = worker_id * per_worker
             iter_end = min(iter_start + per_worker, rows)
 
-        x_attr_name = self.x.schema.attr(0).name
-        y_attr_name = self.y.schema.attr(0).name
-
         # Loop over batches
         for offset in range(iter_start, iter_end, self.batch_size):
+            x_batch = self.x[offset : offset + self.batch_size]
+            y_batch = self.y[offset : offset + self.batch_size]
             # Yield the next training batch
-            yield self.x[offset : offset + self.batch_size][x_attr_name], self.y[
-                offset : offset + self.batch_size
-            ][y_attr_name]
+            yield tuple(x_batch[attr] for attr in self.x_attribute_names) + tuple(
+                y_batch[attr] for attr in self.y_attribute_names
+            )
 
     def __len__(self):
         return self.x.shape[0]

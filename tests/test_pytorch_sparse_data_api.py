@@ -47,7 +47,7 @@ class Net(nn.Module):
 # We test for single and multiple workers
 @pytest.mark.parametrize(
     "workers",
-    [0, 1],
+    [0, 1, 2],
 )
 @pytest.mark.parametrize(
     "num_of_attributes",
