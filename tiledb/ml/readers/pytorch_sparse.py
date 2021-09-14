@@ -2,6 +2,7 @@
 import numpy as np
 import tiledb
 import torch
+from typing import List, Optional
 
 
 class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset):
@@ -10,7 +11,14 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset):
     PyTorch Sparse Dataloader API.
     """
 
-    def __init__(self, x_array: tiledb.Array, y_array: tiledb.Array, batch_size: int):
+    def __init__(
+        self,
+        x_array: tiledb.Array,
+        y_array: tiledb.Array,
+        batch_size: int,
+        x_attribute_names: Optional[List[str]] = [],
+        y_attribute_names: Optional[List[str]] = [],
+    ):
         """
         Initialises a PyTorchTileDBSparseDataset that inherits from PyTorch IterableDataset.
         :param x_array: TileDB Sparse Array. Array that contains features.
@@ -18,7 +26,14 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset):
         tensors but torch does not provide full functionality (experimented) for this case.
         :param batch_size: Integer. The size of the batch that the generator will return. Remember to set batch_size=None
         when calling the PyTorch Sparse Dataloader API, because batching is taking place inside the TileDB IterableDataset.
+        :param x_attribute_names: List of str. A list that contains the attribute names of TileDB array x.
+        :param y_attribute_names: List of str. A list that contains the attribute names of TileDB array y.
         """
+
+        if type(x_array) is tiledb.DenseArray:
+            raise TypeError(
+                "PyTorchTileDBSparseDataset class should be used with tiledb.SparseArray representation"
+            )
 
         # Check that x and y have the same number of rows
         if x_array.schema.domain.shape[0] != y_array.schema.domain.shape[0]:
@@ -30,6 +45,18 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset):
         self.x = x_array
         self.y = y_array
         self.batch_size = batch_size
+
+        self.x_attribute_names = (
+            [x_array.schema.attr(idx).name for idx in range(x_array.schema.nattr)]
+            if not x_attribute_names
+            else x_attribute_names
+        )
+
+        self.y_attribute_names = (
+            [y_array.schema.attr(idx).name for idx in range(y_array.schema.nattr)]
+            if not y_attribute_names
+            else y_attribute_names
+        )
 
     def __check_row_dims(self, x_row_idx: np.array, y_row_idx: np.array):
         """
@@ -75,8 +102,6 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset):
             # iter_end = min(iter_start + per_worker, rows)
             raise NotImplementedError("https://github.com/pytorch/pytorch/issues/20248")
 
-        y_attr_name = self.y.schema.attr(0).name
-
         x_shape = self.x.schema.domain.shape[1:]
         y_shape = self.y.schema.domain.shape[1:]
 
@@ -85,14 +110,6 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset):
             # Yield the next training batch
             x_batch = self.x[offset : offset + self.batch_size]
             y_batch = self.y[offset : offset + self.batch_size]
-
-            # TODO: Both for dense case support multiple attributes
-            values_x = list(x_batch.items())[0][1]
-            values_y = list(y_batch.items())[0][1]
-
-            # Transform to TF COO format y data
-            x_data = values_x.ravel()
-            y_data = values_y.ravel()
 
             x_coords = []
             for i in range(0, self.x.schema.domain.ndim):
@@ -110,12 +127,14 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset):
             # SparseCPU backend
 
             # Identify the label array hence ingest it as sparse tensor or simple tensor
-
-            x_tensor = torch.sparse_coo_tensor(
-                torch.tensor(list(zip(*x_coords))).t(),
-                x_data,
-                (self.batch_size, x_shape[0]),
-                requires_grad=False,
+            x_tensor = tuple(
+                torch.sparse_coo_tensor(
+                    torch.tensor(list(zip(*x_coords))).t(),
+                    x_batch[attr].ravel(),
+                    (self.batch_size, x_shape[0]),
+                    requires_grad=False,
+                )
+                for attr in self.x_attribute_names
             )
 
             if isinstance(self.y, tiledb.SparseArray):
@@ -132,15 +151,21 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset):
 
                 self.__check_row_dims(x_coords[0], y_coords[0])
 
-                y_tensor = torch.sparse_coo_tensor(
-                    torch.tensor(list(zip(*y_coords))).t(),
-                    y_data,
-                    (self.batch_size, y_shape[0]),
-                    requires_grad=False,
+                y_tensor = tuple(
+                    torch.sparse_coo_tensor(
+                        torch.tensor(list(zip(*y_coords))).t(),
+                        y_batch[attr].ravel(),
+                        (self.batch_size, y_shape[0]),
+                        requires_grad=False,
+                    )
+                    for attr in self.y_attribute_names
                 )
             else:
                 # for the check slice the row dimension of y dense array
-                self.__check_row_dims(x_coords[0], values_y)
-                y_tensor = self.y[offset : offset + self.batch_size][y_attr_name]
+                self.__check_row_dims(x_coords[0], y_batch[self.y_attribute_names[0]])
+                y_tensor = tuple(
+                    self.y[offset : offset + self.batch_size][attr]
+                    for attr in self.y_attribute_names
+                )
 
-            yield x_tensor, y_tensor
+            yield x_tensor + y_tensor
