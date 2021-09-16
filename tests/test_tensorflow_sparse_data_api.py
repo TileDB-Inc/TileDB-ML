@@ -1,14 +1,16 @@
 """Tests for TileDB integration with Tensorflow Data API."""
 
 import os
-import pytest
-import tiledb
-import numpy as np
 import uuid
+
+import numpy as np
+import pytest
 import tensorflow as tf
 
+import tiledb
 from tiledb.ml.readers.tensorflow_sparse import TensorflowTileDBSparseDataset
-from tiledb.ml._utils import ingest_in_tiledb, create_sparse_array_one_hot_2d
+
+from .utils import create_sparse_array_one_hot_2d, ingest_in_tiledb
 
 # Suppress all Tensorflow messages
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
@@ -40,19 +42,16 @@ class TestTileDBTensorflowSparseDataAPI:
         tiledb_uri_x = os.path.join(tmpdir, "x" + array_uuid)
         tiledb_uri_y = os.path.join(tmpdir, "y" + array_uuid)
 
-        dataset_shape_x = (ROWS, input_shape)
-        dataset_shape_y = (ROWS, (NUM_OF_CLASSES,))
-
         ingest_in_tiledb(
             uri=tiledb_uri_x,
-            data=create_sparse_array_one_hot_2d(dataset_shape_x[0], dataset_shape_x[1]),
+            data=create_sparse_array_one_hot_2d(ROWS, input_shape[0]),
             batch_size=BATCH_SIZE,
             sparse=True,
             num_of_attributes=num_of_attributes,
         )
         ingest_in_tiledb(
             uri=tiledb_uri_y,
-            data=create_sparse_array_one_hot_2d(dataset_shape_y[0], dataset_shape_y[1]),
+            data=create_sparse_array_one_hot_2d(ROWS, NUM_OF_CLASSES),
             batch_size=BATCH_SIZE,
             sparse=True,
             num_of_attributes=num_of_attributes,
@@ -89,12 +88,9 @@ class TestTileDBTensorflowSparseDataAPI:
         tiledb_uri_x = os.path.join(tmpdir, "x" + array_uuid)
         tiledb_uri_y = os.path.join(tmpdir, "y" + array_uuid)
 
-        dataset_shape_x = (ROWS,) + input_shape
-        dataset_shape_y = (ROWS, (NUM_OF_CLASSES,))
-
         ingest_in_tiledb(
             uri=tiledb_uri_x,
-            data=np.random.rand(*dataset_shape_x),
+            data=np.random.rand(ROWS, *input_shape),
             batch_size=BATCH_SIZE,
             sparse=False,
             num_of_attributes=num_of_attributes,
@@ -102,7 +98,7 @@ class TestTileDBTensorflowSparseDataAPI:
 
         ingest_in_tiledb(
             uri=tiledb_uri_y,
-            data=create_sparse_array_one_hot_2d(dataset_shape_y[0], dataset_shape_y[1]),
+            data=create_sparse_array_one_hot_2d(ROWS, NUM_OF_CLASSES),
             batch_size=BATCH_SIZE,
             sparse=True,
             num_of_attributes=num_of_attributes,
@@ -138,19 +134,16 @@ class TestTileDBTensorflowSparseDataAPI:
         tiledb_uri_x = os.path.join(tmpdir, "x" + array_uuid)
         tiledb_uri_y = os.path.join(tmpdir, "y" + array_uuid)
 
-        dataset_shape_x = (ROWS, input_shape)
-        dataset_shape_y = (ROWS, NUM_OF_CLASSES)
-
         ingest_in_tiledb(
             uri=tiledb_uri_x,
-            data=create_sparse_array_one_hot_2d(dataset_shape_x[0], dataset_shape_x[1]),
+            data=create_sparse_array_one_hot_2d(ROWS, input_shape[0]),
             batch_size=BATCH_SIZE,
             sparse=True,
             num_of_attributes=num_of_attributes,
         )
         ingest_in_tiledb(
             uri=tiledb_uri_y,
-            data=np.random.rand(*dataset_shape_y),
+            data=np.random.rand(ROWS, NUM_OF_CLASSES),
             batch_size=BATCH_SIZE,
             sparse=False,
             num_of_attributes=num_of_attributes,
@@ -187,13 +180,8 @@ class TestTileDBTensorflowSparseDataAPI:
         tiledb_uri_x = os.path.join(tmpdir, "x" + array_uuid)
         tiledb_uri_y = os.path.join(tmpdir, "y" + array_uuid)
 
-        dataset_shape_x = (ROWS, input_shape)
-        dataset_shape_y = (ROWS, NUM_OF_CLASSES)
-
         # Empty one random row
-        spoiled_data = create_sparse_array_one_hot_2d(
-            dataset_shape_x[0], dataset_shape_x[1]
-        )
+        spoiled_data = create_sparse_array_one_hot_2d(ROWS, input_shape[0])
         spoiled_data[np.nonzero(spoiled_data[0])] = 0
 
         ingest_in_tiledb(
@@ -205,7 +193,7 @@ class TestTileDBTensorflowSparseDataAPI:
         )
         ingest_in_tiledb(
             uri=tiledb_uri_y,
-            data=np.random.rand(*dataset_shape_y),
+            data=np.random.rand(ROWS, NUM_OF_CLASSES),
             batch_size=BATCH_SIZE,
             sparse=False,
             num_of_attributes=num_of_attributes,
@@ -242,20 +230,17 @@ class TestTileDBTensorflowSparseDataAPI:
         tiledb_uri_x = os.path.join(tmpdir, "x" + array_uuid)
         tiledb_uri_y = os.path.join(tmpdir, "y" + array_uuid)
 
-        # Add one extra row on X
-        dataset_shape_x = (ROWS + 1, input_shape)
-        dataset_shape_y = (ROWS, (NUM_OF_CLASSES,))
-
         ingest_in_tiledb(
             uri=tiledb_uri_x,
-            data=create_sparse_array_one_hot_2d(dataset_shape_x[0], dataset_shape_x[1]),
+            # Add one extra row on X
+            data=create_sparse_array_one_hot_2d(ROWS + 1, input_shape[0]),
             batch_size=BATCH_SIZE,
             sparse=True,
             num_of_attributes=num_of_attributes,
         )
         ingest_in_tiledb(
             uri=tiledb_uri_y,
-            data=create_sparse_array_one_hot_2d(dataset_shape_y[0], dataset_shape_y[1]),
+            data=create_sparse_array_one_hot_2d(ROWS, NUM_OF_CLASSES),
             batch_size=BATCH_SIZE,
             sparse=True,
             num_of_attributes=num_of_attributes,
@@ -287,14 +272,10 @@ class TestTileDBTensorflowSparseDataAPI:
     def test_except_with_diff_number_of_batch_x_y_rows_empty_record(
         self, tmpdir, input_shape, num_of_attributes
     ):
-        # Add one extra row on X
-        dataset_shape_x = (ROWS, input_shape)
-        dataset_shape_y = (ROWS, (NUM_OF_CLASSES,))
-
         tiledb_uri_x = os.path.join(tmpdir, "x")
         tiledb_uri_y = os.path.join(tmpdir, "y")
 
-        spoiled_data = create_sparse_array_one_hot_2d(*dataset_shape_x)
+        spoiled_data = create_sparse_array_one_hot_2d(ROWS, input_shape[0])
         spoiled_data[np.nonzero(spoiled_data[0])] = 0
 
         ingest_in_tiledb(
@@ -306,7 +287,7 @@ class TestTileDBTensorflowSparseDataAPI:
         )
         ingest_in_tiledb(
             uri=tiledb_uri_y,
-            data=create_sparse_array_one_hot_2d(*dataset_shape_y),
+            data=create_sparse_array_one_hot_2d(ROWS, NUM_OF_CLASSES),
             batch_size=BATCH_SIZE,
             sparse=False,
             num_of_attributes=num_of_attributes,
@@ -343,19 +324,16 @@ class TestTileDBTensorflowSparseDataAPI:
         tiledb_uri_x = os.path.join(tmpdir, "x" + array_uuid)
         tiledb_uri_y = os.path.join(tmpdir, "y" + array_uuid)
 
-        dataset_shape_x = (ROWS, input_shape)
-        dataset_shape_y = (ROWS, NUM_OF_CLASSES)
-
         ingest_in_tiledb(
             uri=tiledb_uri_x,
-            data=create_sparse_array_one_hot_2d(dataset_shape_x[0], dataset_shape_x[1]),
+            data=create_sparse_array_one_hot_2d(ROWS, input_shape[0]),
             batch_size=BATCH_SIZE,
             sparse=True,
             num_of_attributes=num_of_attributes,
         )
         ingest_in_tiledb(
             uri=tiledb_uri_y,
-            data=np.random.rand(*dataset_shape_y),
+            data=np.random.rand(ROWS, NUM_OF_CLASSES),
             batch_size=BATCH_SIZE,
             sparse=False,
             num_of_attributes=num_of_attributes,
@@ -398,20 +376,17 @@ class TestTileDBTensorflowSparseDataAPI:
         tiledb_uri_x = os.path.join(tmpdir, "x" + array_uuid)
         tiledb_uri_y = os.path.join(tmpdir, "y" + array_uuid)
 
-        # Add one extra row on X
-        dataset_shape_x = (ROWS + 1, input_shape)
-        dataset_shape_y = (ROWS, (NUM_OF_CLASSES,))
-
         ingest_in_tiledb(
             uri=tiledb_uri_x,
-            data=create_sparse_array_one_hot_2d(dataset_shape_x[0], dataset_shape_x[1]),
+            # Add one extra row on X
+            data=create_sparse_array_one_hot_2d(ROWS + 1, input_shape[0]),
             batch_size=BATCH_SIZE,
             sparse=True,
             num_of_attributes=num_of_attributes,
         )
         ingest_in_tiledb(
             uri=tiledb_uri_y,
-            data=create_sparse_array_one_hot_2d(dataset_shape_y[0], dataset_shape_y[1]),
+            data=create_sparse_array_one_hot_2d(ROWS, NUM_OF_CLASSES),
             batch_size=BATCH_SIZE,
             sparse=True,
             num_of_attributes=num_of_attributes,

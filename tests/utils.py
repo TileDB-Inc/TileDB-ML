@@ -1,10 +1,11 @@
 import numpy as np
+
 import tiledb
 
 
 def ingest_in_tiledb(
-    data: np.array, batch_size: int, uri: str, sparse: bool, num_of_attributes: int
-):
+    data: np.ndarray, batch_size: int, uri: str, sparse: bool, num_of_attributes: int
+) -> None:
     dims = [
         tiledb.Dim(
             name="dim_" + str(dim),
@@ -36,9 +37,9 @@ def ingest_in_tiledb(
         }
 
 
-def create_sparse_array_one_hot_2d(rows: int, cols: tuple) -> np.ndarray:
-    seed = np.random.randint(low=0, high=cols[0], size=(rows,))
-    seed[-1] = cols[0] - 1
+def create_sparse_array_one_hot_2d(rows: int, cols: int) -> np.ndarray:
+    seed = np.random.randint(low=0, high=cols, size=rows)
+    seed[-1] = cols - 1
     b = np.zeros((seed.size, seed.max() + 1))
     b[np.arange(seed.size), seed] = 1
     return b
