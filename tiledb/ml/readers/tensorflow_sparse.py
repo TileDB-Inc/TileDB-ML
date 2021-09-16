@@ -1,11 +1,13 @@
 """Functionality for loading data directly from TileDB arrays into the Tensorflow Data API."""
-import tiledb
-import tensorflow as tf
-import numpy as np
-from typing import List, Optional
 from functools import partial
-from tensorflow.python.framework import constant_op
+from typing import Iterator, Sequence, Tuple, Union
+
+import numpy as np
+import tensorflow as tf
 from tensorflow.python.data.ops import dataset_ops
+from tensorflow.python.framework import constant_op
+
+import tiledb
 
 
 class TensorflowTileDBSparseDataset(tf.data.Dataset):
@@ -24,16 +26,16 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
         x_array: tiledb.Array,
         y_array: tiledb.Array,
         batch_size: int,
-        x_attribute_names: Optional[List[str]] = [],
-        y_attribute_names: Optional[List[str]] = [],
-    ):
+        x_attribute_names: Sequence[str] = (),
+        y_attribute_names: Sequence[str] = (),
+    ) -> tf.data.Dataset:
         """
         Returns a Tensorflow Dataset object which loads data from TileDB arrays by employing a generator.
         :param x_array: TileDB Sparse Array. Array that contains features.
         :param y_array: TileDB Dense/Sparse Array. Array that contains labels.
         :param batch_size: Integer. The size of the batch that the implemented _generator method will return.
-        :param x_attribute_names: List of str. A list that contains the attribute names of TileDB array x.
-        :param y_attribute_names: List of str. A list that contains the attribute names of TileDB array y.
+        :param x_attribute_names: Sequence of str. A sequence that contains the attribute names of TileDB array x.
+        :param y_attribute_names: Sequence of str. A sequence that contains the attribute names of TileDB array y.
         """
 
         if type(x_array) is tiledb.DenseArray:
@@ -124,7 +126,9 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
             )
 
     @staticmethod
-    def __check_row_dims(x_row_idx: np.array, y_row_idx: np.array, sparse: bool):
+    def __check_row_dims(
+        x_row_idx: np.ndarray, y_row_idx: np.ndarray, sparse: bool
+    ) -> None:
         """
         Check the row dimensionality of x,y in case y is sparse or not
 
@@ -153,17 +157,17 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
         cls,
         x: tiledb.Array,
         y: tiledb.Array,
-        x_attribute_names: List[str],
-        y_attribute_names: List[str],
+        x_attribute_names: Sequence[str],
+        y_attribute_names: Sequence[str],
         rows: int,
         batch_size: int,
-    ) -> tuple:
+    ) -> Iterator[Tuple[tf.sparse.SparseTensor, ...]]:
         """
         A generator function that yields the next training batch.
         :param x: TileDB Sparse array. An opened TileDB array which contains features.
         :param y: TileDB Sparse array. An opened TileDB array which contains labels.
-        :param x_attribute_names: List of str. A list that contains the attribute names of TileDB array x.
-        :param y_attribute_names: List of str. A list that contains the attribute names of TileDB array y.
+        :param x_attribute_names: Sequence of str. A sequence that contains the attribute names of TileDB array x.
+        :param y_attribute_names: Sequence of str. A sequence that contains the attribute names of TileDB array y.
         :param rows: Integer. The number of observations in x, y datasets.
         :param batch_size: Integer. Size of batch, i.e., number of rows returned per call.
         :return: Tuple. Tuple that contains x and y batches.
@@ -223,17 +227,17 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
         cls,
         x: tiledb.Array,
         y: tiledb.Array,
-        x_attribute_names: List[str],
-        y_attribute_names: List[str],
+        x_attribute_names: Sequence[str],
+        y_attribute_names: Sequence[str],
         rows: int,
         batch_size: int,
-    ) -> tuple:
+    ) -> Iterator[Tuple[Union[tf.sparse.SparseTensor, np.ndarray], ...]]:
         """
         A generator function that yields the next training batch.
         :param x: TileDB Sparse array. An opened TileDB array which contains features.
         :param y: TileDB Dense array. An opened TileDB array which contains labels.
-        :param x_attribute_names: List of str. A list that contains the attribute names of TileDB array x.
-        :param y_attribute_names: List of str. A list that contains the attribute names of TileDB array y.
+        :param x_attribute_names: Sequence of str. A sequence that contains the attribute names of TileDB array x.
+        :param y_attribute_names: Sequence of str. A sequence that contains the attribute names of TileDB array y.
         :param rows: Integer. The number of observations in x, y datasets.
         :param batch_size: Integer. Size of batch, i.e., number of rows returned per call.
         :return: Tuple. Tuple that contains x and y batches.
