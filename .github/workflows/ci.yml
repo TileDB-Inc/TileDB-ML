@@ -8,7 +8,7 @@ jobs:
     strategy:
       matrix:
         os: [macos-latest, ubuntu-latest]
-        python-version: [3.6, 3.7, 3.8]
+        python-version: [3.7, 3.8]
 
     steps:
     - uses: actions/checkout@v2
@@ -40,7 +40,7 @@ jobs:
 
     - name: 'Run tests'
       id: tests
-      if: ${{ matrix.os != 'macos-latest' || matrix.python-version != '3.6' }}
+      if: ${{ matrix.os != 'macos-latest' }}
       shell: bash
       run: |
         pip install pytest-mock pytest-cov
@@ -54,7 +54,7 @@ jobs:
 
     - name: 'Run test coverage statistics'
       id: stats
-      if: ${{ matrix.os == 'macos-latest' && matrix.python-version == '3.6' }}
+      if: ${{ matrix.os == 'macos-latest' && matrix.python-version == '3.7' }}
       shell: bash
       run: |
         pip install pytest-mock pytest-cov
@@ -69,7 +69,7 @@ jobs:
         echo "BRANCH=$(echo ${BRANCH_NAME})" >> $GITHUB_ENV
 
     - name: 'Create Test Coverage Badge'
-      if: ${{ matrix.os == 'macos-latest' && matrix.python-version == '3.6' }}
+      if: ${{ matrix.os == 'macos-latest' && matrix.python-version == '3.7' }}
       uses: psf/black@21.7b0
       with:
         auth: ${{ secrets.COVERAGE_SECRET }}
