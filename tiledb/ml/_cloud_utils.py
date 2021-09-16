@@ -1,13 +1,14 @@
 import os
-import tiledb
+from typing import Mapping, Optional
+
 import tiledb.cloud
 
-from typing import Union
+import tiledb
 
 from . import CLOUD_MODELS, FILETYPE_ML_MODEL
 
 
-def get_s3_prefix(namespace: str) -> Union[str, None]:
+def get_s3_prefix(namespace: str) -> Optional[str]:
     """
     Get S3 path from the user profile or organization profile.
     :param namespace: str. User's namespace
@@ -28,7 +29,7 @@ def get_s3_prefix(namespace: str) -> Union[str, None]:
             return None
 
 
-def update_file_properties(uri: str, file_properties: dict):
+def update_file_properties(uri: str, file_properties: Mapping[str, str]) -> None:
     tiledb.cloud.array.update_file_properties(
         uri=uri,
         file_type=FILETYPE_ML_MODEL,
