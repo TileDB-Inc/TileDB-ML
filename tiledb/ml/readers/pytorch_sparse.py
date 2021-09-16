@@ -1,11 +1,16 @@
 """Functionality for loading data directly from sparse TileDB arrays into the PyTorch Dataloader API."""
+
+from typing import Iterator, Sequence, Tuple
+
 import numpy as np
-import tiledb
 import torch
-from typing import List, Optional
+
+import tiledb
+
+DataType = Tuple[torch.Tensor, ...]
 
 
-class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset):
+class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset[DataType]):
     """
     Class that implements all functionality needed to load data from TileDB directly to the
     PyTorch Sparse Dataloader API.
@@ -16,8 +21,8 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset):
         x_array: tiledb.Array,
         y_array: tiledb.Array,
         batch_size: int,
-        x_attribute_names: Optional[List[str]] = [],
-        y_attribute_names: Optional[List[str]] = [],
+        x_attribute_names: Sequence[str] = (),
+        y_attribute_names: Sequence[str] = (),
     ):
         """
         Initialises a PyTorchTileDBSparseDataset that inherits from PyTorch IterableDataset.
@@ -26,8 +31,8 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset):
         tensors but torch does not provide full functionality (experimented) for this case.
         :param batch_size: Integer. The size of the batch that the generator will return. Remember to set batch_size=None
         when calling the PyTorch Sparse Dataloader API, because batching is taking place inside the TileDB IterableDataset.
-        :param x_attribute_names: List of str. A list that contains the attribute names of TileDB array x.
-        :param y_attribute_names: List of str. A list that contains the attribute names of TileDB array y.
+        :param x_attribute_names: Sequence of str. A sequence that contains the attribute names of TileDB array x.
+        :param y_attribute_names: Sequence of str. A sequence that contains the attribute names of TileDB array y.
         """
 
         if type(x_array) is tiledb.DenseArray:
@@ -58,7 +63,7 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset):
             else y_attribute_names
         )
 
-    def __check_row_dims(self, x_row_idx: np.array, y_row_idx: np.array):
+    def __check_row_dims(self, x_row_idx: np.ndarray, y_row_idx: np.ndarray) -> None:
         """
         Check the row dimensionality of x,y in case y is sparse or not
 
@@ -83,8 +88,8 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset):
                 "of TileDB arrays X, Y should be of equal domain extent inside the batch."
             )
 
-    def __iter__(self):
-        worker_info = torch.utils.data.get_worker_info()
+    def __iter__(self) -> Iterator[DataType]:
+        worker_info = torch.utils.data.get_worker_info()  # type: ignore
 
         # Get number of observations
         rows = self.x.schema.domain.shape[0]

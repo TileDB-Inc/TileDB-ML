@@ -1,11 +1,17 @@
 """Functionality for loading data directly from dense TileDB arrays into the PyTorch Dataloader API."""
-import tiledb
-import torch
+
 import math
-from typing import List, Optional
+from typing import Iterator, Sequence, Tuple
+
+import numpy as np
+import torch
+
+import tiledb
+
+DataType = Tuple[np.ndarray, ...]
 
 
-class PyTorchTileDBDenseDataset(torch.utils.data.IterableDataset):
+class PyTorchTileDBDenseDataset(torch.utils.data.IterableDataset[DataType]):
     """
     Class that implements all functionality needed to load data from TileDB directly to the
     PyTorch Dataloader API.
@@ -16,8 +22,8 @@ class PyTorchTileDBDenseDataset(torch.utils.data.IterableDataset):
         x_array: tiledb.Array,
         y_array: tiledb.Array,
         batch_size: int,
-        x_attribute_names: Optional[List[str]] = [],
-        y_attribute_names: Optional[List[str]] = [],
+        x_attribute_names: Sequence[str] = (),
+        y_attribute_names: Sequence[str] = (),
     ):
         """
         Initialises a PyTorchTileDBDenseDataset that inherits from PyTorch IterableDataset.
@@ -25,8 +31,8 @@ class PyTorchTileDBDenseDataset(torch.utils.data.IterableDataset):
         :param y_array: TileDB Dense Array. Array that contains labels.
         :param batch_size: Integer. The size of the batch that the generator will return. Remember to set batch_size=None
         when calling the PyTorch Dataloader API, because batching is taking place inside the TileDB IterableDataset.
-        :param x_attribute_names: List of str. A list that contains the attribute names of TileDB array x.
-        :param y_attribute_names: List of str. A list that contains the attribute names of TileDB array y.
+        :param x_attribute_names: Sequence of str. A sequence that contains the attribute names of TileDB array x.
+        :param y_attribute_names: Sequence of str. A sequence that contains the attribute names of TileDB array y.
         For optimal reads from a TileDB array, it is recommended to set the batch size equal to the tile extent of the
         dimension we query (here, we always query the first dimension of a TileDB array) in order to get a slice (batch)
         of the data. For example, in case the tile extent of the first dimension of a TileDB array (x or y) is equal to
@@ -48,20 +54,16 @@ class PyTorchTileDBDenseDataset(torch.utils.data.IterableDataset):
         self.batch_size = batch_size
 
         # If a user doesn't pass explicit attribute names to return per batch, we return all attributes.
-        self.x_attribute_names = (
-            [x_array.schema.attr(idx).name for idx in range(x_array.schema.nattr)]
-            if not x_attribute_names
-            else x_attribute_names
+        self.x_attribute_names = x_attribute_names or tuple(
+            x_array.schema.attr(idx).name for idx in range(x_array.schema.nattr)
         )
 
-        self.y_attribute_names = (
-            [y_array.schema.attr(idx).name for idx in range(y_array.schema.nattr)]
-            if not y_attribute_names
-            else y_attribute_names
+        self.y_attribute_names = y_attribute_names or tuple(
+            y_array.schema.attr(idx).name for idx in range(y_array.schema.nattr)
         )
 
-    def __iter__(self):
-        worker_info = torch.utils.data.get_worker_info()
+    def __iter__(self) -> Iterator[DataType]:
+        worker_info = torch.utils.data.get_worker_info()  # type: ignore
 
         # Get number of observations
         rows = self.x.schema.domain.shape[0]
@@ -87,5 +89,5 @@ class PyTorchTileDBDenseDataset(torch.utils.data.IterableDataset):
                 y_batch[attr] for attr in self.y_attribute_names
             )
 
-    def __len__(self):
-        return self.x.shape[0]
+    def __len__(self) -> int:
+        return int(self.x.shape[0])
