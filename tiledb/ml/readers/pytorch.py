@@ -19,29 +19,33 @@ class PyTorchTileDBDenseDataset(torch.utils.data.IterableDataset[DataType]):
 
     def __init__(
         self,
-        x_array: tiledb.Array,
-        y_array: tiledb.Array,
+        x_array: tiledb.DenseArray,
+        y_array: tiledb.DenseArray,
         batch_size: int,
         x_attribute_names: Sequence[str] = (),
         y_attribute_names: Sequence[str] = (),
     ):
         """
-        Initialises a PyTorchTileDBDenseDataset that inherits from PyTorch IterableDataset.
-        :param x_array: TileDB Dense Array. Array that contains features.
-        :param y_array: TileDB Dense Array. Array that contains labels.
-        :param batch_size: Integer. The size of the batch that the generator will return. Remember to set batch_size=None
-        when calling the PyTorch Dataloader API, because batching is taking place inside the TileDB IterableDataset.
-        :param x_attribute_names: Sequence of str. A sequence that contains the attribute names of TileDB array x.
-        :param y_attribute_names: Sequence of str. A sequence that contains the attribute names of TileDB array y.
-        For optimal reads from a TileDB array, it is recommended to set the batch size equal to the tile extent of the
-        dimension we query (here, we always query the first dimension of a TileDB array) in order to get a slice (batch)
-        of the data. For example, in case the tile extent of the first dimension of a TileDB array (x or y) is equal to
-        32, it's recommended to set batch_size=32. Any batch size will work, but in case it's not equal the tile extent
-        of the first dimension of the TileDB array, you won't achieve highest read speed. For more details on tiles,
+        Initialize a PyTorchTileDBDenseDataset.
+
+        For optimal reads from a TileDB array, it is recommended to set the batch size
+        equal to the tile extent of the dimension we query (here, we always query the
+        first dimension of a TileDB array) in order to get a slice (batch) of the data.
+        For example, in case the tile extent of the first dimension of a TileDB array
+        (x or y) is equal to 32, it's recommended to set batch_size=32. Any batch size
+        will work, but in case it's not equal the tile extent of the first dimension of
+        the TileDB array, you won't achieve highest read speed. For more details on tiles,
         tile extent and indices in TileDB, please check here:
         https://docs.tiledb.com/main/solutions/tiledb-embedded/performance-tips/choosing-tiling-and-cell-layout#dense-arrays
-        """
 
+        :param x_array: Array that contains features.
+        :param y_array: Array that contains labels.
+        :param batch_size: The size of the batch that the generator will return. Remember
+            to set batch_size=None when calling the PyTorch Dataloader API, because
+            batching is taking place inside the TileDB IterableDataset.
+        :param x_attribute_names: The attribute names of x_array.
+        :param y_attribute_names: The attribute names of y_array.
+        """
         # Check that x and y have the same number of rows
         if x_array.schema.domain.shape[0] != y_array.schema.domain.shape[0]:
             raise ValueError(

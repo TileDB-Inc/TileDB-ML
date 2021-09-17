@@ -11,8 +11,8 @@ from . import CLOUD_MODELS, FILETYPE_ML_MODEL
 def get_s3_prefix(namespace: str) -> Optional[str]:
     """
     Get S3 path from the user profile or organization profile.
-    :param namespace: str. User's namespace
-    :return: str or None. A S3 prefix
+    :param namespace: User's namespace
+    :return: S3 prefix
     """
     profile = tiledb.cloud.client.user_profile()
 

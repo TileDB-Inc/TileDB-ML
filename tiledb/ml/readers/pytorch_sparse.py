@@ -18,23 +18,25 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset[DataType]):
 
     def __init__(
         self,
-        x_array: tiledb.Array,
+        x_array: tiledb.SparseArray,
         y_array: tiledb.Array,
         batch_size: int,
         x_attribute_names: Sequence[str] = (),
         y_attribute_names: Sequence[str] = (),
     ):
         """
-        Initialises a PyTorchTileDBSparseDataset that inherits from PyTorch IterableDataset.
-        :param x_array: TileDB Sparse Array. Array that contains features.
-        :param y_array: TileDB Sparse/Dense Array. Array that contains labels. The sparse tiledb arrays are ingested in sparse
-        tensors but torch does not provide full functionality (experimented) for this case.
-        :param batch_size: Integer. The size of the batch that the generator will return. Remember to set batch_size=None
-        when calling the PyTorch Sparse Dataloader API, because batching is taking place inside the TileDB IterableDataset.
-        :param x_attribute_names: Sequence of str. A sequence that contains the attribute names of TileDB array x.
-        :param y_attribute_names: Sequence of str. A sequence that contains the attribute names of TileDB array y.
-        """
+        Initialize a PyTorchTileDBSparseDataset.
 
+        :param x_array: Array that contains features.
+        :param y_array: Array that contains labels. The sparse tiledb arrays are ingested
+            in sparse tensors but torch does not provide full functionality (experimented)
+            for this case.
+        :param batch_size: The size of the batch that the generator will return. Remember
+            to set batch_size=None when calling the PyTorch Sparse Dataloader API,
+            because batching is taking place inside the TileDB IterableDataset.
+        :param x_attribute_names: The attribute names of x_array.
+        :param y_attribute_names: The attribute names of y_array.
+        """
         if type(x_array) is tiledb.DenseArray:
             raise TypeError(
                 "PyTorchTileDBSparseDataset class should be used with tiledb.SparseArray representation"
@@ -67,15 +69,11 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset[DataType]):
         """
         Check the row dimensionality of x,y in case y is sparse or not
 
-        Parameters:
-            x_row_idx (np.array): Expects the row indices x_coords of x Sparse Array of the
-            dimension that is being batched
-
-            y_row_idx (np.array): if y Sparse Array -> Expects the row indices y_coords of the
-            dimension that is being batched else if y is Dense Array -> data of y
-
-        Raises:
-            ValueError: If unique coords idx of x and y mismatch (both-sparse) or
+        :param x_row_idx: The row indices x_coords of x Sparse Array of the dimension
+            that is being batched
+        :param y_row_idx: if y is sparse array, the row indices y_coords of the dimension
+            that is being batched. If y is dense array, data of y
+        :raises ValueError: If unique coords idx of x and y mismatch (both-sparse) or
             when unique coords idx of x mismatch y elements when y is Dense
         """
         if np.unique(x_row_idx).size != (

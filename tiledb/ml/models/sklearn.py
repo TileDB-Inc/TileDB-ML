@@ -24,10 +24,11 @@ class SklearnTileDBModel(TileDBModel[BaseEstimator]):
 
     def save(self, *, update: bool = False, meta: Optional[Meta] = None) -> None:
         """
-        Saves a Sklearn model as a TileDB array.
-        :param update: Boolean. Whether we should update any existing TileDB array
-        model at the target location.
-        :param meta: Dict. Extra metadata to save in a TileDB array.
+        Save a Sklearn model as a TileDB array.
+
+        :param update: Whether we should update any existing TileDB array model at the
+            target location.
+        :param meta: Extra metadata to save in a TileDB array.
         """
         # Serialize model
         serialized_model = self._serialize_model()
@@ -40,10 +41,11 @@ class SklearnTileDBModel(TileDBModel[BaseEstimator]):
 
     def load(self, *, timestamp: Optional[Timestamp] = None) -> BaseEstimator:
         """
-        Loads a Sklearn model from a TileDB array.
-        :param timestamp: Tuple of int. In case we want to use TileDB time travelling, we can provide a range of
-        timestamps in order to load fragments of the array which live in the specified time range.
-        :return: BaseEstimator. A Sklearn model object.
+        Load a Sklearn model from a TileDB array.
+
+        :param timestamp: Range of timestamps to load fragments of the array which live
+            in the specified time range.
+        :return: A Sklearn model object.
         """
         model_array = tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp)
         model_array_results = model_array[:]
@@ -52,10 +54,12 @@ class SklearnTileDBModel(TileDBModel[BaseEstimator]):
 
     def preview(self, *, display: str = "text") -> str:
         """
-        Creates a text representation of the model.
-        :param display: str. If ‘diagram’, estimators will be displayed as a diagram in an HTML format when shown in a
-        jupyter notebook. If ‘text’, estimators will be displayed as text. Default is ‘text’.
-        :return str. A string representation of the models internal configuration.
+        Create a text representation of the model.
+
+        :param display. If ‘diagram’, estimators will be displayed as a diagram in an
+            HTML format when shown in a jupyter notebook. If ‘text’, estimators will be
+            displayed as text.
+        :return. A string representation of the models internal configuration.
         """
         if self.model:
             with config_context(display=display):
@@ -64,9 +68,7 @@ class SklearnTileDBModel(TileDBModel[BaseEstimator]):
             return ""
 
     def _create_array(self) -> None:
-        """
-        Creates a TileDB array for a Sklearn model.
-        """
+        """Create a TileDB array for a Sklearn model."""
         dom = tiledb.Domain(
             tiledb.Dim(
                 name="model", domain=(1, 1), tile=1, dtype=np.int32, ctx=self.ctx
@@ -95,9 +97,10 @@ class SklearnTileDBModel(TileDBModel[BaseEstimator]):
 
     def _write_array(self, serialized_model: bytes, meta: Optional[Meta]) -> None:
         """
-        Writes a Sklearn model to a TileDB array.
-        :param serialized_model: Bytes. A pickled sklearn model.
-        :param meta: Dict. A dictionary that can contain any kind of metadata in a (key, value) form.
+        Write a Sklearn model to a TileDB array.
+
+        :param serialized_model: A pickled sklearn model.
+        :param meta: Extra metadata to save in a TileDB array.
         """
         with tiledb.open(self.uri, "w", ctx=self.ctx) as tf_model_tiledb:
             # Insertion in TileDB array
@@ -106,7 +109,8 @@ class SklearnTileDBModel(TileDBModel[BaseEstimator]):
 
     def _serialize_model(self) -> bytes:
         """
-        Serializes a Sklearn model with pickle.
-        :return: Bytes. Pickled Sklearn model.
+        Serialize a Sklearn model with pickle.
+
+        :return: Pickled Sklearn model.
         """
         return pickle.dumps(self.model, protocol=4)

@@ -20,26 +20,32 @@ class TensorflowTileDBDenseDataset(FlatMapDataset):
 
     def __new__(
         cls,
-        x_array: tiledb.Array,
-        y_array: tiledb.Array,
+        x_array: tiledb.DenseArray,
+        y_array: tiledb.DenseArray,
         batch_size: int,
         x_attribute_names: Sequence[str] = (),
         y_attribute_names: Sequence[str] = (),
     ) -> TensorflowTileDBDenseDataset:
         """
-        Returns a Tensorflow Dataset object which loads data from TileDB arrays by employing a generator.
-        :param x_array: TileDB Dense Array. Array that contains features.
-        :param y_array: TileDB Dense Array. Array that contains labels.
-        :param batch_size: Integer. The size of the batch that the implemented _generator method will return.
-        :param x_attribute_names: Sequence of str. A sequence that contains the attribute names of TileDB array x.
-        :param y_attribute_names: Sequence of str. A sequence that contains the attribute names of TileDB array y.
-        For optimal reads from a TileDB array, it is recommended to set the batch size equal to the tile extent of the
-        dimension we query (here, we always query the first dimension of a TileDB array) in order to get a slice (batch)
-        of the data. For example, in case the tile extent of the first dimension of a TileDB array (x or y) is equal to
-        32, it's recommended to set batch_size=32. Any batch size will work, but in case it's not equal the tile extent
-        of the first dimension of the TileDB array, you won't achieve highest read speed. For more details on tiles,
+        Return a Tensorflow Dataset object which loads data from TileDB arrays
+        by employing a generator.
+
+        For optimal reads from a TileDB array, it is recommended to set the batch size
+        equal to the tile extent of the dimension we query (here, we always query the
+        first dimension of a TileDB array) in order to get a slice (batch) of the data.
+        For example, in case the tile extent of the first dimension of a TileDB array
+        (x or y) is equal to 32, it's recommended to set batch_size=32. Any batch size
+        will work, but in case it's not equal the tile extent of the first dimension of
+        the TileDB array, you won't achieve highest read speed. For more details on tiles,
         tile extent and indices in TileDB, please check here:
         https://docs.tiledb.com/main/solutions/tiledb-embedded/performance-tips/choosing-tiling-and-cell-layout#dense-arrays
+
+        :param x_array: Array that contains features.
+        :param y_array: Array that contains labels.
+        :param batch_size: The size of the batch that the implemented _generator method
+            will return.
+        :param x_attribute_names: The attribute names of x_array.
+        :param y_attribute_names: The attribute names of y_array.
         """
 
         # Check that x and y have the same number of rows
@@ -118,14 +124,15 @@ class TensorflowTileDBDenseDataset(FlatMapDataset):
         batch_size: int,
     ) -> Iterator[Tuple[np.ndarray, ...]]:
         """
-        A generator function that yields the next training batch.
-        :param x: TileDB array. An opened TileDB array which contains features.
-        :param y: TileDB array. An opened TileDB array which contains labels.
-        :param x_attribute_names: Sequence of str. A sequence that contains the attribute names of TileDB array x.
-        :param y_attribute_names: Sequence of str. A sequence that contains the attribute names of TileDB array y.
-        :param rows: Integer. The number of observations in x, y datasets.
-        :param batch_size: Integer. Size of batch, i.e., number of rows returned per call.
-        :return: Tuple. Tuple that contains x and y batches.
+        Generator for yielding training batches.
+
+        :param x: An opened TileDB array which contains features.
+        :param y: An opened TileDB array which contains labels.
+        :param x_attribute_names: The attribute names of x_array.
+        :param y_attribute_names: The attribute names of y_array.
+        :param rows: The number of observations in x, y datasets.
+        :param batch_size: Size of batch, i.e., number of rows returned per call.
+        :return: An iterator of x and y batches.
         """
         # Loop over batches
         for offset in range(0, rows, batch_size):

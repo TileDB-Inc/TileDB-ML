@@ -40,10 +40,12 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
         include_optimizer: bool = False,
     ) -> None:
         """
-        Saves a Tensorflow model as a TileDB array.
-        :param include_optimizer: Boolean. Whether to save the optimizer or not.
-        :param update: Boolean. Whether we should update any existing TileDB array model at the target location.
-        :param meta: Dict. Extra metadata to save in a TileDB array.
+        Save a Tensorflow model as a TileDB array.
+
+        :param update: Whether we should update any existing TileDB array model at the
+            target location.
+        :param meta: Extra metadata to save in a TileDB array.
+        :param include_optimizer: Whether to save the optimizer or not.
         """
         if self.model is None:
             raise RuntimeError("Model is not initialized")
@@ -76,14 +78,15 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
         input_shape: Optional[Tuple[int, ...]] = None,
     ) -> tf.keras.Model:
         """
-        Loads a Tensorflow model from a TileDB array.
-        :param compile_model: Boolean. Whether to compile the model after loading or not.
-        :param custom_objects: Optional dictionary mapping names (strings) to
-        custom classes or functions to be considered during deserialization.
-        :param timestamp: Tuple of int. In case we want to use TileDB time travelling, we can provide a range of
-        timestamps in order to load fragments of the array which live in the specified time range.
-        :param input_shape: Tuple of integers with the shape that the custom model expects as input
-        :return: Model. Tensorflow model.
+        Load a Tensorflow model from a TileDB array.
+
+        :param timestamp: Range of timestamps to load fragments of the array which live
+            in the specified time range.
+        :param compile_model: Whether to compile the model after loading or not.
+        :param custom_objects: Mapping of names to custom classes or functions to be
+            considered during deserialization.
+        :param input_shape: The shape that the custom model expects as input
+        :return: Tensorflow model.
         """
         with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
             model_array_results = model_array[:]

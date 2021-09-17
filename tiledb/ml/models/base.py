@@ -47,10 +47,12 @@ class TileDBModel(ABC, Generic[Model]):
         and loading machine learning models from TileDB arrays. In case we need to interact
         with TileDB-Cloud we have to pass user's TileDB-Cloud namespace. If we don't
         models will be saved locally.
-        :param uri: str. TileDB array uri
-        :param namespace: str. In case we want to interact (save, load, update, check) with models on
-        TileDB-Cloud we need the user's namespace on TileDB-Cloud. Moreover, array's uri must have an s3 prefix.
-        :param ctx: tiledb.Ctx. TileDB Context.
+
+        :param uri: TileDB array uri
+        :param namespace: In case we want to interact (save, load, update, check) with
+            models on TileDB-Cloud we need the user's namespace on TileDB-Cloud.
+            Moreover, array's uri must have an s3 prefix.
+        :param ctx: TileDB Context.
         :param model: Machine learning model based on the framework we are using.
         """
         self.namespace = namespace
@@ -90,9 +92,10 @@ class TileDBModel(ABC, Generic[Model]):
         self, array: tiledb.Array, meta: Optional[Meta] = None
     ) -> None:
         """
-        This method updates the metadata in a TileDB model array. File properties also go in the metadata section.
-        :param array: tiledb.Array. A TileDB model array.
-        :param meta: dict. A dictionary with the <key, value> pairs that will be inserted in array's metadata.
+        Update the metadata in a TileDB model array. File properties also go in the metadata section.
+
+        :param array: A TileDB model array.
+        :param meta: A mapping with the <key, value> pairs to be inserted in array's metadata.
         """
         # Raise ValueError in case users provide metadata with the same keys as file properties.
         if meta:
@@ -109,12 +112,9 @@ class TileDBModel(ABC, Generic[Model]):
         from tiledb.ml._cloud_utils import get_s3_prefix
 
         s3_prefix = get_s3_prefix(self.namespace)
-
         if s3_prefix is None:
             raise ValueError(
-                "You must set the default s3 prefix path for ML models in {} profile settings on TileDB-Cloud".format(
-                    self.namespace
-                )
+                f"You must set the default s3 prefix path for ML models in "
+                f"{self.namespace} profile settings on TileDB-Cloud"
             )
-
         return "tiledb://{}/{}".format(self.namespace, os.path.join(s3_prefix, uri))
