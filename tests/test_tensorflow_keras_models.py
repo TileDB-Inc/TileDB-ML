@@ -6,7 +6,6 @@ import numpy as np
 import pytest
 import platform
 import io
-import pickle
 
 import tensorflow as tf
 from tensorflow.python.keras.backend import batch_get_value
@@ -534,13 +533,3 @@ def test_exception_raise_file_property_in_meta_error(tmpdir):
         tiledb_obj.save(
             meta={"TILEDB_ML_MODEL_ML_FRAMEWORK": "TILEDB_ML_MODEL_ML_FRAMEWORK"},
         )
-
-
-def test_serialize_model_weights(tmpdir):
-    model = keras.models.Sequential()
-    model.add(keras.layers.Flatten(input_shape=(10, 10)))
-    tiledb_array = os.path.join(tmpdir, "model_array")
-    tiledb_obj = TensorflowKerasTileDBModel(uri=tiledb_array, model=model)
-    assert tiledb_obj._serialize_model_weights() == pickle.dumps(
-        model.get_weights(), protocol=4
-    )
