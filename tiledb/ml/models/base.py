@@ -8,6 +8,10 @@ from typing import Any, Generic, Mapping, Optional, Tuple, TypeVar
 
 import tiledb
 
+Model = TypeVar("Model")
+Meta = Mapping[str, Any]
+Timestamp = Tuple[int, int]
+
 
 @unique
 class ModelFileProperties(Enum):
@@ -20,11 +24,6 @@ class ModelFileProperties(Enum):
     TILEDB_ML_MODEL_STAGE = "TILEDB_ML_MODEL_STAGE"
     TILEDB_ML_MODEL_PYTHON_VERSION = "TILEDB_ML_MODEL_PYTHON_VERSION"
     TILEDB_ML_MODEL_PREVIEW = "TILEDB_ML_MODEL_PREVIEW"
-
-
-Model = TypeVar("Model")
-Meta = Mapping[str, Any]
-Timestamp = Tuple[int, int]
 
 
 class TileDBModel(ABC, Generic[Model]):
@@ -67,27 +66,25 @@ class TileDBModel(ABC, Generic[Model]):
         }
 
     @abstractmethod
-    def save(self, **kwargs: Any) -> None:
-        """
-        Abstract method that saves a machine learning model as a TileDB array.
-        Must be implemented per machine learning framework, i.e, Tensorflow,
-        PyTorch etc.
+    def save(self, *, update: bool = False, meta: Optional[Meta] = None) -> None:
+        """Abstract method that saves a machine learning model as a TileDB array.
+
+        :param update: Whether we should update any existing TileDB array model at the
+            target location.
+        :param meta: Extra metadata to save in a TileDB array.
         """
 
     @abstractmethod
-    def load(self, **kwargs: Any) -> Model:
-        """
-        Abstract method that loads a machine learning model from a model TileDB array.
-        Must be implemented per machine learning framework.
+    def load(self, *, timestamp: Optional[Timestamp] = None) -> Model:
+        """Abstract method that loads a machine learning model from a TileDB array.
+
+        :param timestamp: Range of timestamps to load fragments of the array which live
+            in the specified time range.
         """
 
     @abstractmethod
-    def preview(self, **kwargs: Any) -> str:
-        """
-        Abstract method that previews a machine learning model.
-        Must be implemented per machine learning framework, i.e, Tensorflow,
-        PyTorch etc.
-        """
+    def preview(self) -> str:
+        """Abstract method that previews a machine learning model."""
 
     def update_model_metadata(
         self, array: tiledb.Array, meta: Optional[Meta] = None

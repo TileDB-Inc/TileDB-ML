@@ -34,6 +34,7 @@ class PyTorchTileDBModel(TileDBModel[torch.nn.Module]):
 
     def save(
         self,
+        *,
         update: bool = False,
         meta: Optional[Meta] = None,
         model_info: Optional[Mapping[str, Any]] = None,
@@ -86,6 +87,7 @@ class PyTorchTileDBModel(TileDBModel[torch.nn.Module]):
     # FIXME: This method should change to return the model, not the model_info dict
     def load(  # type: ignore
         self,
+        *,
         model: torch.nn.Module,
         optimizer: Optimizer,
         timestamp: Optional[Timestamp] = None,

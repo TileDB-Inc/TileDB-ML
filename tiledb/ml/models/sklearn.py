@@ -22,7 +22,7 @@ class SklearnTileDBModel(TileDBModel[BaseEstimator]):
     Framework = "SKLEARN"
     FrameworkVersion = sklearn.__version__
 
-    def save(self, update: bool = False, meta: Optional[Meta] = None) -> None:
+    def save(self, *, update: bool = False, meta: Optional[Meta] = None) -> None:
         """
         Saves a Sklearn model as a TileDB array.
         :param update: Boolean. Whether we should update any existing TileDB array
@@ -38,7 +38,7 @@ class SklearnTileDBModel(TileDBModel[BaseEstimator]):
 
         self._write_array(serialized_model=serialized_model, meta=meta)
 
-    def load(self, timestamp: Optional[Timestamp] = None) -> BaseEstimator:
+    def load(self, *, timestamp: Optional[Timestamp] = None) -> BaseEstimator:
         """
         Loads a Sklearn model from a TileDB array.
         :param timestamp: Tuple of int. In case we want to use TileDB time travelling, we can provide a range of
@@ -50,7 +50,7 @@ class SklearnTileDBModel(TileDBModel[BaseEstimator]):
         model = pickle.loads(model_array_results["model_params"].item(0))
         return model
 
-    def preview(self, display: str = "text") -> str:
+    def preview(self, *, display: str = "text") -> str:
         """
         Creates a text representation of the model.
         :param display: str. If ‘diagram’, estimators will be displayed as a diagram in an HTML format when shown in a

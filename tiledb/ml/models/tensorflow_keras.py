@@ -34,6 +34,7 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
 
     def save(
         self,
+        *,
         update: bool = False,
         meta: Optional[Meta] = None,
         include_optimizer: bool = False,
@@ -68,6 +69,7 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
 
     def load(
         self,
+        *,
         timestamp: Optional[Timestamp] = None,
         compile_model: bool = False,
         custom_objects: Optional[Mapping[str, Any]] = None,
