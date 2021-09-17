@@ -1,12 +1,12 @@
 """Base Class for saving and loading machine learning models."""
 
-import abc
 import os
-import tiledb
 import platform
-
-from typing import Optional
+from abc import ABC, abstractmethod
 from enum import Enum, unique
+from typing import Any, Generic, Mapping, Optional, Tuple, TypeVar
+
+import tiledb
 
 
 @unique
@@ -22,21 +22,26 @@ class ModelFileProperties(Enum):
     TILEDB_ML_MODEL_PREVIEW = "TILEDB_ML_MODEL_PREVIEW"
 
 
-class TileDBModel(abc.ABC):
+Model = TypeVar("Model")
+Meta = Mapping[str, Any]
+Timestamp = Tuple[int, int]
+
+
+class TileDBModel(ABC, Generic[Model]):
     """
     This is the base class for all TileDB model storage functionalities, i.e,
     store machine learning models (Tensorflow, PyTorch, etc) as TileDB arrays.
     """
 
-    Framework = None
-    FrameworkVersion = None
+    Framework: Optional[str] = None
+    FrameworkVersion: Optional[str] = None
 
     def __init__(
         self,
         uri: str,
-        namespace: str = None,
-        ctx: tiledb.Ctx = None,
-        model=None,
+        namespace: Optional[str] = None,
+        ctx: Optional[tiledb.Ctx] = None,
+        model: Optional[Model] = None,
     ):
         """
         Base class for saving machine learning models as TileDB arrays
@@ -53,7 +58,6 @@ class TileDBModel(abc.ABC):
         self.ctx = ctx
         self.model = model
         self.uri = self.get_cloud_uri(uri) if self.namespace else uri
-
         self._file_properties = {
             ModelFileProperties.TILEDB_ML_MODEL_ML_FRAMEWORK.value: self.Framework,
             ModelFileProperties.TILEDB_ML_MODEL_ML_FRAMEWORK_VERSION.value: self.FrameworkVersion,
@@ -62,43 +66,47 @@ class TileDBModel(abc.ABC):
             ModelFileProperties.TILEDB_ML_MODEL_PREVIEW.value: self.preview(),
         }
 
-    @abc.abstractmethod
-    def save(self, **kwargs):
+    @abstractmethod
+    def save(self, **kwargs: Any) -> None:
         """
         Abstract method that saves a machine learning model as a TileDB array.
         Must be implemented per machine learning framework, i.e, Tensorflow,
         PyTorch etc.
         """
 
-    @abc.abstractmethod
-    def load(self, **kwargs):
+    @abstractmethod
+    def load(self, **kwargs: Any) -> Model:
         """
         Abstract method that loads a machine learning model from a model TileDB array.
         Must be implemented per machine learning framework.
         """
 
-    @abc.abstractmethod
-    def preview(self, **kwargs):
+    @abstractmethod
+    def preview(self, **kwargs: Any) -> str:
         """
         Abstract method that previews a machine learning model.
         Must be implemented per machine learning framework, i.e, Tensorflow,
         PyTorch etc.
         """
 
-    def update_model_metadata(self, array: tiledb.Array, meta: Optional[dict] = {}):
+    def update_model_metadata(
+        self, array: tiledb.Array, meta: Optional[Meta] = None
+    ) -> None:
         """
         This method updates the metadata in a TileDB model array. File properties also go in the metadata section.
         :param array: tiledb.Array. A TileDB model array.
         :param meta: dict. A dictionary with the <key, value> pairs that will be inserted in array's metadata.
         """
         # Raise ValueError in case users provide metadata with the same keys as file properties.
-        if meta.keys() & self._file_properties.keys():
-            raise ValueError(
-                "Please avoid using file property key names as metadata keys!"
-            )
-        else:
-            for key, value in {**meta, **self._file_properties}.items():
+        if meta:
+            if not meta.keys().isdisjoint(self._file_properties.keys()):
+                raise ValueError(
+                    "Please avoid using file property key names as metadata keys!"
+                )
+            for key, value in meta.items():
                 array.meta[key] = value
+        for key, value in self._file_properties.items():
+            array.meta[key] = value
 
     def get_cloud_uri(self, uri: str) -> str:
         from tiledb.ml._cloud_utils import get_s3_prefix
