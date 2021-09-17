@@ -1,19 +1,19 @@
 """Functionality for saving and loading Sklearn models as TileDB arrays"""
 
 import pickle
+from typing import Optional
+
 import numpy as np
-import tiledb
-
-from typing import Optional, Tuple
-
 import sklearn
 from sklearn import config_context
 from sklearn.base import BaseEstimator
 
-from .base import TileDBModel
+import tiledb
+
+from .base import Meta, TileDBModel, Timestamp
 
 
-class SklearnTileDBModel(TileDBModel):
+class SklearnTileDBModel(TileDBModel[BaseEstimator]):
     """
     Class that implements all functionality needed to save Sklearn models as
     TileDB arrays and load Sklearn models from TileDB arrays.
@@ -22,7 +22,7 @@ class SklearnTileDBModel(TileDBModel):
     Framework = "SKLEARN"
     FrameworkVersion = sklearn.__version__
 
-    def save(self, update: bool = False, meta: Optional[dict] = {}):
+    def save(self, update: bool = False, meta: Optional[Meta] = None) -> None:
         """
         Saves a Sklearn model as a TileDB array.
         :param update: Boolean. Whether we should update any existing TileDB array
@@ -38,7 +38,7 @@ class SklearnTileDBModel(TileDBModel):
 
         self._write_array(serialized_model=serialized_model, meta=meta)
 
-    def load(self, timestamp: Optional[Tuple[int, int]] = None) -> BaseEstimator:
+    def load(self, timestamp: Optional[Timestamp] = None) -> BaseEstimator:
         """
         Loads a Sklearn model from a TileDB array.
         :param timestamp: Tuple of int. In case we want to use TileDB time travelling, we can provide a range of
@@ -63,7 +63,7 @@ class SklearnTileDBModel(TileDBModel):
         else:
             return ""
 
-    def _create_array(self):
+    def _create_array(self) -> None:
         """
         Creates a TileDB array for a Sklearn model.
         """
@@ -93,7 +93,7 @@ class SklearnTileDBModel(TileDBModel):
 
             update_file_properties(self.uri, self._file_properties)
 
-    def _write_array(self, serialized_model: bytes, meta: Optional[dict]):
+    def _write_array(self, serialized_model: bytes, meta: Optional[Meta]) -> None:
         """
         Writes a Sklearn model to a TileDB array.
         :param serialized_model: Bytes. A pickled sklearn model.
@@ -102,7 +102,6 @@ class SklearnTileDBModel(TileDBModel):
         with tiledb.open(self.uri, "w", ctx=self.ctx) as tf_model_tiledb:
             # Insertion in TileDB array
             tf_model_tiledb[:] = {"model_params": np.array([serialized_model])}
-
             self.update_model_metadata(array=tf_model_tiledb, meta=meta)
 
     def _serialize_model(self) -> bytes:
