@@ -1,13 +1,12 @@
 """Tests for TileDB Sklearn model save and load."""
 
-import pytest
 import os
 import platform
+from itertools import zip_longest
 
+import pytest
 import sklearn
 import sklearn.base
-
-from itertools import zip_longest
 
 from tiledb.ml.models.sklearn import SklearnTileDBModel
 

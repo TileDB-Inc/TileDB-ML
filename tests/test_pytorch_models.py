@@ -1,15 +1,15 @@
 """Tests for TileDB PyTorch model save and load."""
 
-import pytest
 import inspect
-import sys
 import os
 import platform
+import sys
 
+import pytest
 import torch
 import torch.nn as nn
-import torch.optim as optimizers
 import torch.nn.functional as F
+import torch.optim as optimizers
 
 from tiledb.ml.models.pytorch import PyTorchTileDBModel
 

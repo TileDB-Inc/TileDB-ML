@@ -1,24 +1,21 @@
 """Tests for TileDB Tensorflow Keras model save and load."""
 
+import io
 import os
-import tiledb
+import platform
+
 import numpy as np
 import pytest
-import platform
-import io
-
 import tensorflow as tf
-from tensorflow.python.keras.backend import batch_get_value
-
 from tensorflow.python import keras
 from tensorflow.python.feature_column import feature_column_lib
 from tensorflow.python.framework import sparse_tensor
-
-from tensorflow.python.keras import optimizers
-from tensorflow.python.keras import testing_utils
+from tensorflow.python.keras import optimizers, testing_utils
+from tensorflow.python.keras.backend import batch_get_value
 from tensorflow.python.keras.feature_column import dense_features
 from tensorflow.python.keras.feature_column import sequence_feature_column as ksfc
 
+import tiledb
 from tiledb.ml.models.tensorflow_keras import TensorflowKerasTileDBModel
 
 # Suppress all Tensorflow messages
