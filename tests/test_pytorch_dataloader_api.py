@@ -1,13 +1,15 @@
 """Tests for TileDB integration with PyTorch Data API for Dense Arrays."""
 
 import os
-import torch
-import tiledb
+
 import numpy as np
 import pytest
+import torch
 
+import tiledb
 from tiledb.ml.readers.pytorch import PyTorchTileDBDenseDataset
-from tiledb.ml._utils import ingest_in_tiledb
+
+from .utils import ingest_in_tiledb
 
 # Test parameters
 NUM_OF_CLASSES = 5
@@ -36,22 +38,19 @@ class TestPytorchDenseDataloader:
     def test_tiledb_pytorch_data_api_train_with_multiple_dim_data(
         self, tmpdir, input_shape, workers, num_of_attributes
     ):
-        dataset_shape_x = (ROWS,) + input_shape
-        dataset_shape_y = (ROWS,)
-
         tiledb_uri_x = os.path.join(tmpdir, "x")
         tiledb_uri_y = os.path.join(tmpdir, "y")
 
         ingest_in_tiledb(
             uri=tiledb_uri_x,
-            data=np.random.rand(*dataset_shape_x),
+            data=np.random.rand(ROWS, *input_shape),
             batch_size=BATCH_SIZE,
             sparse=False,
             num_of_attributes=num_of_attributes,
         )
         ingest_in_tiledb(
             uri=tiledb_uri_y,
-            data=np.random.randint(low=0, high=NUM_OF_CLASSES, size=dataset_shape_y),
+            data=np.random.randint(low=0, high=NUM_OF_CLASSES, size=ROWS),
             batch_size=BATCH_SIZE,
             sparse=False,
             num_of_attributes=num_of_attributes,
@@ -85,20 +84,17 @@ class TestPytorchDenseDataloader:
         tiledb_uri_x = os.path.join(tmpdir, "x")
         tiledb_uri_y = os.path.join(tmpdir, "y")
 
-        # Add one extra row on X
-        dataset_shape_x = (ROWS + 1,) + input_shape
-        dataset_shape_y = (ROWS, NUM_OF_CLASSES)
-
         ingest_in_tiledb(
             uri=tiledb_uri_x,
-            data=np.random.rand(*dataset_shape_x),
+            # Add one extra row on X
+            data=np.random.rand(ROWS + 1, *input_shape),
             batch_size=BATCH_SIZE,
             sparse=False,
             num_of_attributes=num_of_attributes,
         )
         ingest_in_tiledb(
             uri=tiledb_uri_y,
-            data=np.random.rand(*dataset_shape_y),
+            data=np.random.rand(ROWS, NUM_OF_CLASSES),
             batch_size=BATCH_SIZE,
             sparse=False,
             num_of_attributes=num_of_attributes,
@@ -122,19 +118,16 @@ class TestPytorchDenseDataloader:
         tiledb_uri_x = os.path.join(tmpdir, "x")
         tiledb_uri_y = os.path.join(tmpdir, "y")
 
-        dataset_shape_x = (ROWS,) + input_shape
-        dataset_shape_y = (ROWS,)
-
         ingest_in_tiledb(
             uri=tiledb_uri_x,
-            data=np.random.rand(*dataset_shape_x),
+            data=np.random.rand(ROWS, *input_shape),
             batch_size=BATCH_SIZE,
             sparse=False,
             num_of_attributes=num_of_attributes,
         )
         ingest_in_tiledb(
             uri=tiledb_uri_y,
-            data=np.random.randint(low=0, high=NUM_OF_CLASSES, size=dataset_shape_y),
+            data=np.random.randint(low=0, high=NUM_OF_CLASSES, size=ROWS),
             batch_size=BATCH_SIZE,
             sparse=False,
             num_of_attributes=num_of_attributes,
@@ -167,23 +160,19 @@ class TestPytorchDenseDataloader:
     def test_dataset_generator_batch_output(
         self, tmpdir, input_shape, workers, mocker, num_of_attributes
     ):
-
         tiledb_uri_x = os.path.join(tmpdir, "x")
         tiledb_uri_y = os.path.join(tmpdir, "y")
 
-        dataset_shape_x = (ROWS,) + input_shape[1:]
-        dataset_shape_y = (ROWS, NUM_OF_CLASSES)
-
         ingest_in_tiledb(
             uri=tiledb_uri_x,
-            data=np.random.rand(*dataset_shape_x),
+            data=np.random.rand(ROWS, *input_shape[1:]),
             batch_size=BATCH_SIZE,
             sparse=False,
             num_of_attributes=num_of_attributes,
         )
         ingest_in_tiledb(
             uri=tiledb_uri_y,
-            data=np.random.rand(*dataset_shape_y),
+            data=np.random.rand(ROWS, NUM_OF_CLASSES),
             batch_size=BATCH_SIZE,
             sparse=False,
             num_of_attributes=num_of_attributes,
@@ -220,19 +209,16 @@ class TestPytorchDenseDataloader:
         tiledb_uri_x = os.path.join(tmpdir, "x")
         tiledb_uri_y = os.path.join(tmpdir, "y")
 
-        dataset_shape_x = (ROWS,) + input_shape
-        dataset_shape_y = (ROWS,)
-
         ingest_in_tiledb(
             uri=tiledb_uri_x,
-            data=np.random.rand(*dataset_shape_x),
+            data=np.random.rand(ROWS, *input_shape),
             batch_size=BATCH_SIZE,
             sparse=False,
             num_of_attributes=num_of_attributes,
         )
         ingest_in_tiledb(
             uri=tiledb_uri_y,
-            data=np.random.randint(low=0, high=NUM_OF_CLASSES, size=dataset_shape_y),
+            data=np.random.randint(low=0, high=NUM_OF_CLASSES, size=ROWS),
             batch_size=BATCH_SIZE,
             sparse=False,
             num_of_attributes=num_of_attributes,

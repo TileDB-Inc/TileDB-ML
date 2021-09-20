@@ -1,25 +1,21 @@
 """Tests for TileDB Tensorflow Keras model save and load."""
 
+import io
 import os
-import tiledb
+import platform
+
 import numpy as np
 import pytest
-import platform
-import io
-import pickle
-
 import tensorflow as tf
-from tensorflow.python.keras.backend import batch_get_value
-
 from tensorflow.python import keras
 from tensorflow.python.feature_column import feature_column_lib
 from tensorflow.python.framework import sparse_tensor
-
-from tensorflow.python.keras import optimizers
-from tensorflow.python.keras import testing_utils
+from tensorflow.python.keras import optimizers, testing_utils
+from tensorflow.python.keras.backend import batch_get_value
 from tensorflow.python.keras.feature_column import dense_features
 from tensorflow.python.keras.feature_column import sequence_feature_column as ksfc
 
+import tiledb
 from tiledb.ml.models.tensorflow_keras import TensorflowKerasTileDBModel
 
 # Suppress all Tensorflow messages
@@ -534,13 +530,3 @@ def test_exception_raise_file_property_in_meta_error(tmpdir):
         tiledb_obj.save(
             meta={"TILEDB_ML_MODEL_ML_FRAMEWORK": "TILEDB_ML_MODEL_ML_FRAMEWORK"},
         )
-
-
-def test_serialize_model_weights(tmpdir):
-    model = keras.models.Sequential()
-    model.add(keras.layers.Flatten(input_shape=(10, 10)))
-    tiledb_array = os.path.join(tmpdir, "model_array")
-    tiledb_obj = TensorflowKerasTileDBModel(uri=tiledb_array, model=model)
-    assert tiledb_obj._serialize_model_weights() == pickle.dumps(
-        model.get_weights(), protocol=4
-    )

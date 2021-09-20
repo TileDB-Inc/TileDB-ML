@@ -1,14 +1,16 @@
 """Tests for TileDB integration with Tensorflow Data API."""
 
 import os
-import tiledb
-import numpy as np
 import uuid
+
+import numpy as np
 import pytest
 import tensorflow as tf
 
+import tiledb
 from tiledb.ml.readers.tensorflow import TensorflowTileDBDenseDataset
-from tiledb.ml._utils import ingest_in_tiledb
+
+from .utils import ingest_in_tiledb
 
 # Suppress all Tensorflow messages
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
@@ -42,19 +44,16 @@ class TestTileDBTensorflowDataAPI:
         tiledb_uri_x = os.path.join(tmpdir, "x" + array_uuid)
         tiledb_uri_y = os.path.join(tmpdir, "y" + array_uuid)
 
-        dataset_shape_x = (ROWS,) + input_shape[1:]
-        dataset_shape_y = (ROWS, NUM_OF_CLASSES)
-
         ingest_in_tiledb(
             uri=tiledb_uri_x,
-            data=np.random.rand(*dataset_shape_x),
+            data=np.random.rand(ROWS, *input_shape[1:]),
             batch_size=BATCH_SIZE,
             sparse=False,
             num_of_attributes=num_of_attributes,
         )
         ingest_in_tiledb(
             uri=tiledb_uri_y,
-            data=np.random.rand(*dataset_shape_y),
+            data=np.random.rand(ROWS, NUM_OF_CLASSES),
             batch_size=BATCH_SIZE,
             sparse=False,
             num_of_attributes=num_of_attributes,
@@ -91,20 +90,17 @@ class TestTileDBTensorflowDataAPI:
         tiledb_uri_x = os.path.join(tmpdir, "x" + array_uuid)
         tiledb_uri_y = os.path.join(tmpdir, "y" + array_uuid)
 
-        # Add one extra row on X
-        dataset_shape_x = (ROWS + 1,) + input_shape[1:]
-        dataset_shape_y = (ROWS, NUM_OF_CLASSES)
-
         ingest_in_tiledb(
             uri=tiledb_uri_x,
-            data=np.random.rand(*dataset_shape_x),
+            # Add one extra row on X
+            data=np.random.rand(ROWS + 1, *input_shape[1:]),
             batch_size=BATCH_SIZE,
             sparse=False,
             num_of_attributes=num_of_attributes,
         )
         ingest_in_tiledb(
             uri=tiledb_uri_y,
-            data=np.random.rand(*dataset_shape_y),
+            data=np.random.rand(ROWS, NUM_OF_CLASSES),
             batch_size=BATCH_SIZE,
             sparse=False,
             num_of_attributes=num_of_attributes,
@@ -138,19 +134,16 @@ class TestTileDBTensorflowDataAPI:
         tiledb_uri_x = os.path.join(tmpdir, "x" + array_uuid)
         tiledb_uri_y = os.path.join(tmpdir, "y" + array_uuid)
 
-        dataset_shape_x = (ROWS,) + input_shape[1:]
-        dataset_shape_y = (ROWS, NUM_OF_CLASSES)
-
         ingest_in_tiledb(
             uri=tiledb_uri_x,
-            data=np.random.rand(*dataset_shape_x),
+            data=np.random.rand(ROWS, *input_shape[1:]),
             batch_size=BATCH_SIZE,
             sparse=False,
             num_of_attributes=num_of_attributes,
         )
         ingest_in_tiledb(
             uri=tiledb_uri_y,
-            data=np.random.rand(*dataset_shape_y),
+            data=np.random.rand(ROWS, NUM_OF_CLASSES),
             batch_size=BATCH_SIZE,
             sparse=False,
             num_of_attributes=num_of_attributes,
@@ -187,19 +180,16 @@ class TestTileDBTensorflowDataAPI:
         tiledb_uri_x = os.path.join(tmpdir, "x" + array_uuid)
         tiledb_uri_y = os.path.join(tmpdir, "y" + array_uuid)
 
-        dataset_shape_x = (ROWS,) + input_shape[1:]
-        dataset_shape_y = (ROWS, NUM_OF_CLASSES)
-
         ingest_in_tiledb(
             uri=tiledb_uri_x,
-            data=np.random.rand(*dataset_shape_x),
+            data=np.random.rand(ROWS, *input_shape[1:]),
             batch_size=BATCH_SIZE,
             sparse=False,
             num_of_attributes=num_of_attributes,
         )
         ingest_in_tiledb(
             uri=tiledb_uri_y,
-            data=np.random.rand(*dataset_shape_y),
+            data=np.random.rand(ROWS, NUM_OF_CLASSES),
             batch_size=BATCH_SIZE,
             sparse=False,
             num_of_attributes=num_of_attributes,

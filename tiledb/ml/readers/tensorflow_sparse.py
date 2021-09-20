@@ -1,11 +1,13 @@
 """Functionality for loading data directly from TileDB arrays into the Tensorflow Data API."""
-import tiledb
-import tensorflow as tf
-import numpy as np
-from typing import List, Optional
 from functools import partial
-from tensorflow.python.framework import constant_op
+from typing import Iterator, Sequence, Tuple, Union
+
+import numpy as np
+import tensorflow as tf
 from tensorflow.python.data.ops import dataset_ops
+from tensorflow.python.framework import constant_op
+
+import tiledb
 
 
 class TensorflowTileDBSparseDataset(tf.data.Dataset):
@@ -21,21 +23,23 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
 
     def __new__(
         cls,
-        x_array: tiledb.Array,
+        x_array: tiledb.SparseArray,
         y_array: tiledb.Array,
         batch_size: int,
-        x_attribute_names: Optional[List[str]] = [],
-        y_attribute_names: Optional[List[str]] = [],
-    ):
+        x_attribute_names: Sequence[str] = (),
+        y_attribute_names: Sequence[str] = (),
+    ) -> tf.data.Dataset:
         """
-        Returns a Tensorflow Dataset object which loads data from TileDB arrays by employing a generator.
-        :param x_array: TileDB Sparse Array. Array that contains features.
-        :param y_array: TileDB Dense/Sparse Array. Array that contains labels.
-        :param batch_size: Integer. The size of the batch that the implemented _generator method will return.
-        :param x_attribute_names: List of str. A list that contains the attribute names of TileDB array x.
-        :param y_attribute_names: List of str. A list that contains the attribute names of TileDB array y.
-        """
+        Return a Tensorflow Dataset object which loads data from TileDB arrays by
+        employing a generator.
 
+        :param x_array: Array that contains features.
+        :param y_array: Array that contains labels.
+        :param batch_size: The size of the batch that the implemented _generator method
+            will return.
+        :param x_attribute_names: The attribute names of x_array.
+        :param y_attribute_names: The attribute names of y_array.
+        """
         if type(x_array) is tiledb.DenseArray:
             raise TypeError(
                 "TensorflowTileDBSparseDataset class should be used with tiledb.SparseArray representation"
@@ -48,7 +52,7 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
                 "of TileDB arrays X, Y should be of equal domain extent."
             )
 
-        # If a user doesn't pass explicit attribute names to return per batch, we return all attributes.
+        # If no attribute names are passed explicitly, return all attributes
         if not x_attribute_names:
             x_attribute_names = [
                 x_array.schema.attr(idx).name for idx in range(x_array.schema.nattr)
@@ -124,20 +128,17 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
             )
 
     @staticmethod
-    def __check_row_dims(x_row_idx: np.array, y_row_idx: np.array, sparse: bool):
+    def __check_row_dims(
+        x_row_idx: np.ndarray, y_row_idx: np.ndarray, sparse: bool
+    ) -> None:
         """
         Check the row dimensionality of x,y in case y is sparse or not
 
-        Parameters:
-
-            x_row_idx (np.array): Expects the row indices x_coords of x Sparse Array of the
-            dimension that is being batched
-
-            y_row_idx (np.array): if y Sparse Array -> Expects the row indices y_coords of the
-            dimension that is being batched else if y is Dense Array -> data of y
-
-        Raises:
-            ValueError: If unique coords idx of x and y mismatch (both-sparse) or
+        :param x_row_idx: The row indices x_coords of x Sparse Array of the dimension
+            that is being batched
+        :param y_row_idx: if y is sparse array, the row indices y_coords of the dimension
+            that is being batched. If y is dense array, data of y
+        :raises ValueError: If unique coords idx of x and y mismatch (both-sparse) or
             when unique coords idx of x mismatch y elements when y is Dense
         """
         if np.unique(x_row_idx).size != (
@@ -153,22 +154,22 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
         cls,
         x: tiledb.Array,
         y: tiledb.Array,
-        x_attribute_names: List[str],
-        y_attribute_names: List[str],
+        x_attribute_names: Sequence[str],
+        y_attribute_names: Sequence[str],
         rows: int,
         batch_size: int,
-    ) -> tuple:
+    ) -> Iterator[Tuple[tf.sparse.SparseTensor, ...]]:
         """
-        A generator function that yields the next training batch.
-        :param x: TileDB Sparse array. An opened TileDB array which contains features.
-        :param y: TileDB Sparse array. An opened TileDB array which contains labels.
-        :param x_attribute_names: List of str. A list that contains the attribute names of TileDB array x.
-        :param y_attribute_names: List of str. A list that contains the attribute names of TileDB array y.
-        :param rows: Integer. The number of observations in x, y datasets.
-        :param batch_size: Integer. Size of batch, i.e., number of rows returned per call.
-        :return: Tuple. Tuple that contains x and y batches.
-        """
+        Generator for yielding training batches.
 
+        :param x: An opened TileDB array which contains features.
+        :param y: An opened TileDB array which contains labels.
+        :param x_attribute_names: The attribute names of x_array.
+        :param y_attribute_names: The attribute names of y_array.
+        :param rows: The number of observations in x, y datasets.
+        :param batch_size: Size of batch, i.e., number of rows returned per call.
+        :return: An iterator of x and y batches.
+        """
         x_shape = x.schema.domain.shape[1:]
         y_shape = y.schema.domain.shape[1:]
 
@@ -189,9 +190,10 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
                 dim_name = y.schema.domain.dim(i).name
                 y_coords.append(np.array(y_batch[dim_name]))
 
-            # Normalise indices for torch.sparse.Tensor We want the coords indices in every iteration
-            # to be in the range of [0, self.batch_size] so the torch.sparse.Tensors can be created batch-wise.
-            # If we do not normalise the sparse tensor is being created but with a dimension [0, max(coord_index)],
+            # Normalise indices for torch.sparse.Tensor We want the coords indices in
+            # every iteration to be in the range of [0, self.batch_size] so the
+            # torch.sparse.Tensors can be created batch-wise. If we do not normalise the
+            # sparse tensor is being created but with a dimension [0, max(coord_index)],
             # which is overkill
             x_coords[0] -= x_coords[0].min()
             y_coords[0] -= y_coords[0].min()
@@ -223,20 +225,21 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
         cls,
         x: tiledb.Array,
         y: tiledb.Array,
-        x_attribute_names: List[str],
-        y_attribute_names: List[str],
+        x_attribute_names: Sequence[str],
+        y_attribute_names: Sequence[str],
         rows: int,
         batch_size: int,
-    ) -> tuple:
+    ) -> Iterator[Tuple[Union[tf.sparse.SparseTensor, np.ndarray], ...]]:
         """
-        A generator function that yields the next training batch.
-        :param x: TileDB Sparse array. An opened TileDB array which contains features.
-        :param y: TileDB Dense array. An opened TileDB array which contains labels.
-        :param x_attribute_names: List of str. A list that contains the attribute names of TileDB array x.
-        :param y_attribute_names: List of str. A list that contains the attribute names of TileDB array y.
-        :param rows: Integer. The number of observations in x, y datasets.
-        :param batch_size: Integer. Size of batch, i.e., number of rows returned per call.
-        :return: Tuple. Tuple that contains x and y batches.
+        Generator for yielding training batches.
+
+        :param x: An opened TileDB array which contains features.
+        :param y: An opened TileDB array which contains labels.
+        :param x_attribute_names: The attribute names of x_array.
+        :param y_attribute_names: The attribute names of y_array.
+        :param rows: The number of observations in x, y datasets.
+        :param batch_size: Size of batch, i.e., number of rows returned per call.
+        :return: An iterator of x and y batches.
         """
         x_shape = x.schema.domain.shape[1:]
 
@@ -251,9 +254,10 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
                 dim_name = x.schema.domain.dim(i).name
                 x_coords.append(np.array(x_batch[dim_name]))
 
-            # Normalise indices for torch.sparse.Tensor We want the coords indices in every iteration
-            # to be in the range of [0, self.batch_size] so the torch.sparse.Tensors can be created batch-wise.
-            # If we do not normalise the sparse tensor is being created but with a dimension [0, max(coord_index)],
+            # Normalise indices for torch.sparse.Tensor We want the coords indices in
+            # every iteration to be in the range of [0, self.batch_size] so the
+            # torch.sparse.Tensors can be created batch-wise. If we do not normalise the
+            # sparse tensor is being created but with a dimension [0, max(coord_index)],
             # which is overkill
             x_coords[0] -= x_coords[0].min()
 

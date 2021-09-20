@@ -1,29 +1,29 @@
 """Functionality for saving and loading Tensorflow Keras models as TileDB arrays"""
 
 import io
-import logging
 import json
+import logging
 import pickle
+from operator import attrgetter
+from typing import Any, List, Mapping, Optional, Tuple
+
 import numpy as np
 import tensorflow as tf
-import tiledb
-
-from typing import Optional, Tuple
-
-from tensorflow.python.keras.models import Model, Sequential
+from tensorflow.python.keras import backend, optimizer_v1
 from tensorflow.python.keras.engine.functional import Functional
-from tensorflow.python.keras import optimizer_v1
+from tensorflow.python.keras.models import Sequential
+from tensorflow.python.keras.saving import model_config as model_config_lib
 from tensorflow.python.keras.saving import saving_utils
+from tensorflow.python.keras.saving.hdf5_format import preprocess_weights_for_loading
 from tensorflow.python.keras.saving.saved_model import json_utils
 from tensorflow.python.keras.utils import generic_utils
-from tensorflow.python.keras.saving import model_config as model_config_lib
-from tensorflow.python.keras import backend
-from tensorflow.python.keras.saving.hdf5_format import preprocess_weights_for_loading
 
-from .base import TileDBModel
+import tiledb
+
+from .base import Meta, TileDBModel, Timestamp
 
 
-class TensorflowKerasTileDBModel(TileDBModel):
+class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
     """
     Class that implements all functionality needed to save Tensorflow models as
     TileDB arrays and load Tensorflow models from TileDB arrays.
@@ -34,16 +34,22 @@ class TensorflowKerasTileDBModel(TileDBModel):
 
     def save(
         self,
-        include_optimizer: bool = False,
+        *,
         update: bool = False,
-        meta: Optional[dict] = {},
-    ):
+        meta: Optional[Meta] = None,
+        include_optimizer: bool = False,
+    ) -> None:
         """
-        Saves a Tensorflow model as a TileDB array.
-        :param include_optimizer: Boolean. Whether to save the optimizer or not.
-        :param update: Boolean. Whether we should update any existing TileDB array model at the target location.
-        :param meta: Dict. Extra metadata to save in a TileDB array.
+        Save a Tensorflow model as a TileDB array.
+
+        :param update: Whether we should update any existing TileDB array model at the
+            target location.
+        :param meta: Extra metadata to save in a TileDB array.
+        :param include_optimizer: Whether to save the optimizer or not.
         """
+        if self.model is None:
+            raise RuntimeError("Model is not initialized")
+
         # Used in this format only when model is Functional or Sequential
         model_weights = pickle.dumps(self.model.get_weights(), protocol=4)
 
@@ -65,22 +71,23 @@ class TensorflowKerasTileDBModel(TileDBModel):
 
     def load(
         self,
+        *,
+        timestamp: Optional[Timestamp] = None,
         compile_model: bool = False,
-        custom_objects: Optional[dict] = None,
-        timestamp: Optional[Tuple[int, int]] = None,
+        custom_objects: Optional[Mapping[str, Any]] = None,
         input_shape: Optional[Tuple[int, ...]] = None,
-    ) -> Model:
+    ) -> tf.keras.Model:
         """
-        Loads a Tensorflow model from a TileDB array.
-        :param compile_model: Boolean. Whether to compile the model after loading or not.
-        :param custom_objects: Optional dictionary mapping names (strings) to
-        custom classes or functions to be considered during deserialization.
-        :param timestamp: Tuple of int. In case we want to use TileDB time travelling, we can provide a range of
-        timestamps in order to load fragments of the array which live in the specified time range.
-        :param input_shape: Tuple of integers with the shape that the custom model expects as input
-        :return: Model. Tensorflow model.
-        """
+        Load a Tensorflow model from a TileDB array.
 
+        :param timestamp: Range of timestamps to load fragments of the array which live
+            in the specified time range.
+        :param compile_model: Whether to compile the model after loading or not.
+        :param custom_objects: Mapping of names to custom classes or functions to be
+            considered during deserialization.
+        :param input_shape: The shape that the custom model expects as input
+        :return: Tensorflow model.
+        """
         with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
             model_array_results = model_array[:]
             model_config = json.loads(model_array.meta["model_config"])
@@ -148,10 +155,7 @@ class TensorflowKerasTileDBModel(TileDBModel):
             return model
 
     def preview(self) -> str:
-        """
-        Creates a string representation of the model.
-        :return: str. A string representation of the models internal configuration.
-        """
+        """Create a string representation of the model."""
         if self.model:
             s = io.StringIO()
             self.model.summary(print_fn=lambda x: s.write(x + "\n"))
@@ -160,11 +164,9 @@ class TensorflowKerasTileDBModel(TileDBModel):
         else:
             return ""
 
-    def _create_array(self):
-        """
-        Creates a TileDB array for a Tensorflow model
-        """
-
+    def _create_array(self) -> None:
+        """Create a TileDB array for a Tensorflow model"""
+        assert self.model
         dom = tiledb.Domain(
             tiledb.Dim(
                 name="model", domain=(1, 1), tile=1, dtype=np.int32, ctx=self.ctx
@@ -251,13 +253,11 @@ class TensorflowKerasTileDBModel(TileDBModel):
         include_optimizer: bool,
         serialized_weights: bytes,
         serialized_optimizer_weights: bytes,
-        meta: Optional[dict],
-    ):
-        """
-        Writes Tensorflow model to a TileDB array.
-        """
+        meta: Optional[Meta],
+    ) -> None:
+        """Write Tensorflow model to a TileDB array."""
+        assert self.model
         with tiledb.open(self.uri, "w", ctx=self.ctx) as tf_model_tiledb:
-
             if isinstance(self.model, (Functional, Sequential)):
                 tf_model_tiledb[:] = {
                     "model_weights": np.array([serialized_weights]),
@@ -268,7 +268,7 @@ class TensorflowKerasTileDBModel(TileDBModel):
                 layer_names = []
                 weight_names = []
                 weight_values = []
-                for layer in sorted(self.model.layers, key=lambda x: x.name):
+                for layer in sorted(self.model.layers, key=attrgetter("name")):
                     weights = layer.trainable_weights + layer.non_trainable_weights
                     weight_values.append(pickle.dumps(backend.batch_get_value(weights)))
                     weight_names.append(
@@ -298,16 +298,9 @@ class TensorflowKerasTileDBModel(TileDBModel):
 
             self.update_model_metadata(array=tf_model_tiledb, meta=meta)
 
-    def _serialize_model_weights(self) -> bytes:
-        """
-        Serialization of model weights
-        """
-        return pickle.dumps(self.model.get_weights(), protocol=4)
-
     def _serialize_optimizer_weights(self, include_optimizer: bool = True) -> bytes:
-        """
-        Serialization of optimizer weights
-        """
+        """Serialize optimizer weights"""
+        assert self.model
         if (
             include_optimizer
             and self.model.optimizer
@@ -322,8 +315,9 @@ class TensorflowKerasTileDBModel(TileDBModel):
         else:
             return b""
 
-    def _load_custom_subclassed_model(self, model, model_array):
-
+    def _load_custom_subclassed_model(
+        self, model: tf.keras.Model, model_array: tiledb.Array
+    ) -> None:
         if "keras_version" in model_array.meta:
             original_keras_version = model_array.meta["keras_version"]
             if hasattr(original_keras_version, "decode"):
@@ -339,21 +333,21 @@ class TensorflowKerasTileDBModel(TileDBModel):
 
         # Load weights for layers
         self._load_weights_from_tiledb(
-            model_array[:], model.layers, original_keras_version, original_backend
+            model_array[:], model, original_keras_version, original_backend
         )
 
     def _load_weights_from_tiledb(
         self,
-        model_array_results,
-        symbolic_layers,
-        original_keras_version,
-        original_backend,
-    ):
-        symbolic_layer_names = []
-        for layer in symbolic_layers:
+        model_array_results: Mapping[str, Any],
+        model: tf.keras.Model,
+        original_keras_version: Optional[str],
+        original_backend: Optional[str],
+    ) -> None:
+        num_layers = 0
+        for layer in model.layers:
             weights = layer.trainable_weights + layer.non_trainable_weights
             if weights:
-                symbolic_layer_names.append(layer)
+                num_layers += 1
 
         read_layer_names = []
         for k, name in enumerate(model_array_results["layer_name"]):
@@ -363,23 +357,27 @@ class TensorflowKerasTileDBModel(TileDBModel):
             if layer_weight_names:
                 read_layer_names.append(name)
 
-        if len(read_layer_names) != len(symbolic_layer_names):
+        if len(read_layer_names) != num_layers:
             raise ValueError(
-                f"You are trying to load a weight file containing {len(read_layer_names)} layers into a model with {len(symbolic_layer_names)} layers"
+                f"You are trying to load a weight file with {len(read_layer_names)} "
+                f"layers into a model with {num_layers} layers"
             )
 
-        weight_value_tuples = []
-        for k, name in enumerate(symbolic_layers):
-            symbolic_weight_names = name.trainable_weights + name.non_trainable_weights
+        var_value_tuples: List[Tuple[tf.Variable, np.ndarray]] = []
+        for k, layer in enumerate(model.layers):
+            weight_vars = layer.trainable_weights + layer.non_trainable_weights
             read_weight_values = pickle.loads(
                 model_array_results["weight_values"].item(k)
             )
             read_weight_values = preprocess_weights_for_loading(
-                name, read_weight_values, original_keras_version, original_backend
+                layer, read_weight_values, original_keras_version, original_backend
             )
-            if len(read_weight_values) != len(symbolic_weight_names):
+            if len(read_weight_values) != len(weight_vars):
                 raise ValueError(
-                    f'Layer #{k}  (named "{layer.name}" in the current model) was found to correspond to layer {name} in the save file. However the new layer {layer.name} expects {len(symbolic_weight_names)} weights, but the saved weights have {len(read_weight_values)} elements'
+                    f'Layer #{k}  (named "{layer.name}" in the current model) was found '
+                    f"to correspond to layer {layer} in the save file. However the new "
+                    f"layer {layer.name} expects {len(weight_vars)} weights, "
+                    f"but the saved weights have {len(read_weight_values)} elements"
                 )
-            weight_value_tuples += zip(symbolic_weight_names, read_weight_values)
-        backend.batch_set_value(weight_value_tuples)
+            var_value_tuples.extend(zip(weight_vars, read_weight_values))
+        backend.batch_set_value(var_value_tuples)

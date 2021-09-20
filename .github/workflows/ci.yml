@@ -8,7 +8,7 @@ jobs:
     strategy:
       matrix:
         os: [macos-latest, ubuntu-latest]
-        python-version: [3.6, 3.7, 3.8]
+        python-version: [3.7, 3.8]
 
     steps:
     - uses: actions/checkout@v2
@@ -17,59 +17,40 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
 
-    # Print python and pip version information for debugging.
-    - name: 'Print python version in bash task'
+    - name: 'Print python version'
       run: |
-        echo '==== Python information ===='
         which python
         which pip
         python --version
-        echo '============================'
-      shell: bash
-
-    - name: 'Print env'
-      run: printenv
-      shell: bash
 
     - name: 'Upgrade pip'
       run: python -m pip install --upgrade pip
 
     - name: 'Install dependencies'
       run: pip install -e .[full]
-      shell: bash
 
     - name: 'Run tests'
-      id: tests
-      if: ${{ matrix.os != 'macos-latest' || matrix.python-version != '3.6' }}
-      shell: bash
+      if: ${{ matrix.os != 'macos-latest' }}
       run: |
         pip install pytest-mock pytest-cov
         pytest tests/
-        REF=${{ github.ref }}
-        echo "github.ref: $REF"
-        IFS='/' read -ra PATHS <<< "$REF"
-        BRANCH_NAME="${PATHS[1]}_${PATHS[2]}"
-        echo $BRANCH_NAME
-        echo "BRANCH=$(echo ${BRANCH_NAME})" >> $GITHUB_ENV
+
+    - name: Run mypy
+      if: ${{ matrix.os != 'macos-latest' }}
+      run: |
+        pip install mypy
+        mypy .
 
     - name: 'Run test coverage statistics'
       id: stats
-      if: ${{ matrix.os == 'macos-latest' && matrix.python-version == '3.6' }}
-      shell: bash
+      if: ${{ matrix.os == 'macos-latest' && matrix.python-version == '3.7' }}
       run: |
         pip install pytest-mock pytest-cov
         TEST_COVERAGE="$(pytest --cov-report term:skip-covered --cov=tiledb tests/ | grep '^TOTAL' | awk -v N=4 '{print $N}')"
         echo "::set-output name=COVERAGE::$TEST_COVERAGE"
-        REF=${{ github.ref }}
-        echo "github.ref: $REF"
-        IFS='/' read -ra PATHS <<< "$REF"
-        BRANCH_NAME="${PATHS[1]}_${PATHS[2]}"
-        echo $BRANCH_NAME
-        echo $TEST_COVERAGE
-        echo "BRANCH=$(echo ${BRANCH_NAME})" >> $GITHUB_ENV
 
     - name: 'Create Test Coverage Badge'
-      if: ${{ matrix.os == 'macos-latest' && matrix.python-version == '3.6' }}
+      if: ${{ matrix.os == 'macos-latest' && matrix.python-version == '3.7' }}
       uses: psf/black@21.7b0
       with:
         auth: ${{ secrets.COVERAGE_SECRET }}

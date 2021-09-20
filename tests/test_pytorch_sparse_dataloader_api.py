@@ -1,14 +1,15 @@
 """Tests for TileDB integration with Pytorch sparse Data API."""
 
 import os
-import torch
-import tiledb
+
 import numpy as np
 import pytest
+import torch
 
-
+import tiledb
 from tiledb.ml.readers.pytorch_sparse import PyTorchTileDBSparseDataset
-from tiledb.ml._utils import ingest_in_tiledb, create_sparse_array_one_hot_2d
+
+from .utils import create_sparse_array_one_hot_2d, ingest_in_tiledb
 
 # Test parameters
 NUM_OF_CLASSES = 5
@@ -36,22 +37,19 @@ class TestTileDBSparsePyTorchDataloaderAPI:
     def test_tiledb_pytorch_sparse_data_api_with_sparse_data_sparse_label(
         self, tmpdir, input_shape, workers, num_of_attributes
     ):
-        dataset_shape_x = (ROWS, input_shape)
-        dataset_shape_y = (ROWS, (NUM_OF_CLASSES,))
-
         tiledb_uri_x = os.path.join(tmpdir, "x")
         tiledb_uri_y = os.path.join(tmpdir, "y")
 
         ingest_in_tiledb(
             uri=tiledb_uri_x,
-            data=create_sparse_array_one_hot_2d(*dataset_shape_x),
+            data=create_sparse_array_one_hot_2d(ROWS, input_shape[0]),
             batch_size=BATCH_SIZE,
             sparse=True,
             num_of_attributes=num_of_attributes,
         )
         ingest_in_tiledb(
             uri=tiledb_uri_y,
-            data=create_sparse_array_one_hot_2d(*dataset_shape_y),
+            data=create_sparse_array_one_hot_2d(ROWS, NUM_OF_CLASSES),
             batch_size=BATCH_SIZE,
             sparse=True,
             num_of_attributes=num_of_attributes,
@@ -85,22 +83,19 @@ class TestTileDBSparsePyTorchDataloaderAPI:
     def test_tiledb_pytorch_sparse_data_api_with_dense_data_sparse_label_except(
         self, tmpdir, input_shape, workers, num_of_attributes
     ):
-        dataset_shape_x = (ROWS,) + input_shape
-        dataset_shape_y = (ROWS, (NUM_OF_CLASSES,))
-
         tiledb_uri_x = os.path.join(tmpdir, "x")
         tiledb_uri_y = os.path.join(tmpdir, "y")
 
         ingest_in_tiledb(
             uri=tiledb_uri_x,
-            data=np.random.rand(*dataset_shape_x),
+            data=np.random.rand(ROWS, *input_shape),
             batch_size=BATCH_SIZE,
             sparse=False,
             num_of_attributes=num_of_attributes,
         )
         ingest_in_tiledb(
             uri=tiledb_uri_y,
-            data=create_sparse_array_one_hot_2d(*dataset_shape_y),
+            data=create_sparse_array_one_hot_2d(ROWS, NUM_OF_CLASSES),
             batch_size=BATCH_SIZE,
             sparse=True,
             num_of_attributes=num_of_attributes,
@@ -127,22 +122,19 @@ class TestTileDBSparsePyTorchDataloaderAPI:
     def test_tiledb_pytorch_sparse_data_api_with_sparse_data_dense_label(
         self, tmpdir, input_shape, workers, num_of_attributes
     ):
-        dataset_shape_x = (ROWS, input_shape)
-        dataset_shape_y = (ROWS,)
-
         tiledb_uri_x = os.path.join(tmpdir, "x")
         tiledb_uri_y = os.path.join(tmpdir, "y")
 
         ingest_in_tiledb(
             uri=tiledb_uri_x,
-            data=create_sparse_array_one_hot_2d(*dataset_shape_x),
+            data=create_sparse_array_one_hot_2d(ROWS, input_shape[0]),
             batch_size=BATCH_SIZE,
             sparse=True,
             num_of_attributes=num_of_attributes,
         )
         ingest_in_tiledb(
             uri=tiledb_uri_y,
-            data=np.random.randint(low=0, high=NUM_OF_CLASSES, size=dataset_shape_y),
+            data=np.random.randint(low=0, high=NUM_OF_CLASSES, size=ROWS),
             batch_size=BATCH_SIZE,
             sparse=False,
             num_of_attributes=num_of_attributes,
@@ -175,23 +167,20 @@ class TestTileDBSparsePyTorchDataloaderAPI:
     def test_tiledb_pytorch_sparse_data_api_with_sparse_data_diff_number_of_x_y_rows(
         self, tmpdir, input_shape, workers, num_of_attributes
     ):
-        # Add one extra row on X - Spoiled Data by adding one more row in X data
-        dataset_shape_x = (ROWS + 1, input_shape)
-        dataset_shape_y = (ROWS, (NUM_OF_CLASSES,))
-
         tiledb_uri_x = os.path.join(tmpdir, "x")
         tiledb_uri_y = os.path.join(tmpdir, "y")
 
         ingest_in_tiledb(
             uri=tiledb_uri_x,
-            data=create_sparse_array_one_hot_2d(*dataset_shape_x),
+            # Add one extra row on X - Spoiled Data by adding one more row in X data
+            data=create_sparse_array_one_hot_2d(ROWS + 1, input_shape[0]),
             batch_size=BATCH_SIZE,
             sparse=True,
             num_of_attributes=num_of_attributes,
         )
         ingest_in_tiledb(
             uri=tiledb_uri_y,
-            data=create_sparse_array_one_hot_2d(*dataset_shape_y),
+            data=create_sparse_array_one_hot_2d(ROWS, NUM_OF_CLASSES),
             batch_size=BATCH_SIZE,
             sparse=True,
             num_of_attributes=num_of_attributes,
@@ -218,13 +207,10 @@ class TestTileDBSparsePyTorchDataloaderAPI:
     def test_tiledb_pytorch_sparse_data_api_with_diff_number_of_batch_x_y_rows_empty_record_except(
         self, tmpdir, input_shape, workers, num_of_attributes
     ):
-        dataset_shape_x = (ROWS, input_shape)
-        dataset_shape_y = (ROWS, (NUM_OF_CLASSES,))
-
         tiledb_uri_x = os.path.join(tmpdir, "x")
         tiledb_uri_y = os.path.join(tmpdir, "y")
 
-        spoiled_data = create_sparse_array_one_hot_2d(*dataset_shape_x)
+        spoiled_data = create_sparse_array_one_hot_2d(ROWS, input_shape[0])
         spoiled_data[np.nonzero(spoiled_data[0])] = 0
 
         ingest_in_tiledb(
@@ -236,7 +222,7 @@ class TestTileDBSparsePyTorchDataloaderAPI:
         )
         ingest_in_tiledb(
             uri=tiledb_uri_y,
-            data=create_sparse_array_one_hot_2d(*dataset_shape_y),
+            data=create_sparse_array_one_hot_2d(ROWS, NUM_OF_CLASSES),
             batch_size=BATCH_SIZE,
             sparse=False,
             num_of_attributes=num_of_attributes,
@@ -268,22 +254,19 @@ class TestTileDBSparsePyTorchDataloaderAPI:
     def test_tiledb_pytorch_sparse_sparse_label_data(
         self, tmpdir, input_shape, workers, num_of_attributes
     ):
-        dataset_shape_x = (ROWS, input_shape)
-        dataset_shape_y = (ROWS, (NUM_OF_CLASSES,))
-
         tiledb_uri_x = os.path.join(tmpdir, "x")
         tiledb_uri_y = os.path.join(tmpdir, "y")
 
         ingest_in_tiledb(
             uri=tiledb_uri_x,
-            data=create_sparse_array_one_hot_2d(*dataset_shape_x),
+            data=create_sparse_array_one_hot_2d(ROWS, input_shape[0]),
             batch_size=BATCH_SIZE,
             sparse=True,
             num_of_attributes=num_of_attributes,
         )
         ingest_in_tiledb(
             uri=tiledb_uri_y,
-            data=create_sparse_array_one_hot_2d(*dataset_shape_y),
+            data=create_sparse_array_one_hot_2d(ROWS, NUM_OF_CLASSES),
             batch_size=BATCH_SIZE,
             sparse=True,
             num_of_attributes=num_of_attributes,
