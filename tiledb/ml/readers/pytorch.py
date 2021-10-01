@@ -7,7 +7,7 @@ import numpy as np
 import torch
 
 import tiledb
-from tiledb.ml.utils._parallel_utils import run_io_tasks_in_parallel
+from tiledb.ml._parallel_utils import run_io_tasks_in_parallel
 
 DataType = Tuple[np.ndarray, ...]
 
