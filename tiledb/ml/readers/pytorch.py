@@ -3,13 +3,13 @@
 import math
 from typing import Iterator, Sequence, Tuple
 
-import numpy as np
+# import numpy as np
 import torch
 
 import tiledb
 from tiledb.ml._parallel_utils import run_io_tasks_in_parallel
 
-DataType = Tuple[np.ndarray, ...]
+DataType = Tuple[torch.Tensor, ...]
 
 
 class PyTorchTileDBDenseDataset(torch.utils.data.IterableDataset[DataType]):
