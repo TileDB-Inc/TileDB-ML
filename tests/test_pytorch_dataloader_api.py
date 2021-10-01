@@ -68,9 +68,7 @@ class TestPytorchDenseDataloader:
                     "features_" + str(attr) for attr in range(num_of_attributes)
                 ],
             )
-
             assert isinstance(tiledb_dataset, torch.utils.data.IterableDataset)
-
             # Same test without attribute names explicitly provided by the user
             tiledb_dataset = PyTorchTileDBDenseDataset(
                 x_array=x, y_array=y, batch_size=BATCH_SIZE

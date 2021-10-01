@@ -7,6 +7,7 @@ import numpy as np
 import torch
 
 import tiledb
+from tiledb.ml._parallel_utils import run_io_tasks_in_parallel
 
 DataType = Tuple[np.ndarray, ...]
 
@@ -86,11 +87,14 @@ class PyTorchTileDBDenseDataset(torch.utils.data.IterableDataset[DataType]):
 
         # Loop over batches
         for offset in range(iter_start, iter_end, self.batch_size):
-            x_batch = self.x[offset : offset + self.batch_size]
-            y_batch = self.y[offset : offset + self.batch_size]
+            parallel_batches = run_io_tasks_in_parallel(
+                (self.x, self.y), self.batch_size, offset
+            )
             # Yield the next training batch
-            yield tuple(x_batch[attr] for attr in self.x_attribute_names) + tuple(
-                y_batch[attr] for attr in self.y_attribute_names
+            yield tuple(
+                parallel_batches[0]._result[attr] for attr in self.x_attribute_names
+            ) + tuple(
+                parallel_batches[1]._result[attr] for attr in self.y_attribute_names
             )
 
     def __len__(self) -> int:
