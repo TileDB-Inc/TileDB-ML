@@ -1,5 +1,5 @@
 import os
-from typing import Any, List, Tuple
+from typing import List
 
 import tiledb.cloud
 
@@ -21,6 +21,8 @@ IO_BATCH_SIZE = 20000
 
 
 def predict() -> List[int]:
+    from typing import Any, Tuple
+
     import numpy as np
     import torch
     import torch.nn as nn

@@ -1,5 +1,4 @@
 import os
-from typing import Any, Tuple
 
 import tiledb.cloud
 
@@ -22,6 +21,8 @@ IO_BATCH_SIZE = 20000
 
 
 def train() -> None:
+    from typing import Any, Tuple
+
     import numpy as np
     import torch
     import torch.nn as nn
