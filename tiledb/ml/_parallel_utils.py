@@ -1,5 +1,7 @@
 from concurrent.futures import Future, ThreadPoolExecutor
-from typing import Any, List
+from typing import List
+
+import numpy as np
 
 import tiledb
 
@@ -19,7 +21,7 @@ def batch_slice_func(
 
 def run_io_tasks_in_parallel(
     arrays: List[tiledb.DenseArray], batch_size: int, offset: int
-) -> List[Future[Any]]:
+) -> List[Future[np.ndarray]]:
     """
     Creates a Threadpool of 2 workers and runs the batch_slice_func in parallel
     param: arrays: The arrays x,y to be sliced in parallel
