@@ -87,14 +87,13 @@ class PyTorchTileDBDenseDataset(torch.utils.data.IterableDataset[DataType]):
 
         # Loop over batches
         for offset in range(iter_start, iter_end, self.batch_size):
-            parallel_batches = run_io_tasks_in_parallel(
+            x_batch, y_batch = run_io_tasks_in_parallel(
                 (self.x, self.y), self.batch_size, offset
             )
+
             # Yield the next training batch
-            yield tuple(
-                parallel_batches[0]._result[attr] for attr in self.x_attribute_names
-            ) + tuple(
-                parallel_batches[1]._result[attr] for attr in self.y_attribute_names
+            yield tuple(x_batch[attr] for attr in self.x_attribute_names) + tuple(
+                y_batch[attr] for attr in self.y_attribute_names
             )
 
     def __len__(self) -> int:

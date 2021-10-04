@@ -112,14 +112,14 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset[DataType]):
         # Loop over batches
         for offset in range(iter_start, iter_end, self.batch_size):
             # Yield the next training batch
-            parallel_batches = run_io_tasks_in_parallel(
+            x_batch, y_batch = run_io_tasks_in_parallel(
                 (self.x, self.y), self.batch_size, offset
             )
 
             x_coords = []
             for i in range(0, self.x.schema.domain.ndim):
                 dim_name = self.x.schema.domain.dim(i).name
-                x_coords.append(parallel_batches[0]._result[dim_name])
+                x_coords.append(x_batch[dim_name])
 
             # Normalise indices for torch.sparse.Tensor We want the coords indices in every iteration
             # to be in the range of [0, self.batch_size] so the torch.sparse.Tensors can be created batch-wise.
@@ -135,7 +135,7 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset[DataType]):
             x_tensor = tuple(
                 torch.sparse_coo_tensor(
                     torch.tensor(list(zip(*x_coords))).t(),
-                    parallel_batches[0]._result[attr].ravel(),
+                    x_batch[attr].ravel(),
                     (self.batch_size, x_shape[0]),
                     requires_grad=False,
                 )
@@ -146,7 +146,7 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset[DataType]):
                 y_coords = []
                 for i in range(0, self.y.schema.domain.ndim):
                     dim_name = self.y.schema.domain.dim(i).name
-                    y_coords.append(parallel_batches[1]._result[dim_name])
+                    y_coords.append(y_batch[dim_name])
 
                 # Normalise indices for torch.sparse.Tensor We want the coords indices in every iteration
                 # to be in the range of [0, self.batch_size] so the torch.sparse.Tensors can be created batch-wise.
@@ -159,7 +159,7 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset[DataType]):
                 y_tensor = tuple(
                     torch.sparse_coo_tensor(
                         torch.tensor(list(zip(*y_coords))).t(),
-                        parallel_batches[1]._result[attr].ravel(),
+                        y_batch[attr].ravel(),
                         (self.batch_size, y_shape[0]),
                         requires_grad=False,
                     )
@@ -167,11 +167,7 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset[DataType]):
                 )
             else:
                 # for the check slice the row dimension of y dense array
-                self.__check_row_dims(
-                    x_coords[0], parallel_batches[1]._result[self.y_attribute_names[0]]
-                )
-                y_tensor = tuple(
-                    parallel_batches[1]._result[attr] for attr in self.y_attribute_names
-                )
+                self.__check_row_dims(x_coords[0], y_batch[self.y_attribute_names[0]])
+                y_tensor = tuple(y_batch[attr] for attr in self.y_attribute_names)
 
             yield x_tensor + y_tensor
