@@ -187,6 +187,7 @@ class TestPytorchDenseDataloader:
                 tiledb_dataset, batch_size=None, num_workers=workers
             )
 
+            next(iter(train_loader))
             for batchindx, data in enumerate(train_loader):
                 assert len(data) == 2 * num_of_attributes
 

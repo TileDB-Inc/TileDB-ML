@@ -1,18 +1,21 @@
 """Functionality for loading data directly from dense TileDB arrays into the PyTorch Dataloader API."""
 
 import math
+from concurrent.futures import ThreadPoolExecutor
 from typing import Iterator, Sequence, Tuple
 
 import numpy as np
 import torch
 
 import tiledb
-from tiledb.ml._parallel_utils import run_io_tasks_in_parallel
+from tiledb.ml._parallel_utils import ParallelIOMixin
 
 DataType = Tuple[np.ndarray, ...]
 
 
-class PyTorchTileDBDenseDataset(torch.utils.data.IterableDataset[DataType]):
+class PyTorchTileDBDenseDataset(
+    ParallelIOMixin, torch.utils.data.IterableDataset[DataType]
+):
     """
     Class that implements all functionality needed to load data from TileDB directly to the
     PyTorch Dataloader API.
@@ -47,6 +50,7 @@ class PyTorchTileDBDenseDataset(torch.utils.data.IterableDataset[DataType]):
         :param x_attribute_names: The attribute names of x_array.
         :param y_attribute_names: The attribute names of y_array.
         """
+
         # Check that x and y have the same number of rows
         if x_array.schema.domain.shape[0] != y_array.schema.domain.shape[0]:
             raise ValueError(
@@ -86,15 +90,16 @@ class PyTorchTileDBDenseDataset(torch.utils.data.IterableDataset[DataType]):
             iter_end = min(iter_start + per_worker, rows)
 
         # Loop over batches
-        for offset in range(iter_start, iter_end, self.batch_size):
-            x_batch, y_batch = run_io_tasks_in_parallel(
-                (self.x, self.y), self.batch_size, offset
-            )
+        with ThreadPoolExecutor(max_workers=2) as self.executor:
+            for offset in range(iter_start, iter_end, self.batch_size):
+                x_batch, y_batch = self.run_io_tasks_in_parallel(
+                    (self.x, self.y), self.batch_size, offset
+                )
 
-            # Yield the next training batch
-            yield tuple(x_batch[attr] for attr in self.x_attribute_names) + tuple(
-                y_batch[attr] for attr in self.y_attribute_names
-            )
+                # Yield the next training batch
+                yield tuple(x_batch[attr] for attr in self.x_attribute_names) + tuple(
+                    y_batch[attr] for attr in self.y_attribute_names
+                )
 
     def __len__(self) -> int:
         return int(self.x.shape[0])
