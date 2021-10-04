@@ -8,14 +8,20 @@ TILEDB_USER_NAME = os.environ.get("TILEDB_USER_NAME")
 TILEDB_PASSWD = os.environ.get("TILEDB_PASSWD")
 
 # Your TileDB namespace
-TILEDB_NAMESPACE = "your_tiledb_namespace"
+TILEDB_NAMESPACE = "gskoumas"
 
 # Your S3 bucket
-S3_BUCKET = "your_s3_bucket"
+S3_BUCKET = "tiledb-gskoumas"
 
-IMAGES_URI = "tiledb://{}/s3://{}/mnist_images".format(TILEDB_NAMESPACE, S3_BUCKET)
-LABELS_URI = "tiledb://{}/s3://{}/mnist_labels".format(TILEDB_NAMESPACE, S3_BUCKET)
-MODEL_URI = "tiledb://{}/s3://{}/mnist_model".format(TILEDB_NAMESPACE, S3_BUCKET)
+IMAGES_URI = "tiledb://{}/s3://{}/arrays/mnist_images".format(
+    TILEDB_NAMESPACE, S3_BUCKET
+)
+LABELS_URI = "tiledb://{}/s3://{}/arrays/mnist_labels".format(
+    TILEDB_NAMESPACE, S3_BUCKET
+)
+MODEL_URI = "tiledb://{}/s3://{}/ml_models/mnist_model".format(
+    TILEDB_NAMESPACE, S3_BUCKET
+)
 
 IO_BATCH_SIZE = 20000
 
