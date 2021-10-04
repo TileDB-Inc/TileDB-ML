@@ -10,7 +10,7 @@ class ParallelIOMixin(object):
         self, arrays: Tuple[tiledb.DenseArray], batch_size: int, offset: int
     ):
         """
-        Creates a Threadpool of 2 workers and runs the batch_slice_func in parallel
+        Runs the batch_slice_func in parallel
         param: arrays: The arrays x,y to be sliced in parallel
         param: batch_size: The size of the batch to be sliced
         param: offset: The index of x,y from the start of the arrays
