@@ -33,7 +33,7 @@ def predict() -> List[int]:
 
     class Net(nn.Module):
         def __init__(self, shape: Tuple[int, int]):
-            super(Net, self).__init__()
+            super().__init__()  # type: ignore
             self.flatten = nn.Flatten()
             self.linear_relu_stack = nn.Sequential(
                 nn.Linear(np.product(shape), 32),
@@ -57,7 +57,7 @@ def predict() -> List[int]:
         model=loaded_model, optimizer=loaded_optimizer
     )
 
-    with torch.no_grad():
+    with torch.no_grad():  # type: ignore
         with tiledb.open(IMAGES_URI) as x, tiledb.open(LABELS_URI) as y:
             tiledb_dataset = PyTorchTileDBDenseDataset(
                 x_array=x, y_array=y, batch_size=IO_BATCH_SIZE

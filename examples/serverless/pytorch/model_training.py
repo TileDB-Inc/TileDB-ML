@@ -33,7 +33,7 @@ def train() -> None:
 
     class Net(nn.Module):
         def __init__(self, shape: Tuple[int, int]):
-            super(Net, self).__init__()
+            super().__init__()  # type: ignore
             self.flatten = nn.Flatten()
             self.linear_relu_stack = nn.Sequential(
                 nn.Linear(np.product(shape), 32),
