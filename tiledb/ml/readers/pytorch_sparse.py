@@ -7,14 +7,11 @@ import numpy as np
 import torch
 
 import tiledb
-from tiledb.ml._parallel_utils import ParallelIOMixin
 
 DataType = Tuple[torch.Tensor, ...]
 
 
-class PyTorchTileDBSparseDataset(
-    ParallelIOMixin, torch.utils.data.IterableDataset[DataType]
-):
+class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset[DataType]):
     """
     Class that implements all functionality needed to load data from TileDB directly to the
     PyTorch Sparse Dataloader API.
@@ -113,11 +110,11 @@ class PyTorchTileDBSparseDataset(
         y_shape = self.y.schema.domain.shape[1:]
 
         # Loop over batches
-        with ThreadPoolExecutor(max_workers=2) as self.executor:
+        with ThreadPoolExecutor(max_workers=2) as executor:
             for offset in range(iter_start, iter_end, self.batch_size):
                 # Yield the next training batch
                 x_batch, y_batch = self.run_io_tasks_in_parallel(
-                    (self.x, self.y), self.batch_size, offset
+                    executor, (self.x, self.y), self.batch_size, offset
                 )
 
                 x_coords = []
