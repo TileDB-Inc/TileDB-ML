@@ -65,7 +65,9 @@ def train() -> None:
             net.train()
             training_batch_idx = 0
             for batch_idx, (inputs, labels) in enumerate(train_loader):
-                for train_batch_start_idx in range(0, 20000, training_batch_size):
+                for train_batch_start_idx in range(
+                    0, IO_BATCH_SIZE, training_batch_size
+                ):
                     # zero the parameter gradients
                     optimizer.zero_grad()
                     # forward + backward + optimize

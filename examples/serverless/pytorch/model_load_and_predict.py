@@ -57,8 +57,8 @@ def predict() -> List[int]:
         model=loaded_model, optimizer=loaded_optimizer
     )
 
-    with torch.no_grad():  # type: ignore
-        with tiledb.open(IMAGES_URI) as x, tiledb.open(LABELS_URI) as y:
+    with tiledb.open(IMAGES_URI) as x, tiledb.open(LABELS_URI) as y:
+        with torch.no_grad():  # type: ignore
             tiledb_dataset = PyTorchTileDBDenseDataset(
                 x_array=x, y_array=y, batch_size=IO_BATCH_SIZE
             )
