@@ -8,6 +8,7 @@ import numpy as np
 import torch
 
 import tiledb
+from tiledb.ml._parallel_utils import run_io_tasks_in_parallel
 
 DataType = Tuple[np.ndarray, ...]
 
@@ -89,7 +90,7 @@ class PyTorchTileDBDenseDataset(torch.utils.data.IterableDataset[DataType]):
         # Loop over batches
         with ThreadPoolExecutor(max_workers=2) as executor:
             for offset in range(iter_start, iter_end, self.batch_size):
-                x_batch, y_batch = self.run_io_tasks_in_parallel(
+                x_batch, y_batch = run_io_tasks_in_parallel(
                     executor, (self.x, self.y), self.batch_size, offset
                 )
 
