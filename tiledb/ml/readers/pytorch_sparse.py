@@ -1,11 +1,13 @@
 """Functionality for loading data directly from sparse TileDB arrays into the PyTorch Dataloader API."""
 
+from concurrent.futures import ThreadPoolExecutor
 from typing import Iterator, Sequence, Tuple
 
 import numpy as np
 import torch
 
 import tiledb
+from tiledb.ml._parallel_utils import run_io_tasks_in_parallel
 
 DataType = Tuple[torch.Tensor, ...]
 
@@ -109,66 +111,67 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset[DataType]):
         y_shape = self.y.schema.domain.shape[1:]
 
         # Loop over batches
-        for offset in range(iter_start, iter_end, self.batch_size):
-            # Yield the next training batch
-            x_batch = self.x[offset : offset + self.batch_size]
-            y_batch = self.y[offset : offset + self.batch_size]
-
-            x_coords = []
-            for i in range(0, self.x.schema.domain.ndim):
-                dim_name = self.x.schema.domain.dim(i).name
-                x_coords.append(x_batch[dim_name])
-
-            # Normalise indices for torch.sparse.Tensor We want the coords indices in every iteration
-            # to be in the range of [0, self.batch_size] so the torch.sparse.Tensors can be created batch-wise.
-            # If we do not normalise the sparse tensor is being created but with a dimension [0, max(coord_index)],
-            # which is overkill
-            x_coords[0] -= x_coords[0].min()
-
-            # TODO: Sparse labels are not supported by Pytorch during this iteration for completeness
-            # we support the ingestion of sparseArray in labels, but loss and backward will fail due to
-            # SparseCPU backend
-
-            # Identify the label array hence ingest it as sparse tensor or simple tensor
-            x_tensor = tuple(
-                torch.sparse_coo_tensor(
-                    torch.tensor(list(zip(*x_coords))).t(),
-                    x_batch[attr].ravel(),
-                    (self.batch_size, x_shape[0]),
-                    requires_grad=False,
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            for offset in range(iter_start, iter_end, self.batch_size):
+                # Yield the next training batch
+                x_batch, y_batch = run_io_tasks_in_parallel(
+                    executor, (self.x, self.y), self.batch_size, offset
                 )
-                for attr in self.x_attribute_names
-            )
 
-            if isinstance(self.y, tiledb.SparseArray):
-                y_coords = []
-                for i in range(0, self.y.schema.domain.ndim):
-                    dim_name = self.y.schema.domain.dim(i).name
-                    y_coords.append(y_batch[dim_name])
+                x_coords = []
+                for i in range(0, self.x.schema.domain.ndim):
+                    dim_name = self.x.schema.domain.dim(i).name
+                    x_coords.append(x_batch[dim_name])
 
                 # Normalise indices for torch.sparse.Tensor We want the coords indices in every iteration
                 # to be in the range of [0, self.batch_size] so the torch.sparse.Tensors can be created batch-wise.
                 # If we do not normalise the sparse tensor is being created but with a dimension [0, max(coord_index)],
                 # which is overkill
-                y_coords[0] -= y_coords[0].min()
+                x_coords[0] -= x_coords[0].min()
 
-                self.__check_row_dims(x_coords[0], y_coords[0])
+                # TODO: Sparse labels are not supported by Pytorch during this iteration for completeness
+                # we support the ingestion of sparseArray in labels, but loss and backward will fail due to
+                # SparseCPU backend
 
-                y_tensor = tuple(
+                # Identify the label array hence ingest it as sparse tensor or simple tensor
+                x_tensor = tuple(
                     torch.sparse_coo_tensor(
-                        torch.tensor(list(zip(*y_coords))).t(),
-                        y_batch[attr].ravel(),
-                        (self.batch_size, y_shape[0]),
+                        torch.tensor(list(zip(*x_coords))).t(),
+                        x_batch[attr].ravel(),
+                        (self.batch_size, x_shape[0]),
                         requires_grad=False,
                     )
-                    for attr in self.y_attribute_names
-                )
-            else:
-                # for the check slice the row dimension of y dense array
-                self.__check_row_dims(x_coords[0], y_batch[self.y_attribute_names[0]])
-                y_tensor = tuple(
-                    self.y[offset : offset + self.batch_size][attr]
-                    for attr in self.y_attribute_names
+                    for attr in self.x_attribute_names
                 )
 
-            yield x_tensor + y_tensor
+                if isinstance(self.y, tiledb.SparseArray):
+                    y_coords = []
+                    for i in range(0, self.y.schema.domain.ndim):
+                        dim_name = self.y.schema.domain.dim(i).name
+                        y_coords.append(y_batch[dim_name])
+
+                    # Normalise indices for torch.sparse.Tensor We want the coords indices in every iteration
+                    # to be in the range of [0, self.batch_size] so the torch.sparse.Tensors can be created batch-wise.
+                    # If we do not normalise the sparse tensor is being created but with a dimension [0, max(coord_index)],
+                    # which is overkill
+                    y_coords[0] -= y_coords[0].min()
+
+                    self.__check_row_dims(x_coords[0], y_coords[0])
+
+                    y_tensor = tuple(
+                        torch.sparse_coo_tensor(
+                            torch.tensor(list(zip(*y_coords))).t(),
+                            y_batch[attr].ravel(),
+                            (self.batch_size, y_shape[0]),
+                            requires_grad=False,
+                        )
+                        for attr in self.y_attribute_names
+                    )
+                else:
+                    # for the check slice the row dimension of y dense array
+                    self.__check_row_dims(
+                        x_coords[0], y_batch[self.y_attribute_names[0]]
+                    )
+                    y_tensor = tuple(y_batch[attr] for attr in self.y_attribute_names)
+
+                yield x_tensor + y_tensor
