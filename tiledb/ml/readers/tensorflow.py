@@ -142,8 +142,6 @@ class TensorflowTileDBDenseDataset(FlatMapDataset):
                 x_batch, y_batch = run_io_tasks_in_parallel(
                     executor, (x, y), batch_size, offset
                 )
-                # x_batch = x[offset : offset + batch_size]
-                # y_batch = y[offset : offset + batch_size]
 
                 # Yield the next training batch
                 yield tuple(x_batch[attr] for attr in x_attribute_names) + tuple(
