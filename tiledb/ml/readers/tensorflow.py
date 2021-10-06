@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from typing import Iterator, Sequence, Tuple, cast
 
@@ -10,6 +11,7 @@ import tensorflow as tf
 from tensorflow.python.data.ops.dataset_ops import FlatMapDataset
 
 import tiledb
+from tiledb.ml._parallel_utils import run_io_tasks_in_parallel
 
 
 class TensorflowTileDBDenseDataset(FlatMapDataset):
@@ -135,14 +137,18 @@ class TensorflowTileDBDenseDataset(FlatMapDataset):
         :return: An iterator of x and y batches.
         """
         # Loop over batches
-        for offset in range(0, rows, batch_size):
-            x_batch = x[offset : offset + batch_size]
-            y_batch = y[offset : offset + batch_size]
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            for offset in range(0, rows, batch_size):
+                x_batch, y_batch = run_io_tasks_in_parallel(
+                    executor, (x, y), batch_size, offset
+                )
+                # x_batch = x[offset : offset + batch_size]
+                # y_batch = y[offset : offset + batch_size]
 
-            # Yield the next training batch
-            yield tuple(x_batch[attr] for attr in x_attribute_names) + tuple(
-                y_batch[attr] for attr in y_attribute_names
-            )
+                # Yield the next training batch
+                yield tuple(x_batch[attr] for attr in x_attribute_names) + tuple(
+                    y_batch[attr] for attr in y_attribute_names
+                )
 
     def __len__(self) -> int:
         return self.length
