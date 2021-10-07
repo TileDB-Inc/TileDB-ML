@@ -1,4 +1,5 @@
 """Functionality for loading data directly from TileDB arrays into the Tensorflow Data API."""
+from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from typing import Iterator, Sequence, Tuple, Union
 
@@ -8,6 +9,7 @@ from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.framework import constant_op
 
 import tiledb
+from tiledb.ml._parallel_utils import run_io_tasks_in_parallel
 
 
 class TensorflowTileDBSparseDataset(tf.data.Dataset):
@@ -175,50 +177,56 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
 
         # Loop over batches
         # https://github.com/tensorflow/tensorflow/issues/44565
-        for offset in range(0, rows, batch_size):
-            x_batch = x[offset : offset + batch_size]
-            y_batch = y[offset : offset + batch_size]
-
-            # Transform to TF COO format x, y data
-            x_coords = []
-            for i in range(0, x.schema.domain.ndim):
-                dim_name = x.schema.domain.dim(i).name
-                x_coords.append(np.array(x_batch[dim_name]))
-
-            y_coords = []
-            for i in range(0, y.schema.domain.ndim):
-                dim_name = y.schema.domain.dim(i).name
-                y_coords.append(np.array(y_batch[dim_name]))
-
-            # Normalise indices for torch.sparse.Tensor We want the coords indices in
-            # every iteration to be in the range of [0, self.batch_size] so the
-            # torch.sparse.Tensors can be created batch-wise. If we do not normalise the
-            # sparse tensor is being created but with a dimension [0, max(coord_index)],
-            # which is overkill
-            x_coords[0] -= x_coords[0].min()
-            y_coords[0] -= y_coords[0].min()
-
-            cls.__check_row_dims(x_coords[0], y_coords[0], sparse=True)
-
-            yield tuple(
-                tf.sparse.SparseTensor(
-                    indices=constant_op.constant(list(zip(*x_coords)), dtype=tf.int64),
-                    values=constant_op.constant(
-                        x_batch[attr].ravel(), dtype=x.schema.attr(attr).dtype
-                    ),
-                    dense_shape=(batch_size, x_shape[0]),
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            for offset in range(0, rows, batch_size):
+                x_batch, y_batch = run_io_tasks_in_parallel(
+                    executor, (x, y), batch_size, offset
                 )
-                for attr in x_attribute_names
-            ) + tuple(
-                tf.sparse.SparseTensor(
-                    indices=constant_op.constant(list(zip(*y_coords)), dtype=tf.int64),
-                    values=constant_op.constant(
-                        y_batch[attr].ravel(), dtype=y.schema.attr(attr).dtype
-                    ),
-                    dense_shape=(batch_size, y_shape[0]),
+
+                # Transform to TF COO format x, y data
+                x_coords = []
+                for i in range(0, x.schema.domain.ndim):
+                    dim_name = x.schema.domain.dim(i).name
+                    x_coords.append(np.array(x_batch[dim_name]))
+
+                y_coords = []
+                for i in range(0, y.schema.domain.ndim):
+                    dim_name = y.schema.domain.dim(i).name
+                    y_coords.append(np.array(y_batch[dim_name]))
+
+                # Normalise indices for torch.sparse.Tensor We want the coords indices in
+                # every iteration to be in the range of [0, self.batch_size] so the
+                # torch.sparse.Tensors can be created batch-wise. If we do not normalise the
+                # sparse tensor is being created but with a dimension [0, max(coord_index)],
+                # which is overkill
+                x_coords[0] -= x_coords[0].min()
+                y_coords[0] -= y_coords[0].min()
+
+                cls.__check_row_dims(x_coords[0], y_coords[0], sparse=True)
+
+                yield tuple(
+                    tf.sparse.SparseTensor(
+                        indices=constant_op.constant(
+                            list(zip(*x_coords)), dtype=tf.int64
+                        ),
+                        values=constant_op.constant(
+                            x_batch[attr].ravel(), dtype=x.schema.attr(attr).dtype
+                        ),
+                        dense_shape=(batch_size, x_shape[0]),
+                    )
+                    for attr in x_attribute_names
+                ) + tuple(
+                    tf.sparse.SparseTensor(
+                        indices=constant_op.constant(
+                            list(zip(*y_coords)), dtype=tf.int64
+                        ),
+                        values=constant_op.constant(
+                            y_batch[attr].ravel(), dtype=y.schema.attr(attr).dtype
+                        ),
+                        dense_shape=(batch_size, y_shape[0]),
+                    )
+                    for attr in y_attribute_names
                 )
-                for attr in y_attribute_names
-            )
 
     @classmethod
     def _generator_sparse_dense(
@@ -245,34 +253,38 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
 
         # Loop over batches
         # https://github.com/tensorflow/tensorflow/issues/44565
-        for offset in range(0, rows, batch_size):
-            x_batch = x[offset : offset + batch_size]
-            y_batch = y[offset : offset + batch_size]
-
-            x_coords = []
-            for i in range(0, x.schema.domain.ndim):
-                dim_name = x.schema.domain.dim(i).name
-                x_coords.append(np.array(x_batch[dim_name]))
-
-            # Normalise indices for torch.sparse.Tensor We want the coords indices in
-            # every iteration to be in the range of [0, self.batch_size] so the
-            # torch.sparse.Tensors can be created batch-wise. If we do not normalise the
-            # sparse tensor is being created but with a dimension [0, max(coord_index)],
-            # which is overkill
-            x_coords[0] -= x_coords[0].min()
-
-            # for the check slice the row dimension of y dense array
-            cls.__check_row_dims(
-                x_coords[0], y_batch[y_attribute_names[0]], sparse=False
-            )
-
-            yield tuple(
-                tf.sparse.SparseTensor(
-                    indices=constant_op.constant(list(zip(*x_coords)), dtype=tf.int64),
-                    values=constant_op.constant(
-                        x_batch[attr].flatten(), dtype=x.schema.attr(attr).dtype
-                    ),
-                    dense_shape=(batch_size, x_shape[0]),
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            for offset in range(0, rows, batch_size):
+                x_batch, y_batch = run_io_tasks_in_parallel(
+                    executor, (x, y), batch_size, offset
                 )
-                for attr in x_attribute_names
-            ) + tuple(y_batch[attr] for attr in y_attribute_names)
+
+                x_coords = []
+                for i in range(0, x.schema.domain.ndim):
+                    dim_name = x.schema.domain.dim(i).name
+                    x_coords.append(np.array(x_batch[dim_name]))
+
+                # Normalise indices for torch.sparse.Tensor We want the coords indices in
+                # every iteration to be in the range of [0, self.batch_size] so the
+                # torch.sparse.Tensors can be created batch-wise. If we do not normalise the
+                # sparse tensor is being created but with a dimension [0, max(coord_index)],
+                # which is overkill
+                x_coords[0] -= x_coords[0].min()
+
+                # for the check slice the row dimension of y dense array
+                cls.__check_row_dims(
+                    x_coords[0], y_batch[y_attribute_names[0]], sparse=False
+                )
+
+                yield tuple(
+                    tf.sparse.SparseTensor(
+                        indices=constant_op.constant(
+                            list(zip(*x_coords)), dtype=tf.int64
+                        ),
+                        values=constant_op.constant(
+                            x_batch[attr].flatten(), dtype=x.schema.attr(attr).dtype
+                        ),
+                        dense_shape=(batch_size, x_shape[0]),
+                    )
+                    for attr in x_attribute_names
+                ) + tuple(y_batch[attr] for attr in y_attribute_names)
