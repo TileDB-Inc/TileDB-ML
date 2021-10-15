@@ -1,6 +1,7 @@
 """Functionality for loading data directly from dense TileDB arrays into the PyTorch Dataloader API."""
 
 import math
+import random
 from concurrent.futures import ThreadPoolExecutor
 from typing import Iterator, Sequence, Tuple
 
@@ -24,6 +25,7 @@ class PyTorchTileDBDenseDataset(torch.utils.data.IterableDataset[DataType]):
         x_array: tiledb.DenseArray,
         y_array: tiledb.DenseArray,
         batch_size: int,
+        batch_shuffle: bool = False,
         x_attribute_names: Sequence[str] = (),
         y_attribute_names: Sequence[str] = (),
     ):
@@ -45,6 +47,7 @@ class PyTorchTileDBDenseDataset(torch.utils.data.IterableDataset[DataType]):
         :param batch_size: The size of the batch that the generator will return. Remember
             to set batch_size=None when calling the PyTorch Dataloader API, because
             batching is taking place inside the TileDB IterableDataset.
+        :param batch_shuffle: Bool. True if we want to shuffle batches.
         :param x_attribute_names: The attribute names of x_array.
         :param y_attribute_names: The attribute names of y_array.
         """
@@ -59,6 +62,7 @@ class PyTorchTileDBDenseDataset(torch.utils.data.IterableDataset[DataType]):
         self.x = x_array
         self.y = y_array
         self.batch_size = batch_size
+        self.batch_shuffle = batch_shuffle
 
         # If a user doesn't pass explicit attribute names to return per batch, we return all attributes.
         self.x_attribute_names = x_attribute_names or tuple(
@@ -87,9 +91,19 @@ class PyTorchTileDBDenseDataset(torch.utils.data.IterableDataset[DataType]):
             iter_start = worker_id * per_worker
             iter_end = min(iter_start + per_worker, rows)
 
+        offsets = range(iter_start, iter_end, self.batch_size)
+
+        # Shuffle offsets in case we need batch shuffling
+        if self.batch_shuffle:
+            random.seed()
+            offsets = random.sample(  # type: ignore
+                range(iter_start, iter_end, self.batch_size),
+                math.ceil((iter_end - iter_start) / self.batch_size),
+            )
+
         # Loop over batches
         with ThreadPoolExecutor(max_workers=2) as executor:
-            for offset in range(iter_start, iter_end, self.batch_size):
+            for offset in offsets:
                 x_batch, y_batch = run_io_tasks_in_parallel(
                     executor, (self.x, self.y), self.batch_size, offset
                 )

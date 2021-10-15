@@ -1,5 +1,7 @@
 """Functionality for loading data directly from sparse TileDB arrays into the PyTorch Dataloader API."""
 
+import math
+import random
 from concurrent.futures import ThreadPoolExecutor
 from typing import Iterator, Sequence, Tuple
 
@@ -23,6 +25,7 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset[DataType]):
         x_array: tiledb.SparseArray,
         y_array: tiledb.Array,
         batch_size: int,
+        batch_shuffle: bool = False,
         x_attribute_names: Sequence[str] = (),
         y_attribute_names: Sequence[str] = (),
     ):
@@ -54,6 +57,7 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset[DataType]):
         self.x = x_array
         self.y = y_array
         self.batch_size = batch_size
+        self.batch_shuffle = batch_shuffle
 
         self.x_attribute_names = (
             [x_array.schema.attr(idx).name for idx in range(x_array.schema.nattr)]
@@ -107,12 +111,22 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset[DataType]):
             # iter_end = min(iter_start + per_worker, rows)
             raise NotImplementedError("https://github.com/pytorch/pytorch/issues/20248")
 
+        offsets = range(iter_start, iter_end, self.batch_size)
+
+        # Shuffle offsets in case we need batch shuffling
+        if self.batch_shuffle:
+            random.seed()
+            offsets = random.sample(  # type: ignore
+                range(iter_start, iter_end, self.batch_size),
+                math.ceil((iter_end - iter_start) / self.batch_size),
+            )
+
         x_shape = self.x.schema.domain.shape[1:]
         y_shape = self.y.schema.domain.shape[1:]
 
         # Loop over batches
         with ThreadPoolExecutor(max_workers=2) as executor:
-            for offset in range(iter_start, iter_end, self.batch_size):
+            for offset in offsets:
                 # Yield the next training batch
                 x_batch, y_batch = run_io_tasks_in_parallel(
                     executor, (self.x, self.y), self.batch_size, offset
