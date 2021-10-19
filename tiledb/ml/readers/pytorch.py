@@ -24,6 +24,8 @@ class PyTorchTileDBDenseDataset(torch.utils.data.IterableDataset[DataType]):
         x_array: tiledb.DenseArray,
         y_array: tiledb.DenseArray,
         batch_size: int,
+        batch_shuffle: bool = False,
+        within_batch_shuffle: bool = False,
         x_attribute_names: Sequence[str] = (),
         y_attribute_names: Sequence[str] = (),
     ):
@@ -45,6 +47,8 @@ class PyTorchTileDBDenseDataset(torch.utils.data.IterableDataset[DataType]):
         :param batch_size: The size of the batch that the generator will return. Remember
             to set batch_size=None when calling the PyTorch Dataloader API, because
             batching is taking place inside the TileDB IterableDataset.
+        :param batch_shuffle: True if we want to shuffle batches.
+        :param within_batch_shuffle: True if we want to shuffle records in each batch.
         :param x_attribute_names: The attribute names of x_array.
         :param y_attribute_names: The attribute names of y_array.
         """
@@ -59,6 +63,8 @@ class PyTorchTileDBDenseDataset(torch.utils.data.IterableDataset[DataType]):
         self.x = x_array
         self.y = y_array
         self.batch_size = batch_size
+        self.batch_shuffle = batch_shuffle
+        self.within_batch_shuffle = within_batch_shuffle
 
         # If a user doesn't pass explicit attribute names to return per batch, we return all attributes.
         self.x_attribute_names = x_attribute_names or tuple(
@@ -87,17 +93,41 @@ class PyTorchTileDBDenseDataset(torch.utils.data.IterableDataset[DataType]):
             iter_start = worker_id * per_worker
             iter_end = min(iter_start + per_worker, rows)
 
+        offsets = np.arange(iter_start, iter_end, self.batch_size)
+
+        # Shuffle offsets in case we need batch shuffling
+        if self.batch_shuffle:
+            np.random.shuffle(offsets)
+
         # Loop over batches
         with ThreadPoolExecutor(max_workers=2) as executor:
-            for offset in range(iter_start, iter_end, self.batch_size):
+            for offset in offsets:
                 x_batch, y_batch = run_io_tasks_in_parallel(
                     executor, (self.x, self.y), self.batch_size, offset
                 )
 
-                # Yield the next training batch
-                yield tuple(x_batch[attr] for attr in self.x_attribute_names) + tuple(
-                    y_batch[attr] for attr in self.y_attribute_names
-                )
+                if self.within_batch_shuffle:
+                    # We get batch length based on the first attribute, because last batch might be smaller than the
+                    # batch size
+                    rand_permutation = np.arange(
+                        x_batch[self.x_attribute_names[0]].shape[0]
+                    )
+
+                    np.random.shuffle(rand_permutation)
+
+                    # Yield the next training batch
+                    yield tuple(
+                        x_batch[attr][rand_permutation]
+                        for attr in self.x_attribute_names
+                    ) + tuple(
+                        y_batch[attr][rand_permutation]
+                        for attr in self.y_attribute_names
+                    )
+                else:
+                    # Yield the next training batch
+                    yield tuple(
+                        x_batch[attr] for attr in self.x_attribute_names
+                    ) + tuple(y_batch[attr] for attr in self.y_attribute_names)
 
     def __len__(self) -> int:
         return int(self.x.shape[0])

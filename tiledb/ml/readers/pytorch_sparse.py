@@ -23,6 +23,7 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset[DataType]):
         x_array: tiledb.SparseArray,
         y_array: tiledb.Array,
         batch_size: int,
+        batch_shuffle: bool = False,
         x_attribute_names: Sequence[str] = (),
         y_attribute_names: Sequence[str] = (),
     ):
@@ -36,6 +37,7 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset[DataType]):
         :param batch_size: The size of the batch that the generator will return. Remember
             to set batch_size=None when calling the PyTorch Sparse Dataloader API,
             because batching is taking place inside the TileDB IterableDataset.
+        :param batch_shuffle: True if we want to shuffle batches.
         :param x_attribute_names: The attribute names of x_array.
         :param y_attribute_names: The attribute names of y_array.
         """
@@ -54,6 +56,7 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset[DataType]):
         self.x = x_array
         self.y = y_array
         self.batch_size = batch_size
+        self.batch_shuffle = batch_shuffle
 
         self.x_attribute_names = (
             [x_array.schema.attr(idx).name for idx in range(x_array.schema.nattr)]
@@ -107,12 +110,18 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset[DataType]):
             # iter_end = min(iter_start + per_worker, rows)
             raise NotImplementedError("https://github.com/pytorch/pytorch/issues/20248")
 
+        offsets = np.arange(iter_start, iter_end, self.batch_size)
+
+        # Shuffle offsets in case we need batch shuffling
+        if self.batch_shuffle:
+            np.random.shuffle(offsets)
+
         x_shape = self.x.schema.domain.shape[1:]
         y_shape = self.y.schema.domain.shape[1:]
 
         # Loop over batches
         with ThreadPoolExecutor(max_workers=2) as executor:
-            for offset in range(iter_start, iter_end, self.batch_size):
+            for offset in offsets:
                 # Yield the next training batch
                 x_batch, y_batch = run_io_tasks_in_parallel(
                     executor, (self.x, self.y), self.batch_size, offset

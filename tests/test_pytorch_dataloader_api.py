@@ -34,9 +34,23 @@ ROWS = 100
     "num_of_attributes",
     [1, 2, 3],
 )
+@pytest.mark.parametrize(
+    "batch_shuffle",
+    [True, False],
+)
+@pytest.mark.parametrize(
+    "within_batch_shuffle",
+    [True, False],
+)
 class TestPytorchDenseDataloader:
     def test_tiledb_pytorch_data_api_train_with_multiple_dim_data(
-        self, tmpdir, input_shape, workers, num_of_attributes
+        self,
+        tmpdir,
+        input_shape,
+        workers,
+        num_of_attributes,
+        batch_shuffle,
+        within_batch_shuffle,
     ):
         tiledb_uri_x = os.path.join(tmpdir, "x")
         tiledb_uri_y = os.path.join(tmpdir, "y")
@@ -61,6 +75,8 @@ class TestPytorchDenseDataloader:
                 x_array=x,
                 y_array=y,
                 batch_size=BATCH_SIZE,
+                batch_shuffle=batch_shuffle,
+                within_batch_shuffle=within_batch_shuffle,
                 x_attribute_names=[
                     "features_" + str(attr) for attr in range(num_of_attributes)
                 ],
@@ -69,15 +85,26 @@ class TestPytorchDenseDataloader:
                 ],
             )
             assert isinstance(tiledb_dataset, torch.utils.data.IterableDataset)
+
             # Same test without attribute names explicitly provided by the user
             tiledb_dataset = PyTorchTileDBDenseDataset(
-                x_array=x, y_array=y, batch_size=BATCH_SIZE
+                x_array=x,
+                y_array=y,
+                batch_size=BATCH_SIZE,
+                batch_shuffle=batch_shuffle,
+                within_batch_shuffle=within_batch_shuffle,
             )
 
             assert isinstance(tiledb_dataset, torch.utils.data.IterableDataset)
 
     def test_except_with_diff_number_of_x_y_rows(
-        self, tmpdir, input_shape, workers, num_of_attributes
+        self,
+        tmpdir,
+        input_shape,
+        workers,
+        num_of_attributes,
+        batch_shuffle,
+        within_batch_shuffle,
     ):
         tiledb_uri_x = os.path.join(tmpdir, "x")
         tiledb_uri_y = os.path.join(tmpdir, "y")
@@ -103,16 +130,26 @@ class TestPytorchDenseDataloader:
                 PyTorchTileDBDenseDataset(
                     x_array=x,
                     y_array=y,
+                    batch_size=BATCH_SIZE,
+                    batch_shuffle=batch_shuffle,
+                    within_batch_shuffle=within_batch_shuffle,
                     x_attribute_names=[
                         "features_" + str(attr) for attr in range(num_of_attributes)
                     ],
                     y_attribute_names=[
                         "features_" + str(attr) for attr in range(num_of_attributes)
                     ],
-                    batch_size=BATCH_SIZE,
                 )
 
-    def test_dataset_length(self, tmpdir, input_shape, workers, num_of_attributes):
+    def test_dataset_length(
+        self,
+        tmpdir,
+        input_shape,
+        workers,
+        num_of_attributes,
+        batch_shuffle,
+        within_batch_shuffle,
+    ):
         tiledb_uri_x = os.path.join(tmpdir, "x")
         tiledb_uri_y = os.path.join(tmpdir, "y")
 
@@ -135,13 +172,15 @@ class TestPytorchDenseDataloader:
             tiledb_dataset = PyTorchTileDBDenseDataset(
                 x_array=x,
                 y_array=y,
+                batch_size=BATCH_SIZE,
+                batch_shuffle=batch_shuffle,
+                within_batch_shuffle=within_batch_shuffle,
                 x_attribute_names=[
                     "features_" + str(attr) for attr in range(num_of_attributes)
                 ],
                 y_attribute_names=[
                     "features_" + str(attr) for attr in range(num_of_attributes)
                 ],
-                batch_size=BATCH_SIZE,
             )
 
             assert len(tiledb_dataset) == ROWS
@@ -151,12 +190,21 @@ class TestPytorchDenseDataloader:
                 x_array=x,
                 y_array=y,
                 batch_size=BATCH_SIZE,
+                batch_shuffle=batch_shuffle,
+                within_batch_shuffle=within_batch_shuffle,
             )
 
             assert len(tiledb_dataset) == ROWS
 
     def test_dataset_generator_batch_output(
-        self, tmpdir, input_shape, workers, mocker, num_of_attributes
+        self,
+        tmpdir,
+        input_shape,
+        workers,
+        mocker,
+        num_of_attributes,
+        batch_shuffle,
+        within_batch_shuffle,
     ):
         tiledb_uri_x = os.path.join(tmpdir, "x")
         tiledb_uri_y = os.path.join(tmpdir, "y")
@@ -178,7 +226,11 @@ class TestPytorchDenseDataloader:
 
         with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
             tiledb_dataset = PyTorchTileDBDenseDataset(
-                x_array=x, y_array=y, batch_size=BATCH_SIZE
+                x_array=x,
+                y_array=y,
+                batch_size=BATCH_SIZE,
+                batch_shuffle=batch_shuffle,
+                within_batch_shuffle=within_batch_shuffle,
             )
 
             assert isinstance(tiledb_dataset, torch.utils.data.IterableDataset)
@@ -201,7 +253,14 @@ class TestPytorchDenseDataloader:
                     )
 
     def test_no_duplicates_with_multiple_workers(
-        self, tmpdir, input_shape, workers, mocker, num_of_attributes
+        self,
+        tmpdir,
+        input_shape,
+        workers,
+        mocker,
+        num_of_attributes,
+        batch_shuffle,
+        within_batch_shuffle,
     ):
 
         tiledb_uri_x = os.path.join(tmpdir, "x")
@@ -225,7 +284,11 @@ class TestPytorchDenseDataloader:
         with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
 
             tiledb_dataset = PyTorchTileDBDenseDataset(
-                x_array=x, y_array=y, batch_size=BATCH_SIZE
+                x_array=x,
+                y_array=y,
+                batch_size=BATCH_SIZE,
+                batch_shuffle=batch_shuffle,
+                within_batch_shuffle=within_batch_shuffle,
             )
 
             assert isinstance(tiledb_dataset, torch.utils.data.IterableDataset)
