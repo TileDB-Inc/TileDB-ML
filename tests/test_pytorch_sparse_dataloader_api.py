@@ -273,12 +273,8 @@ class TestTileDBSparsePyTorchDataloaderAPI:
                     ],
                 )
                 # Exhaust iterator
-                while True:
-                    try:
-                        next(tiledb_dataset.__iter__())
-                    except StopIteration:
-                        # if StopIteration is raised, break from loop
-                        break
+                for _ in tiledb_dataset:
+                    pass
 
         # Same test without attribute names explicitly provided by the user
         with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
@@ -290,11 +286,8 @@ class TestTileDBSparsePyTorchDataloaderAPI:
                     batch_shuffle=batch_shuffle,
                 )
                 # Exhaust iterator
-                while True:
-                    try:
-                        next(tiledb_dataset.__iter__())
-                    except StopIteration:
-                        break
+                for _ in tiledb_dataset:
+                    pass
 
     def test_tiledb_pytorch_sparse_sparse_label_data(
         self, tmpdir, input_shape, workers, num_of_attributes, batch_shuffle

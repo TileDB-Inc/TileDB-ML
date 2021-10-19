@@ -1,7 +1,6 @@
 """Functionality for loading data directly from sparse TileDB arrays into the PyTorch Dataloader API."""
 
 import math
-import random
 from concurrent.futures import ThreadPoolExecutor
 from typing import Iterator, Sequence, Tuple
 
@@ -39,6 +38,7 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset[DataType]):
         :param batch_size: The size of the batch that the generator will return. Remember
             to set batch_size=None when calling the PyTorch Sparse Dataloader API,
             because batching is taking place inside the TileDB IterableDataset.
+        :param batch_shuffle: True if we want to shuffle batches.
         :param x_attribute_names: The attribute names of x_array.
         :param y_attribute_names: The attribute names of y_array.
         """
@@ -115,10 +115,11 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset[DataType]):
 
         # Shuffle offsets in case we need batch shuffling
         if self.batch_shuffle:
-            random.seed()
-            offsets = random.sample(  # type: ignore
-                range(iter_start, iter_end, self.batch_size),
+            gen = np.random.default_rng()
+            offsets = gen.choice(
+                offsets,
                 math.ceil((iter_end - iter_start) / self.batch_size),
+                replace=False,
             )
 
         x_shape = self.x.schema.domain.shape[1:]

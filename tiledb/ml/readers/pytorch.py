@@ -1,7 +1,6 @@
 """Functionality for loading data directly from dense TileDB arrays into the PyTorch Dataloader API."""
 
 import math
-import random
 from concurrent.futures import ThreadPoolExecutor
 from typing import Iterator, Sequence, Tuple
 
@@ -48,8 +47,8 @@ class PyTorchTileDBDenseDataset(torch.utils.data.IterableDataset[DataType]):
         :param batch_size: The size of the batch that the generator will return. Remember
             to set batch_size=None when calling the PyTorch Dataloader API, because
             batching is taking place inside the TileDB IterableDataset.
-        :param batch_shuffle: Bool. True if we want to shuffle batches.
-        :param within_batch_shuffle: Bool. True if we want to shuffle records in each batche.
+        :param batch_shuffle: True if we want to shuffle batches.
+        :param within_batch_shuffle: True if we want to shuffle records in each batch.
         :param x_attribute_names: The attribute names of x_array.
         :param y_attribute_names: The attribute names of y_array.
         """
@@ -98,10 +97,11 @@ class PyTorchTileDBDenseDataset(torch.utils.data.IterableDataset[DataType]):
 
         # Shuffle offsets in case we need batch shuffling
         if self.batch_shuffle:
-            random.seed()
-            offsets = random.sample(  # type: ignore
-                range(iter_start, iter_end, self.batch_size),
+            gen = np.random.default_rng()
+            offsets = gen.choice(
+                offsets,
                 math.ceil((iter_end - iter_start) / self.batch_size),
+                replace=False,
             )
 
         # Loop over batches
@@ -112,13 +112,13 @@ class PyTorchTileDBDenseDataset(torch.utils.data.IterableDataset[DataType]):
                 )
 
                 if self.within_batch_shuffle:
-                    random.seed()
                     # We get batch length based on the first attribute, because last batch might be smaller than the
                     # batch size
                     rand_permutation = np.arange(
                         x_batch[self.x_attribute_names[0]].shape[0]
                     )
-                    random.shuffle(rand_permutation)
+
+                    np.random.shuffle(rand_permutation)
 
                     # Yield the next training batch
                     yield tuple(
