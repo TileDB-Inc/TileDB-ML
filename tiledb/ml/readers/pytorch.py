@@ -93,16 +93,11 @@ class PyTorchTileDBDenseDataset(torch.utils.data.IterableDataset[DataType]):
             iter_start = worker_id * per_worker
             iter_end = min(iter_start + per_worker, rows)
 
-        offsets = range(iter_start, iter_end, self.batch_size)
+        offsets = np.arange(iter_start, iter_end, self.batch_size)
 
         # Shuffle offsets in case we need batch shuffling
         if self.batch_shuffle:
-            gen = np.random.default_rng()
-            offsets = gen.choice(
-                offsets,
-                math.ceil((iter_end - iter_start) / self.batch_size),
-                replace=False,
-            )
+            np.random.shuffle(offsets)
 
         # Loop over batches
         with ThreadPoolExecutor(max_workers=2) as executor:
