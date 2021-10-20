@@ -13,8 +13,9 @@ from .utils import ingest_in_tiledb
 
 # Test parameters
 NUM_OF_CLASSES = 5
+BUFFER_SIZE = 100
 BATCH_SIZE = 20
-ROWS = 100
+ROWS = 1000
 
 
 @pytest.mark.parametrize(
@@ -75,6 +76,7 @@ class TestPytorchDenseDataloader:
                 x_array=x,
                 y_array=y,
                 batch_size=BATCH_SIZE,
+                buffer_size=BUFFER_SIZE,
                 batch_shuffle=batch_shuffle,
                 within_batch_shuffle=within_batch_shuffle,
                 x_attribute_names=[
@@ -91,6 +93,7 @@ class TestPytorchDenseDataloader:
                 x_array=x,
                 y_array=y,
                 batch_size=BATCH_SIZE,
+                buffer_size=BUFFER_SIZE,
                 batch_shuffle=batch_shuffle,
                 within_batch_shuffle=within_batch_shuffle,
             )
@@ -131,6 +134,7 @@ class TestPytorchDenseDataloader:
                     x_array=x,
                     y_array=y,
                     batch_size=BATCH_SIZE,
+                    buffer_size=BUFFER_SIZE,
                     batch_shuffle=batch_shuffle,
                     within_batch_shuffle=within_batch_shuffle,
                     x_attribute_names=[
@@ -173,6 +177,7 @@ class TestPytorchDenseDataloader:
                 x_array=x,
                 y_array=y,
                 batch_size=BATCH_SIZE,
+                buffer_size=BUFFER_SIZE,
                 batch_shuffle=batch_shuffle,
                 within_batch_shuffle=within_batch_shuffle,
                 x_attribute_names=[
@@ -229,6 +234,7 @@ class TestPytorchDenseDataloader:
                 x_array=x,
                 y_array=y,
                 batch_size=BATCH_SIZE,
+                buffer_size=BUFFER_SIZE,
                 batch_shuffle=batch_shuffle,
                 within_batch_shuffle=within_batch_shuffle,
             )
@@ -287,6 +293,7 @@ class TestPytorchDenseDataloader:
                 x_array=x,
                 y_array=y,
                 batch_size=BATCH_SIZE,
+                buffer_size=BUFFER_SIZE,
                 batch_shuffle=batch_shuffle,
                 within_batch_shuffle=within_batch_shuffle,
             )
