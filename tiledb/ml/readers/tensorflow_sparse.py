@@ -28,6 +28,7 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
         x_array: tiledb.SparseArray,
         y_array: tiledb.Array,
         batch_size: int,
+        batch_shuffle: bool = False,
         x_attribute_names: Sequence[str] = (),
         y_attribute_names: Sequence[str] = (),
     ) -> tf.data.Dataset:
@@ -37,8 +38,8 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
 
         :param x_array: Array that contains features.
         :param y_array: Array that contains labels.
-        :param batch_size: The size of the batch that the implemented _generator method
-            will return.
+        :param batch_size: The size of the batch that the implemented _generator method will return.
+        :param batch_shuffle: True if we want to shuffle batches.
         :param x_attribute_names: The attribute names of x_array.
         :param y_attribute_names: The attribute names of y_array.
         """
@@ -95,6 +96,7 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
                 y_attribute_names=y_attribute_names,
                 rows=rows,
                 batch_size=batch_size,
+                batch_shuffl=batch_shuffle,
             )
 
             return dataset_ops.Dataset.from_generator(
@@ -122,6 +124,7 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
                 y_attribute_names=y_attribute_names,
                 rows=rows,
                 batch_size=batch_size,
+                batch_shuffle=batch_shuffle,
             )
 
             return dataset_ops.Dataset.from_generator(
@@ -160,6 +163,7 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
         y_attribute_names: Sequence[str],
         rows: int,
         batch_size: int,
+        batch_shuffle: bool,
     ) -> Iterator[Tuple[tf.sparse.SparseTensor, ...]]:
         """
         Generator for yielding training batches.
@@ -170,15 +174,22 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
         :param y_attribute_names: The attribute names of y_array.
         :param rows: The number of observations in x, y datasets.
         :param batch_size: Size of batch, i.e., number of rows returned per call.
+        :param batch_shuffle: True if we want to shuffle batches.
         :return: An iterator of x and y batches.
         """
         x_shape = x.schema.domain.shape[1:]
         y_shape = y.schema.domain.shape[1:]
 
+        offsets = np.arange(0, rows, batch_size)
+
+        # Shuffle offsets in case we need batch shuffling
+        if batch_shuffle:
+            np.random.shuffle(offsets)
+
         # Loop over batches
         # https://github.com/tensorflow/tensorflow/issues/44565
         with ThreadPoolExecutor(max_workers=2) as executor:
-            for offset in range(0, rows, batch_size):
+            for offset in offsets:
                 x_batch, y_batch = run_io_tasks_in_parallel(
                     executor, (x, y), batch_size, offset
                 )
@@ -237,6 +248,7 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
         y_attribute_names: Sequence[str],
         rows: int,
         batch_size: int,
+        batch_shuffle: bool,
     ) -> Iterator[Tuple[Union[tf.sparse.SparseTensor, np.ndarray], ...]]:
         """
         Generator for yielding training batches.
@@ -247,14 +259,21 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
         :param y_attribute_names: The attribute names of y_array.
         :param rows: The number of observations in x, y datasets.
         :param batch_size: Size of batch, i.e., number of rows returned per call.
+        :param batch_shuffle: True if we want to shuffle batches.
         :return: An iterator of x and y batches.
         """
         x_shape = x.schema.domain.shape[1:]
 
+        offsets = np.arange(0, rows, batch_size)
+
+        # Shuffle offsets in case we need batch shuffling
+        if batch_shuffle:
+            np.random.shuffle(offsets)
+
         # Loop over batches
         # https://github.com/tensorflow/tensorflow/issues/44565
         with ThreadPoolExecutor(max_workers=2) as executor:
-            for offset in range(0, rows, batch_size):
+            for offset in offsets:
                 x_batch, y_batch = run_io_tasks_in_parallel(
                     executor, (x, y), batch_size, offset
                 )
