@@ -13,9 +13,9 @@ from .utils import ingest_in_tiledb
 
 # Test parameters
 NUM_OF_CLASSES = 5
-BUFFER_SIZE = 100
+BUFFER_SIZE = 50
 BATCH_SIZE = 20
-ROWS = 1000
+ROWS = 100
 
 
 @pytest.mark.parametrize(
