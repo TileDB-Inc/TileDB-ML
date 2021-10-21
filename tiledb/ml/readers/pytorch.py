@@ -24,7 +24,7 @@ class PyTorchTileDBDenseDataset(torch.utils.data.IterableDataset[DataType]):
         x_array: tiledb.DenseArray,
         y_array: tiledb.DenseArray,
         batch_size: int,
-        buffer_size: Optional[int] = None,
+        buffer_size: Optional[int],
         batch_shuffle: bool = False,
         within_batch_shuffle: bool = False,
         x_attribute_names: Sequence[str] = (),
@@ -67,7 +67,7 @@ class PyTorchTileDBDenseDataset(torch.utils.data.IterableDataset[DataType]):
         self.x = x_array
         self.y = y_array
         self.batch_size = batch_size
-        self.buffer_size = batch_size if buffer_size is None else buffer_size
+        self.buffer_size = buffer_size or buffer_size
         self.batch_shuffle = batch_shuffle
         self.within_batch_shuffle = within_batch_shuffle
 
