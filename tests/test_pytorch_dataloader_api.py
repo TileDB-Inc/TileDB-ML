@@ -13,7 +13,6 @@ from .utils import ingest_in_tiledb
 
 # Test parameters
 NUM_OF_CLASSES = 5
-BUFFER_SIZE = 50
 BATCH_SIZE = 20
 ROWS = 100
 
@@ -43,6 +42,10 @@ ROWS = 100
     "within_batch_shuffle",
     [True, False],
 )
+@pytest.mark.parametrize(
+    "buffer_size",
+    [50, None],
+)
 class TestPytorchDenseDataloader:
     def test_tiledb_pytorch_data_api_train_with_multiple_dim_data(
         self,
@@ -52,6 +55,7 @@ class TestPytorchDenseDataloader:
         num_of_attributes,
         batch_shuffle,
         within_batch_shuffle,
+        buffer_size,
     ):
         tiledb_uri_x = os.path.join(tmpdir, "x")
         tiledb_uri_y = os.path.join(tmpdir, "y")
@@ -76,7 +80,7 @@ class TestPytorchDenseDataloader:
                 x_array=x,
                 y_array=y,
                 batch_size=BATCH_SIZE,
-                buffer_size=BUFFER_SIZE,
+                buffer_size=buffer_size,
                 batch_shuffle=batch_shuffle,
                 within_batch_shuffle=within_batch_shuffle,
                 x_attribute_names=[
@@ -93,7 +97,7 @@ class TestPytorchDenseDataloader:
                 x_array=x,
                 y_array=y,
                 batch_size=BATCH_SIZE,
-                buffer_size=BUFFER_SIZE,
+                buffer_size=buffer_size,
                 batch_shuffle=batch_shuffle,
                 within_batch_shuffle=within_batch_shuffle,
             )
@@ -108,6 +112,7 @@ class TestPytorchDenseDataloader:
         num_of_attributes,
         batch_shuffle,
         within_batch_shuffle,
+        buffer_size,
     ):
         tiledb_uri_x = os.path.join(tmpdir, "x")
         tiledb_uri_y = os.path.join(tmpdir, "y")
@@ -134,7 +139,7 @@ class TestPytorchDenseDataloader:
                     x_array=x,
                     y_array=y,
                     batch_size=BATCH_SIZE,
-                    buffer_size=BUFFER_SIZE,
+                    buffer_size=buffer_size,
                     batch_shuffle=batch_shuffle,
                     within_batch_shuffle=within_batch_shuffle,
                     x_attribute_names=[
@@ -153,6 +158,7 @@ class TestPytorchDenseDataloader:
         num_of_attributes,
         batch_shuffle,
         within_batch_shuffle,
+        buffer_size,
     ):
         tiledb_uri_x = os.path.join(tmpdir, "x")
         tiledb_uri_y = os.path.join(tmpdir, "y")
@@ -177,7 +183,7 @@ class TestPytorchDenseDataloader:
                 x_array=x,
                 y_array=y,
                 batch_size=BATCH_SIZE,
-                buffer_size=BUFFER_SIZE,
+                buffer_size=buffer_size,
                 batch_shuffle=batch_shuffle,
                 within_batch_shuffle=within_batch_shuffle,
                 x_attribute_names=[
@@ -210,6 +216,7 @@ class TestPytorchDenseDataloader:
         num_of_attributes,
         batch_shuffle,
         within_batch_shuffle,
+        buffer_size,
     ):
         tiledb_uri_x = os.path.join(tmpdir, "x")
         tiledb_uri_y = os.path.join(tmpdir, "y")
@@ -234,7 +241,7 @@ class TestPytorchDenseDataloader:
                 x_array=x,
                 y_array=y,
                 batch_size=BATCH_SIZE,
-                buffer_size=BUFFER_SIZE,
+                buffer_size=buffer_size,
                 batch_shuffle=batch_shuffle,
                 within_batch_shuffle=within_batch_shuffle,
             )
@@ -267,6 +274,7 @@ class TestPytorchDenseDataloader:
         num_of_attributes,
         batch_shuffle,
         within_batch_shuffle,
+        buffer_size,
     ):
 
         tiledb_uri_x = os.path.join(tmpdir, "x")
@@ -293,7 +301,7 @@ class TestPytorchDenseDataloader:
                 x_array=x,
                 y_array=y,
                 batch_size=BATCH_SIZE,
-                buffer_size=BUFFER_SIZE,
+                buffer_size=buffer_size,
                 batch_shuffle=batch_shuffle,
                 within_batch_shuffle=within_batch_shuffle,
             )
