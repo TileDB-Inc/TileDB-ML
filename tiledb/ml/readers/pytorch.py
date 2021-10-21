@@ -67,7 +67,7 @@ class PyTorchTileDBDenseDataset(torch.utils.data.IterableDataset[DataType]):
         self.x = x_array
         self.y = y_array
         self.batch_size = batch_size
-        self.buffer_size = buffer_size
+        self.buffer_size = batch_size if buffer_size is None else buffer_size
         self.batch_shuffle = batch_shuffle
         self.within_batch_shuffle = within_batch_shuffle
 
@@ -79,6 +79,9 @@ class PyTorchTileDBDenseDataset(torch.utils.data.IterableDataset[DataType]):
         self.y_attribute_names = y_attribute_names or tuple(
             y_array.schema.attr(idx).name for idx in range(y_array.schema.nattr)
         )
+
+        if buffer_size is not None and buffer_size < batch_size:
+            raise ValueError("Buffer size should be geq to the batch size.")
 
     def __iter__(self) -> Iterator[DataType]:
         worker_info = torch.utils.data.get_worker_info()  # type: ignore
@@ -111,35 +114,22 @@ class PyTorchTileDBDenseDataset(torch.utils.data.IterableDataset[DataType]):
                 x_buffer, y_buffer = run_io_tasks_in_parallel(
                     executor,
                     (self.x, self.y),
-                    self.buffer_size if self.buffer_size else self.batch_size,
+                    self.buffer_size,
                     offset,
                 )
 
                 # Split the buffer_size into batch_size chunks
-                # batch_offsets = np.arange(offset, min(offset + self.buffer_size, iter_end), self.batch_size)
-                batch_offsets = (
-                    np.arange(0, self.buffer_size, self.batch_size)
-                    if self.buffer_size
-                    else range(1)
-                )
+                batch_offsets = np.arange(0, self.buffer_size, self.batch_size)
 
                 for batch_offset in batch_offsets:
-                    x_batch = (
-                        {
-                            attr: data[batch_offset : batch_offset + self.batch_size]
-                            for attr, data in x_buffer.items()
-                        }
-                        if self.buffer_size
-                        else x_buffer
-                    )
-                    y_batch = (
-                        {
-                            attr: data[batch_offset : batch_offset + self.batch_size]
-                            for attr, data in y_buffer.items()
-                        }
-                        if self.buffer_size
-                        else y_buffer
-                    )
+                    x_batch = {
+                        attr: data[batch_offset : batch_offset + self.batch_size]
+                        for attr, data in x_buffer.items()
+                    }
+                    y_batch = {
+                        attr: data[batch_offset : batch_offset + self.batch_size]
+                        for attr, data in y_buffer.items()
+                    }
 
                     if self.within_batch_shuffle:
                         # We get batch length based on the first attribute, because last batch might be smaller than the

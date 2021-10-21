@@ -397,3 +397,47 @@ class TestTileDBSparsePyTorchDataloaderAPI:
                     BATCH_SIZE,
                     NUM_OF_CLASSES,
                 )
+
+    def test_buffer_size_geq_batch_size_exception(
+        self,
+        tmpdir,
+        input_shape,
+        workers,
+        num_of_attributes,
+        batch_shuffle,
+        buffer_size,
+    ):
+        tiledb_uri_x = os.path.join(tmpdir, "x")
+        tiledb_uri_y = os.path.join(tmpdir, "y")
+
+        ingest_in_tiledb(
+            uri=tiledb_uri_x,
+            data=create_sparse_array_one_hot_2d(ROWS, input_shape[0]),
+            batch_size=BATCH_SIZE,
+            sparse=True,
+            num_of_attributes=num_of_attributes,
+        )
+        ingest_in_tiledb(
+            uri=tiledb_uri_y,
+            data=create_sparse_array_one_hot_2d(ROWS, NUM_OF_CLASSES),
+            batch_size=BATCH_SIZE,
+            sparse=True,
+            num_of_attributes=num_of_attributes,
+        )
+
+        buffer_size = 10
+        with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
+            with pytest.raises(ValueError):
+                _ = PyTorchTileDBSparseDataset(
+                    x_array=x,
+                    y_array=y,
+                    batch_size=BATCH_SIZE,
+                    buffer_size=buffer_size,
+                    batch_shuffle=batch_shuffle,
+                    x_attribute_names=[
+                        "features_" + str(attr) for attr in range(num_of_attributes)
+                    ],
+                    y_attribute_names=[
+                        "features_" + str(attr) for attr in range(num_of_attributes)
+                    ],
+                )

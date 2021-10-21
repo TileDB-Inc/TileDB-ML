@@ -59,7 +59,7 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset[DataType]):
         self.x = x_array
         self.y = y_array
         self.batch_size = batch_size
-        self.buffer_size = buffer_size
+        self.buffer_size = batch_size if buffer_size is None else buffer_size
         self.batch_shuffle = batch_shuffle
 
         self.x_attribute_names = (
@@ -73,6 +73,9 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset[DataType]):
             if not y_attribute_names
             else y_attribute_names
         )
+
+        if buffer_size is not None and buffer_size < batch_size:
+            raise ValueError("Buffer size should be geq to the batch size.")
 
     def __check_row_dims(self, x_row_idx: np.ndarray, y_row_idx: np.ndarray) -> None:
         """
@@ -131,35 +134,23 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset[DataType]):
                 x_buffer, y_buffer = run_io_tasks_in_parallel(
                     executor,
                     (self.x, self.y),
-                    self.buffer_size if self.buffer_size else self.batch_size,
+                    self.buffer_size,
                     offset,
                 )
 
                 # Split the buffer_size into batch_size chunks
                 # batch_offsets = np.arange(offset, min(offset + self.buffer_size, iter_end), self.batch_size)
-                batch_offsets = (
-                    np.arange(0, self.buffer_size, self.batch_size)
-                    if self.buffer_size
-                    else range(1)
-                )
+                batch_offsets = np.arange(0, self.buffer_size, self.batch_size)
 
                 for batch_offset in batch_offsets:
-                    x_batch = (
-                        {
-                            attr: data[batch_offset : batch_offset + self.batch_size]
-                            for attr, data in x_buffer.items()
-                        }
-                        if self.buffer_size
-                        else x_buffer
-                    )
-                    y_batch = (
-                        {
-                            attr: data[batch_offset : batch_offset + self.batch_size]
-                            for attr, data in y_buffer.items()
-                        }
-                        if self.buffer_size
-                        else y_buffer
-                    )
+                    x_batch = {
+                        attr: data[batch_offset : batch_offset + self.batch_size]
+                        for attr, data in x_buffer.items()
+                    }
+                    y_batch = {
+                        attr: data[batch_offset : batch_offset + self.batch_size]
+                        for attr, data in y_buffer.items()
+                    }
 
                     x_coords = []
                     for i in range(0, self.x.schema.domain.ndim):
