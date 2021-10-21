@@ -201,6 +201,7 @@ class TestPytorchDenseDataloader:
                 x_array=x,
                 y_array=y,
                 batch_size=BATCH_SIZE,
+                buffer_size=buffer_size,
                 batch_shuffle=batch_shuffle,
                 within_batch_shuffle=within_batch_shuffle,
             )

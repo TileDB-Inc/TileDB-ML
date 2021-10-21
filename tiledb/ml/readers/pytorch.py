@@ -67,7 +67,7 @@ class PyTorchTileDBDenseDataset(torch.utils.data.IterableDataset[DataType]):
         self.x = x_array
         self.y = y_array
         self.batch_size = batch_size
-        self.buffer_size = buffer_size or buffer_size
+        self.buffer_size = buffer_size or batch_size
         self.batch_shuffle = batch_shuffle
         self.within_batch_shuffle = within_batch_shuffle
 
