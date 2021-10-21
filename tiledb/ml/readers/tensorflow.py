@@ -72,6 +72,11 @@ class TensorflowTileDBDenseDataset(FlatMapDataset):
                 y_array.schema.attr(idx).name for idx in range(y_array.schema.nattr)
             ]
 
+        # Set the buffer_size appropriately and check its size
+        buffer_size_checked = buffer_size if buffer_size is not None else batch_size
+        if buffer_size_checked < batch_size:
+            raise ValueError("Buffer size should be geq to the batch size.")
+
         # Get number of observations
         rows = x_array.schema.domain.shape[0]
 
@@ -97,7 +102,7 @@ class TensorflowTileDBDenseDataset(FlatMapDataset):
             y_attribute_names=y_attribute_names,
             rows=rows,
             batch_size=batch_size,
-            buffer_size=buffer_size,
+            buffer_size=buffer_size_checked,
             batch_shuffle=batch_shuffle,
             within_batch_shuffle=within_batch_shuffle,
         )
@@ -164,33 +169,22 @@ class TensorflowTileDBDenseDataset(FlatMapDataset):
                 x_buffer, y_buffer = run_io_tasks_in_parallel(
                     executor,
                     (x, y),
-                    buffer_size if buffer_size else batch_size,
+                    buffer_size,
                     offset,
                 )
 
                 # Split the buffer_size into batch_size chunks
-                # batch_offsets = np.arange(offset, min(offset + self.buffer_size, iter_end), self.batch_size)
-                batch_offsets = (
-                    np.arange(0, buffer_size, batch_size) if buffer_size else range(1)
-                )
+                batch_offsets = np.arange(0, buffer_size, batch_size)
 
                 for batch_offset in batch_offsets:
-                    x_batch = (
-                        {
-                            attr: data[batch_offset : batch_offset + batch_size]
-                            for attr, data in x_buffer.items()
-                        }
-                        if buffer_size
-                        else x_buffer
-                    )
-                    y_batch = (
-                        {
-                            attr: data[batch_offset : batch_offset + batch_size]
-                            for attr, data in y_buffer.items()
-                        }
-                        if buffer_size
-                        else y_buffer
-                    )
+                    x_batch = {
+                        attr: data[batch_offset : batch_offset + batch_size]
+                        for attr, data in x_buffer.items()
+                    }
+                    y_batch = {
+                        attr: data[batch_offset : batch_offset + batch_size]
+                        for attr, data in y_buffer.items()
+                    }
 
                     if within_batch_shuffle:
                         # We get batch length based on the first attribute, because last batch might be smaller than the

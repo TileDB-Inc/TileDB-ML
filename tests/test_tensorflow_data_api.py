@@ -282,3 +282,51 @@ class TestTileDBTensorflowDataAPI:
                     BATCH_SIZE,
                     NUM_OF_CLASSES,
                 )
+
+    def test_buffer_size_geq_batch_size_exception(
+        self,
+        tmpdir,
+        input_shape,
+        num_of_attributes,
+        batch_shuffle,
+        within_batch_shuffle,
+        buffer_size,
+    ):
+        array_uuid = str(uuid.uuid4())
+        tiledb_uri_x = os.path.join(tmpdir, "x" + array_uuid)
+        tiledb_uri_y = os.path.join(tmpdir, "y" + array_uuid)
+
+        ingest_in_tiledb(
+            uri=tiledb_uri_x,
+            # Add one extra row on X
+            data=np.random.rand(ROWS + 1, *input_shape[1:]),
+            batch_size=BATCH_SIZE,
+            sparse=False,
+            num_of_attributes=num_of_attributes,
+        )
+        ingest_in_tiledb(
+            uri=tiledb_uri_y,
+            data=np.random.rand(ROWS, NUM_OF_CLASSES),
+            batch_size=BATCH_SIZE,
+            sparse=False,
+            num_of_attributes=num_of_attributes,
+        )
+
+        # Set the buffer_size less than the batch_size
+        buffer_size = 10
+        with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
+            with pytest.raises(ValueError):
+                TensorflowTileDBDenseDataset(
+                    x_array=x,
+                    y_array=y,
+                    batch_size=BATCH_SIZE,
+                    batch_shuffle=batch_shuffle,
+                    buffer_size=buffer_size,
+                    within_batch_shuffle=within_batch_shuffle,
+                    x_attribute_names=[
+                        "features_" + str(attr) for attr in range(num_of_attributes)
+                    ],
+                    y_attribute_names=[
+                        "features_" + str(attr) for attr in range(num_of_attributes)
+                    ],
+                )
