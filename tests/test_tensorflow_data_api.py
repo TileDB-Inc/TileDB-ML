@@ -44,6 +44,10 @@ ROWS = 1000
     "within_batch_shuffle",
     [True, False],
 )
+@pytest.mark.parametrize(
+    "buffer_size",
+    [50, None],
+)
 class TestTileDBTensorflowDataAPI:
     def test_tiledb_tf_data_api_with_multiple_dim_data(
         self,
@@ -52,6 +56,7 @@ class TestTileDBTensorflowDataAPI:
         num_of_attributes,
         batch_shuffle,
         within_batch_shuffle,
+        buffer_size,
     ):
         array_uuid = str(uuid.uuid4())
         tiledb_uri_x = os.path.join(tmpdir, "x" + array_uuid)
@@ -78,6 +83,7 @@ class TestTileDBTensorflowDataAPI:
                 y_array=y,
                 batch_size=BATCH_SIZE,
                 batch_shuffle=batch_shuffle,
+                buffer_size=buffer_size,
                 within_batch_shuffle=within_batch_shuffle,
                 x_attribute_names=[
                     "features_" + str(attr) for attr in range(num_of_attributes)
@@ -95,6 +101,7 @@ class TestTileDBTensorflowDataAPI:
                 y_array=y,
                 batch_size=BATCH_SIZE,
                 batch_shuffle=batch_shuffle,
+                buffer_size=buffer_size,
                 within_batch_shuffle=within_batch_shuffle,
             )
 
@@ -107,6 +114,7 @@ class TestTileDBTensorflowDataAPI:
         num_of_attributes,
         batch_shuffle,
         within_batch_shuffle,
+        buffer_size,
     ):
         array_uuid = str(uuid.uuid4())
         tiledb_uri_x = os.path.join(tmpdir, "x" + array_uuid)
@@ -135,6 +143,7 @@ class TestTileDBTensorflowDataAPI:
                     y_array=y,
                     batch_size=BATCH_SIZE,
                     batch_shuffle=batch_shuffle,
+                    buffer_size=buffer_size,
                     within_batch_shuffle=within_batch_shuffle,
                     x_attribute_names=[
                         "features_" + str(attr) for attr in range(num_of_attributes)
@@ -152,6 +161,7 @@ class TestTileDBTensorflowDataAPI:
                     y_array=y,
                     batch_size=BATCH_SIZE,
                     batch_shuffle=batch_shuffle,
+                    buffer_size=buffer_size,
                     within_batch_shuffle=within_batch_shuffle,
                 )
 
@@ -162,6 +172,7 @@ class TestTileDBTensorflowDataAPI:
         num_of_attributes,
         batch_shuffle,
         within_batch_shuffle,
+        buffer_size,
     ):
         array_uuid = str(uuid.uuid4())
         tiledb_uri_x = os.path.join(tmpdir, "x" + array_uuid)
@@ -188,6 +199,7 @@ class TestTileDBTensorflowDataAPI:
                 y_array=y,
                 batch_size=BATCH_SIZE,
                 batch_shuffle=batch_shuffle,
+                buffer_size=buffer_size,
                 within_batch_shuffle=within_batch_shuffle,
                 x_attribute_names=[
                     "features_" + str(attr) for attr in range(num_of_attributes)
@@ -205,6 +217,7 @@ class TestTileDBTensorflowDataAPI:
                 y_array=y,
                 batch_size=BATCH_SIZE,
                 batch_shuffle=batch_shuffle,
+                buffer_size=buffer_size,
                 within_batch_shuffle=within_batch_shuffle,
             )
 
@@ -217,6 +230,7 @@ class TestTileDBTensorflowDataAPI:
         num_of_attributes,
         batch_shuffle,
         within_batch_shuffle,
+        buffer_size,
     ):
         array_uuid = str(uuid.uuid4())
         tiledb_uri_x = os.path.join(tmpdir, "x" + array_uuid)
@@ -249,6 +263,7 @@ class TestTileDBTensorflowDataAPI:
                     y=y,
                     batch_size=BATCH_SIZE,
                     batch_shuffle=batch_shuffle,
+                    buffer_size=buffer_size,
                     within_batch_shuffle=within_batch_shuffle,
                     x_attribute_names=attribute_names,
                     y_attribute_names=attribute_names,

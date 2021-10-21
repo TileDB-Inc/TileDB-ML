@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
-from typing import Iterator, Sequence, Tuple, cast
+from typing import Iterator, Optional, Sequence, Tuple, cast
 
 import numpy as np
 import tensorflow as tf
@@ -25,6 +25,7 @@ class TensorflowTileDBDenseDataset(FlatMapDataset):
         x_array: tiledb.DenseArray,
         y_array: tiledb.DenseArray,
         batch_size: int,
+        buffer_size: Optional[int] = None,
         batch_shuffle: bool = False,
         within_batch_shuffle: bool = False,
         x_attribute_names: Sequence[str] = (),
@@ -96,6 +97,7 @@ class TensorflowTileDBDenseDataset(FlatMapDataset):
             y_attribute_names=y_attribute_names,
             rows=rows,
             batch_size=batch_size,
+            buffer_size=buffer_size,
             batch_shuffle=batch_shuffle,
             within_batch_shuffle=within_batch_shuffle,
         )
@@ -116,6 +118,7 @@ class TensorflowTileDBDenseDataset(FlatMapDataset):
         x_array: tiledb.Array,
         y_array: tiledb.Array,
         batch_size: int,
+        buffer_size: Optional[int] = None,
         batch_shuffle: bool = False,
         within_batch_shuffle: bool = False,
         x_attribute_names: Sequence[str] = (),
@@ -131,6 +134,7 @@ class TensorflowTileDBDenseDataset(FlatMapDataset):
         y_attribute_names: Sequence[str],
         rows: int,
         batch_size: int,
+        buffer_size: Optional[int],
         batch_shuffle: bool,
         within_batch_shuffle: bool,
     ) -> Iterator[Tuple[np.ndarray, ...]]:
@@ -157,28 +161,59 @@ class TensorflowTileDBDenseDataset(FlatMapDataset):
         # Loop over batches
         with ThreadPoolExecutor(max_workers=2) as executor:
             for offset in offsets:
-                x_batch, y_batch = run_io_tasks_in_parallel(
-                    executor, (x, y), batch_size, offset
+                x_buffer, y_buffer = run_io_tasks_in_parallel(
+                    executor,
+                    (x, y),
+                    buffer_size if buffer_size else batch_size,
+                    offset,
                 )
 
-                if within_batch_shuffle:
-                    # We get batch length based on the first attribute, because last batch might be smaller than the
-                    # batch size
-                    rand_permutation = np.arange(x_batch[x_attribute_names[0]].shape[0])
+                # Split the buffer_size into batch_size chunks
+                # batch_offsets = np.arange(offset, min(offset + self.buffer_size, iter_end), self.batch_size)
+                batch_offsets = (
+                    np.arange(0, buffer_size, batch_size) if buffer_size else range(1)
+                )
 
-                    np.random.shuffle(rand_permutation)
+                for batch_offset in batch_offsets:
+                    x_batch = (
+                        {
+                            attr: data[batch_offset : batch_offset + batch_size]
+                            for attr, data in x_buffer.items()
+                        }
+                        if buffer_size
+                        else x_buffer
+                    )
+                    y_batch = (
+                        {
+                            attr: data[batch_offset : batch_offset + batch_size]
+                            for attr, data in y_buffer.items()
+                        }
+                        if buffer_size
+                        else y_buffer
+                    )
 
-                    # Yield the next training batch
-                    yield tuple(
-                        x_batch[attr][rand_permutation] for attr in x_attribute_names
-                    ) + tuple(
-                        y_batch[attr][rand_permutation] for attr in y_attribute_names
-                    )
-                else:
-                    # Yield the next training batch
-                    yield tuple(x_batch[attr] for attr in x_attribute_names) + tuple(
-                        y_batch[attr] for attr in y_attribute_names
-                    )
+                    if within_batch_shuffle:
+                        # We get batch length based on the first attribute, because last batch might be smaller than the
+                        # batch size
+                        rand_permutation = np.arange(
+                            x_batch[x_attribute_names[0]].shape[0]
+                        )
+
+                        np.random.shuffle(rand_permutation)
+
+                        # Yield the next training batch
+                        yield tuple(
+                            x_batch[attr][rand_permutation]
+                            for attr in x_attribute_names
+                        ) + tuple(
+                            y_batch[attr][rand_permutation]
+                            for attr in y_attribute_names
+                        )
+                    else:
+                        # Yield the next training batch
+                        yield tuple(
+                            x_batch[attr] for attr in x_attribute_names
+                        ) + tuple(y_batch[attr] for attr in y_attribute_names)
 
     def __len__(self) -> int:
         return self.length
