@@ -257,6 +257,10 @@ class TestTileDBTensorflowDataAPI:
                 "features_" + str(attr) for attr in range(num_of_attributes)
             ]
 
+            # This is a UT for generator only so TensorflowTileDBSparseDataset constructor
+            # will not be called and hence the correction of buffer_size from None to batch_size
+            # will be skipped and thus we hard code it for the test
+            buffer_size = buffer_size or BATCH_SIZE
             generated_data = next(
                 TensorflowTileDBDenseDataset._generator(
                     x=x,
