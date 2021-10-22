@@ -103,10 +103,6 @@ class PyTorchTileDBDenseDataset(torch.utils.data.IterableDataset[DataType]):
 
         offsets = np.arange(iter_start, iter_end, self.buffer_size)
 
-        # Shuffle offsets in case we need batch shuffling
-        if self.batch_shuffle:
-            np.random.shuffle(offsets)
-
         # Loop over batches
         with ThreadPoolExecutor(max_workers=2) as executor:
             for offset in offsets:
@@ -120,6 +116,10 @@ class PyTorchTileDBDenseDataset(torch.utils.data.IterableDataset[DataType]):
 
                 # Split the buffer_size into batch_size chunks
                 batch_offsets = np.arange(0, self.buffer_size, self.batch_size)
+
+                # Shuffle offsets in case we need batch shuffling
+                if self.batch_shuffle:
+                    np.random.shuffle(batch_offsets)
 
                 for batch_offset in batch_offsets:
                     x_batch = {
