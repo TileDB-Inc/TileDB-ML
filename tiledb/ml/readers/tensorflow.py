@@ -73,7 +73,7 @@ class TensorflowTileDBDenseDataset(FlatMapDataset):
             ]
 
         # Set the buffer_size appropriately and check its size
-        buffer_size_checked = buffer_size if buffer_size is not None else batch_size
+        buffer_size_checked = buffer_size or batch_size
         if buffer_size_checked < batch_size:
             raise ValueError("Buffer size should be geq to the batch size.")
 
@@ -157,11 +157,7 @@ class TensorflowTileDBDenseDataset(FlatMapDataset):
         :return: An iterator of x and y batches.
         """
 
-        offsets = np.arange(0, rows, batch_size)
-
-        # Shuffle offsets in case we need batch shuffling
-        if batch_shuffle:
-            np.random.shuffle(offsets)
+        offsets = np.arange(0, rows, buffer_size)
 
         # Loop over batches
         with ThreadPoolExecutor(max_workers=2) as executor:
@@ -175,6 +171,10 @@ class TensorflowTileDBDenseDataset(FlatMapDataset):
 
                 # Split the buffer_size into batch_size chunks
                 batch_offsets = np.arange(0, buffer_size, batch_size)
+
+                # Shuffle offsets in case we need batch shuffling
+                if batch_shuffle:
+                    np.random.shuffle(batch_offsets)
 
                 for batch_offset in batch_offsets:
                     x_batch = {
