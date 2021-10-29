@@ -55,12 +55,14 @@ this is useful in order to create simple and flexible model registries with Tile
 * [Example for Scikit-Learn Model on TileDB-Cloud](https://github.com/TileDB-Inc/TileDB-ML/blob/master/examples/cloud/sklearn_tiledb_cloud_ml_model_array.ipynb)
 
 
-We also provide detailed notebook examples on how to train Tensorflow and PyTorch models with the use of our Data APIs support for Dense and Sparse TileDB arrays.
+We also provide detailed notebook examples on how to train Tensorflow and PyTorch models with the use of our Data APIs support for Dense TileDB arrays.
 
 * [Example on training wih Tensorflow and Dense TileDB arrays](https://github.com/TileDB-Inc/TileDB-ML/blob/master/examples/readers/tensorflow_data_api_tiledb_dense.ipynb)
-* [Example on training wih Tensorflow and Sparse TileDB arrays](https://github.com/TileDB-Inc/TileDB-ML/blob/master/examples/readers/tensorflow_data_api_tiledb_sparse.ipynb)
+
+[comment]: <> (* [Example on training wih Tensorflow and Sparse TileDB arrays]&#40;https://github.com/TileDB-Inc/TileDB-ML/blob/master/examples/readers/tensorflow_data_api_tiledb_sparse.ipynb&#41;)
 * [Example on training wih PyTorch and Dense TileDB arrays](https://github.com/TileDB-Inc/TileDB-ML/blob/master/examples/readers/pytorch_data_api_tiledb_dense.ipynb)
-* [Example on training wih PyTorch and Sparse TileDB arrays](https://github.com/TileDB-Inc/TileDB-ML/blob/master/examples/readers/pytorch_data_api_tiledb_sparse.ipynb)
+
+[comment]: <> (* [Example on training wih PyTorch and Sparse TileDB arrays]&#40;https://github.com/TileDB-Inc/TileDB-ML/blob/master/examples/readers/pytorch_data_api_tiledb_sparse.ipynb&#41;)
 
 
 ## Installation
@@ -135,8 +137,8 @@ TileDB-ML can be installed:
 
 We are already working on the following:
 
-* C++ integration of TileDB with the Tensorflow Data API through [tensorflow-io](https://github.com/tensorflow/io).
-* Readers from TileDB arrays to other popular machine learning framework Data APIs, as mentioned above.
+[comment]: <> (* C++ integration of TileDB with the Tensorflow Data API through [tensorflow-io]&#40;https://github.com/tensorflow/io&#41;.)
+* Readers from TileDB arrays to other popular machine learning framework Data APIs.
 * Model save/load support for other popular machine learning frameworks like XGBoost and CatBoost.
 
 Our ultimate goal is ALL machine learning data, from raw data (text, images, audio), to features (Feature Store) and models (Model Registry), represented, stored and managed
