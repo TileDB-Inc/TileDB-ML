@@ -1,10 +1,11 @@
 """Functionality for loading data directly from sparse TileDB arrays into the PyTorch Dataloader API."""
 
 from concurrent.futures import ThreadPoolExecutor
-from typing import Iterator, Optional, Sequence, Tuple
+from typing import Dict, Iterator, Optional, Sequence, Tuple
 
 import numpy as np
 import torch
+from scipy.sparse import csr_matrix
 
 import tiledb
 from tiledb.ml._parallel_utils import run_io_tasks_in_parallel
@@ -98,6 +99,43 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset[DataType]):
                 "of TileDB arrays X, Y should be of equal domain extent inside the batch."
             )
 
+    def __to_csr(
+        self, array_id: str, buffer: Dict[str, np.array], offset: int
+    ) -> csr_matrix:
+        """
+        :param array_id: The matrix on which the transformation will have effect 'X' for x_array and 'Y' for y_array
+        :param buffer: The buffered slice of the matrix to be batched
+        :param offset: The starting offset of the buffered slice
+        :returns A CSR representation of the buffered slice of the matrix
+        """
+        if array_id not in ["X", "Y"]:
+            raise ValueError(
+                "You can either transform in CSR format inner arrays of 'X' or 'Y'"
+            )
+
+        # TODO: Only 2d arrays supported for now
+        array = self.x if array_id == "X" else self.y
+        array_dims = [array.schema.domain.dim(i).name for i in range(2)]
+
+        # Normalise indices for torch.sparse.Tensor We want the coords indices in every iteration to be
+        # in the range of [0, self.batch_size] so the torch.sparse.Tensors can be created batch-wise. If
+        # we do not normalise the sparse tensor is being created but with a dimension [0,
+        # max(coord_index)], which is overkill
+        row_size_norm = buffer[array_dims[0]].max() - buffer[array_dims[0]].min() + 1
+        col_size_norm = buffer[array_dims[1]].max() + 1
+        buffer_csr = csr_matrix(
+            (
+                buffer[
+                    self.x_attribute_names[0]
+                    if array_id == "X"
+                    else self.y_attribute_names[0]
+                ],
+                (buffer[array_dims[0]] - offset, buffer[array_dims[1]]),
+            ),
+            shape=(row_size_norm, col_size_norm),
+        )
+        return buffer_csr
+
     def __iter__(self) -> Iterator[DataType]:
         worker_info = torch.utils.data.get_worker_info()  # type: ignore
 
@@ -126,7 +164,7 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset[DataType]):
         with ThreadPoolExecutor(max_workers=2) as executor:
             for offset in offsets:
                 # Yield the next training batch
-                # Summon the buffer_sized data from back-end in case buffer_size is enabled
+                # Fetch the buffer_sized data from back-end in case buffer_size is enabled
                 x_buffer, y_buffer = run_io_tasks_in_parallel(
                     executor,
                     (self.x, self.y),
@@ -134,8 +172,13 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset[DataType]):
                     offset,
                 )
 
+                # COO to CSR transformation for batching and row slicing
+                x_buffer_csr = self.__to_csr("X", x_buffer, offset)
+
+                if isinstance(self.y, tiledb.SparseArray):
+                    y_buffer_csr = self.__to_csr("Y", y_buffer, offset)
+
                 # Split the buffer_size into batch_size chunks
-                # batch_offsets = np.arange(offset, min(offset + self.buffer_size, iter_end), self.batch_size)
                 batch_offsets = np.arange(0, self.buffer_size, self.batch_size)
 
                 # Shuffle offsets in case we need batch shuffling
@@ -143,59 +186,65 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset[DataType]):
                     np.random.shuffle(batch_offsets)
 
                 for batch_offset in batch_offsets:
-                    x_batch = {
-                        attr: data[batch_offset : batch_offset + self.batch_size]
-                        for attr, data in x_buffer.items()
-                    }
-                    y_batch = {
-                        attr: data[batch_offset : batch_offset + self.batch_size]
-                        for attr, data in y_buffer.items()
-                    }
+                    x_batch = x_buffer_csr[
+                        batch_offset : batch_offset + self.batch_size
+                    ]
 
-                    x_coords = []
-                    for i in range(0, self.x.schema.domain.ndim):
-                        dim_name = self.x.schema.domain.dim(i).name
-                        x_coords.append(x_batch[dim_name])
+                    if x_batch.data.size == 0:
+                        return
 
-                    # Normalise indices for torch.sparse.Tensor We want the coords indices in every iteration
-                    # to be in the range of [0, self.batch_size] so the torch.sparse.Tensors can be created batch-wise.
-                    # If we do not normalise the sparse tensor is being created but with a dimension [0, max(coord_index)],
-                    # which is overkill
-                    x_coords[0] -= x_coords[0].min()
+                    if isinstance(self.y, tiledb.SparseArray):
+                        y_batch = y_buffer_csr[
+                            batch_offset : batch_offset + self.batch_size
+                        ]
+                    else:
+                        y_batch = {
+                            attr: data[batch_offset : batch_offset + self.batch_size]
+                            for attr, data in y_buffer.items()
+                        }
+
+                    # Keep row records number for cross-check between X and Y batches. Last index excluded shows to
+                    # empty
+                    samples_num_x = x_batch.indptr[:-1]
+
+                    # Transform back to COO for torch.sparse_coo_tensor to digest
+                    x_batch_coo = x_batch.tocoo()
+                    x_coords = np.stack(
+                        (x_batch_coo.row, x_batch_coo.col), axis=-1
+                    ).tolist()
 
                     # TODO: Sparse labels are not supported by Pytorch during this iteration for completeness
                     # we support the ingestion of sparseArray in labels, but loss and backward will fail due to
                     # SparseCPU backend
 
-                    # Identify the label array hence ingest it as sparse tensor or simple tensor
                     x_tensor = tuple(
                         torch.sparse_coo_tensor(
-                            torch.tensor(list(zip(*x_coords))).t(),
-                            x_batch[attr].ravel(),
+                            torch.tensor(x_coords).t(),
+                            x_batch_coo.data,
                             (self.batch_size, x_shape[0]),
                             requires_grad=False,
                         )
                         for attr in self.x_attribute_names
                     )
 
+                    # Identify the label array hence ingest it as sparse tensor or simple tensor
                     if isinstance(self.y, tiledb.SparseArray):
-                        y_coords = []
-                        for i in range(0, self.y.schema.domain.ndim):
-                            dim_name = self.y.schema.domain.dim(i).name
-                            y_coords.append(y_batch[dim_name])
+                        # Keep row records number for cross-check between X and Y batches. Last index excluded shows
+                        # to empty
+                        samples_num_y = y_batch.indptr[:-1]
 
-                        # Normalise indices for torch.sparse.Tensor We want the coords indices in every iteration
-                        # to be in the range of [0, self.batch_size] so the torch.sparse.Tensors can be created batch-wise.
-                        # If we do not normalise the sparse tensor is being created but with a dimension [0, max(coord_index)],
-                        # which is overkill
-                        y_coords[0] -= y_coords[0].min()
+                        # Transform back to COO for torch.sparse_coo_tensor to digest
+                        y_batch_coo = y_batch.tocoo()
+                        y_coords = np.stack(
+                            (y_batch_coo.row, y_batch_coo.col), axis=-1
+                        ).tolist()
 
-                        self.__check_row_dims(x_coords[0], y_coords[0])
+                        self.__check_row_dims(samples_num_x, samples_num_y)
 
                         y_tensor = tuple(
                             torch.sparse_coo_tensor(
-                                torch.tensor(list(zip(*y_coords))).t(),
-                                y_batch[attr].ravel(),
+                                torch.tensor(y_coords).t(),
+                                y_batch_coo.data,
                                 (self.batch_size, y_shape[0]),
                                 requires_grad=False,
                             )
@@ -204,7 +253,7 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset[DataType]):
                     else:
                         # for the check slice the row dimension of y dense array
                         self.__check_row_dims(
-                            x_coords[0], y_batch[self.y_attribute_names[0]]
+                            samples_num_x, y_batch[self.y_attribute_names[0]]
                         )
                         y_tensor = tuple(
                             y_batch[attr] for attr in self.y_attribute_names
