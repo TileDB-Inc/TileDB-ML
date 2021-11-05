@@ -114,23 +114,26 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset[DataType]):
             )
 
         # TODO: Only 2d arrays supported for now
-        array = self.x if array_id == "X" else self.y
-        array_dims = [array.schema.domain.dim(i).name for i in range(2)]
+        if array_id == "X":
+            array = self.x
+            attribute_names = self.x.attribute_names[0]
+        else:
+            array = self.y
+            attribute_names = self.y.attribute_names[0]
 
+        dim = array.schema.domain.dim
+        row = buffer[dim(0).name]
+        col = buffer[dim(1).name]
         # Normalise indices for torch.sparse.Tensor We want the coords indices in every iteration to be
         # in the range of [0, self.batch_size] so the torch.sparse.Tensors can be created batch-wise. If
         # we do not normalise the sparse tensor is being created but with a dimension [0,
         # max(coord_index)], which is overkill
-        row_size_norm = buffer[array_dims[0]].max() - buffer[array_dims[0]].min() + 1
-        col_size_norm = buffer[array_dims[1]].max() + 1
+        row_size_norm = buffer[row].max() - buffer[row].min() + 1
+        col_size_norm = buffer[col].max() + 1
         buffer_csr = csr_matrix(
             (
-                buffer[
-                    self.x_attribute_names[0]
-                    if array_id == "X"
-                    else self.y_attribute_names[0]
-                ],
-                (buffer[array_dims[0]] - offset, buffer[array_dims[1]]),
+                buffer[attribute_names],
+                (buffer[row] - offset, buffer[col]),
             ),
             shape=(row_size_norm, col_size_norm),
         )
@@ -209,9 +212,7 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset[DataType]):
 
                     # Transform back to COO for torch.sparse_coo_tensor to digest
                     x_batch_coo = x_batch.tocoo()
-                    x_coords = np.stack(
-                        (x_batch_coo.row, x_batch_coo.col), axis=-1
-                    ).tolist()
+                    x_coords = np.stack((x_batch_coo.row, x_batch_coo.col), axis=-1)
 
                     # TODO: Sparse labels are not supported by Pytorch during this iteration for completeness
                     # we support the ingestion of sparseArray in labels, but loss and backward will fail due to
@@ -235,9 +236,7 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset[DataType]):
 
                         # Transform back to COO for torch.sparse_coo_tensor to digest
                         y_batch_coo = y_batch.tocoo()
-                        y_coords = np.stack(
-                            (y_batch_coo.row, y_batch_coo.col), axis=-1
-                        ).tolist()
+                        y_coords = np.stack((y_batch_coo.row, y_batch_coo.col), axis=-1)
 
                         self.__check_row_dims(samples_num_x, samples_num_y)
 
