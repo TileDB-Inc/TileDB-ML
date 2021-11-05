@@ -1,7 +1,7 @@
 """Functionality for loading data directly from sparse TileDB arrays into the PyTorch Dataloader API."""
 
 from concurrent.futures import ThreadPoolExecutor
-from typing import Dict, Iterator, Optional, Sequence, Tuple
+from typing import Iterator, Mapping, Optional, Sequence, Tuple
 
 import numpy as np
 import torch
@@ -100,7 +100,7 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset[DataType]):
             )
 
     def __to_csr(
-        self, array_id: str, buffer: Dict[str, np.array], offset: int
+        self, array_id: str, buffer: Mapping[str, np.array], offset: int
     ) -> csr_matrix:
         """
         :param array_id: The matrix on which the transformation will have effect 'X' for x_array and 'Y' for y_array
@@ -116,10 +116,10 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset[DataType]):
         # TODO: Only 2d arrays supported for now
         if array_id == "X":
             array = self.x
-            attribute_names = self.x.attribute_names[0]
+            attribute_names = self.x_attribute_names[0]
         else:
             array = self.y
-            attribute_names = self.y.attribute_names[0]
+            attribute_names = self.y_attribute_names[0]
 
         dim = array.schema.domain.dim
         row = buffer[dim(0).name]
@@ -128,12 +128,12 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset[DataType]):
         # in the range of [0, self.batch_size] so the torch.sparse.Tensors can be created batch-wise. If
         # we do not normalise the sparse tensor is being created but with a dimension [0,
         # max(coord_index)], which is overkill
-        row_size_norm = buffer[row].max() - buffer[row].min() + 1
-        col_size_norm = buffer[col].max() + 1
+        row_size_norm = row.max() - row.min() + 1
+        col_size_norm = col.max() + 1
         buffer_csr = csr_matrix(
             (
                 buffer[attribute_names],
-                (buffer[row] - offset, buffer[col]),
+                (row - offset, col),
             ),
             shape=(row_size_norm, col_size_norm),
         )
