@@ -1,10 +1,11 @@
 """Functionality for loading data directly from TileDB arrays into the Tensorflow Data API."""
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
-from typing import Iterator, Optional, Sequence, Tuple, Union
+from typing import Iterator, Mapping, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
+from scipy.sparse import csr_matrix
 from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.framework import constant_op
 
@@ -163,6 +164,39 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
             )
 
     @classmethod
+    def __to_csr(
+        cls,
+        array: tiledb.Array,
+        attribute_names: str,
+        buffer: Mapping[str, np.array],
+        offset: int,
+    ) -> csr_matrix:
+        """
+        :param array_id: The matrix on which the transformation will have effect 'X' for x_array and 'Y' for y_array
+        :param buffer: The buffered slice of the matrix to be batched
+        :param offset: The starting offset of the buffered slice
+        :returns A CSR representation of the buffered slice of the matrix
+        """
+
+        dim = array.schema.domain.dim
+        row = buffer[dim(0).name]
+        col = buffer[dim(1).name]
+        # Normalise indices for torch.sparse.Tensor We want the coords indices in every iteration to be
+        # in the range of [0, self.batch_size] so the torch.sparse.Tensors can be created batch-wise. If
+        # we do not normalise the sparse tensor is being created but with a dimension [0,
+        # max(coord_index)], which is overkill
+        row_size_norm = row.max() - row.min() + 1
+        col_size_norm = col.max() + 1
+        buffer_csr = csr_matrix(
+            (
+                buffer[attribute_names],
+                (row - offset, col),
+            ),
+            shape=(row_size_norm, col_size_norm),
+        )
+        return buffer_csr
+
+    @classmethod
     def _generator_sparse_sparse(
         cls,
         x: tiledb.Array,
@@ -202,6 +236,10 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
                     offset,
                 )
 
+                # COO to CSR transformation for batching and row slicing
+                x_buffer_csr = cls.__to_csr(x, x_attribute_names[0], x_buffer, offset)
+                y_buffer_csr = cls.__to_csr(y, y_attribute_names[0], y_buffer, offset)
+
                 # Split the buffer_size into batch_size chunks
                 batch_offsets = np.arange(0, buffer_size, batch_size)
 
@@ -210,54 +248,45 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
                     np.random.shuffle(batch_offsets)
 
                 for batch_offset in batch_offsets:
-                    x_batch = {
-                        attr: data[batch_offset : batch_offset + batch_size]
-                        for attr, data in x_buffer.items()
-                    }
-                    y_batch = {
-                        attr: data[batch_offset : batch_offset + batch_size]
-                        for attr, data in y_buffer.items()
-                    }
+                    x_batch = x_buffer_csr[batch_offset : batch_offset + batch_size]
 
-                    # Transform to TF COO format x, y data
-                    x_coords = []
-                    for i in range(0, x.schema.domain.ndim):
-                        dim_name = x.schema.domain.dim(i).name
-                        x_coords.append(np.array(x_batch[dim_name]))
+                    if x_batch.data.size == 0:
+                        return
 
-                    y_coords = []
-                    for i in range(0, y.schema.domain.ndim):
-                        dim_name = y.schema.domain.dim(i).name
-                        y_coords.append(np.array(y_batch[dim_name]))
+                    y_batch = y_buffer_csr[batch_offset : batch_offset + batch_size]
 
-                    # Normalise indices for torch.sparse.Tensor We want the coords indices in
-                    # every iteration to be in the range of [0, self.batch_size] so the
-                    # torch.sparse.Tensors can be created batch-wise. If we do not normalise the
-                    # sparse tensor is being created but with a dimension [0, max(coord_index)],
-                    # which is overkill
-                    x_coords[0] -= x_coords[0].min()
-                    y_coords[0] -= y_coords[0].min()
+                    # Keep row records number for cross-check between X and Y batches. Last index excluded shows to
+                    # empty
+                    samples_num_x = x_batch.indptr[:-1]
 
-                    cls.__check_row_dims(x_coords[0], y_coords[0], sparse=True)
+                    # Transform back to COO for torch.sparse_coo_tensor to digest
+                    x_batch_coo = x_batch.tocoo()
+                    x_coords = np.stack((x_batch_coo.row, x_batch_coo.col), axis=-1)
+
+                    # Keep row records number for cross-check between X and Y batches. Last index excluded shows
+                    # to empty
+                    samples_num_y = y_batch.indptr[:-1]
+
+                    # Transform back to COO for torch.sparse_coo_tensor to digest
+                    y_batch_coo = y_batch.tocoo()
+                    y_coords = np.stack((y_batch_coo.row, y_batch_coo.col), axis=-1)
+
+                    cls.__check_row_dims(samples_num_x, samples_num_y, sparse=True)
 
                     yield tuple(
                         tf.sparse.SparseTensor(
-                            indices=constant_op.constant(
-                                list(zip(*x_coords)), dtype=tf.int64
-                            ),
+                            indices=constant_op.constant(x_coords, dtype=tf.int64),
                             values=constant_op.constant(
-                                x_batch[attr].ravel(), dtype=x.schema.attr(attr).dtype
+                                x_batch_coo.data, dtype=x.schema.attr(attr).dtype
                             ),
                             dense_shape=(batch_size, x_shape[0]),
                         )
                         for attr in x_attribute_names
                     ) + tuple(
                         tf.sparse.SparseTensor(
-                            indices=constant_op.constant(
-                                list(zip(*y_coords)), dtype=tf.int64
-                            ),
+                            indices=constant_op.constant(y_coords, dtype=tf.int64),
                             values=constant_op.constant(
-                                y_batch[attr].ravel(), dtype=y.schema.attr(attr).dtype
+                                y_batch_coo.data, dtype=y.schema.attr(attr).dtype
                             ),
                             dense_shape=(batch_size, y_shape[0]),
                         )
@@ -294,7 +323,7 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
 
         # Loop over batches
         # https://github.com/tensorflow/tensorflow/issues/44565
-        with ThreadPoolExecutor(max_workers=2) as executor:
+        with ThreadPoolExecutor(max_workers=1) as executor:
             for offset in offsets:
                 x_buffer, y_buffer = run_io_tasks_in_parallel(
                     executor,
@@ -302,6 +331,9 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
                     buffer_size,
                     offset,
                 )
+
+                # COO to CSR transformation for batching and row slicing
+                x_buffer_csr = cls.__to_csr(x, x_attribute_names[0], x_buffer, offset)
 
                 # Split the buffer_size into batch_size chunks
                 batch_offsets = np.arange(0, buffer_size, batch_size)
@@ -311,39 +343,34 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
                     np.random.shuffle(batch_offsets)
 
                 for batch_offset in batch_offsets:
-                    x_batch = {
-                        attr: data[batch_offset : batch_offset + batch_size]
-                        for attr, data in x_buffer.items()
-                    }
+                    x_batch = x_buffer_csr[batch_offset : batch_offset + batch_size]
+
+                    if x_batch.data.size == 0:
+                        return
+
                     y_batch = {
                         attr: data[batch_offset : batch_offset + batch_size]
                         for attr, data in y_buffer.items()
                     }
 
-                    x_coords = []
-                    for i in range(0, x.schema.domain.ndim):
-                        dim_name = x.schema.domain.dim(i).name
-                        x_coords.append(np.array(x_batch[dim_name]))
+                    # Keep row records number for cross-check between X and Y batches. Last index excluded shows to
+                    # empty
+                    samples_num_x = x_batch.indptr[:-1]
 
-                    # Normalise indices for torch.sparse.Tensor We want the coords indices in
-                    # every iteration to be in the range of [0, self.batch_size] so the
-                    # torch.sparse.Tensors can be created batch-wise. If we do not normalise the
-                    # sparse tensor is being created but with a dimension [0, max(coord_index)],
-                    # which is overkill
-                    x_coords[0] -= x_coords[0].min()
+                    # Transform back to COO for torch.sparse_coo_tensor to digest
+                    x_batch_coo = x_batch.tocoo()
+                    x_coords = np.stack((x_batch_coo.row, x_batch_coo.col), axis=-1)
 
                     # for the check slice the row dimension of y dense array
                     cls.__check_row_dims(
-                        x_coords[0], y_batch[y_attribute_names[0]], sparse=False
+                        samples_num_x, y_batch[y_attribute_names[0]], sparse=False
                     )
 
                     yield tuple(
                         tf.sparse.SparseTensor(
-                            indices=constant_op.constant(
-                                list(zip(*x_coords)), dtype=tf.int64
-                            ),
+                            indices=constant_op.constant(x_coords, dtype=tf.int64),
                             values=constant_op.constant(
-                                x_batch[attr].flatten(), dtype=x.schema.attr(attr).dtype
+                                x_batch_coo.data, dtype=x.schema.attr(attr).dtype
                             ),
                             dense_shape=(batch_size, x_shape[0]),
                         )
