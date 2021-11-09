@@ -9,7 +9,7 @@ from torch.optim import Optimizer
 
 import tiledb
 
-from .base import Meta, TileDBModel, Timestamp
+from .base import Meta, TileDBModel, Timestamp, current_milli_time
 
 
 class PyTorchTileDBModel(TileDBModel[torch.nn.Module]):
@@ -211,7 +211,9 @@ class PyTorchTileDBModel(TileDBModel[torch.nn.Module]):
             optimizer state, extra model information) of a PyTorch model.
         :param meta: Extra metadata to save in a TileDB array.
         """
-        with tiledb.open(self.uri, "w", ctx=self.ctx) as tf_model_tiledb:
+        with tiledb.open(
+            self.uri, "w", timestamp=current_milli_time(), ctx=self.ctx
+        ) as tf_model_tiledb:
             # Insertion in TileDB array
             tf_model_tiledb[:] = {
                 key: np.array([value]) for key, value in serialized_model_dict.items()
