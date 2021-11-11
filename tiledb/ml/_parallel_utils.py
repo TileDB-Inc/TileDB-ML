@@ -6,7 +6,7 @@ import tiledb
 
 
 def run_io_tasks_in_parallel(
-    executor, arrays: Tuple[tiledb.DenseArray], batch_size: int, offset: int
+    executor, arrays: Tuple[tiledb.Array], batch_size: int, offset: int
 ):
     """
     Runs the batch_slice_func in parallel
@@ -15,12 +15,11 @@ def run_io_tasks_in_parallel(
     param: offset: The index of x,y from the start of the arrays
     return: Futures containing the sliced arrays of the parallel runs
     """
+
     batch_slice = partial(batch_slice_fn, batch_size=batch_size, offset=offset)
     running_tasks = executor.map(batch_slice, arrays)
     return running_tasks
 
 
-def batch_slice_fn(
-    array: tiledb.DenseArray, batch_size: int, offset: int
-) -> tiledb.DenseArray:
+def batch_slice_fn(array: tiledb.Array, batch_size: int, offset: int) -> tiledb.Array:
     return array[offset : offset + batch_size]

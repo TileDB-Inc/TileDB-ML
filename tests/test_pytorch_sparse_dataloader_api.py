@@ -32,7 +32,7 @@ ROWS = 100
 )
 @pytest.mark.parametrize(
     "num_of_attributes",
-    [1, 2, 3],
+    [1],
 )
 @pytest.mark.parametrize(
     "batch_shuffle",
