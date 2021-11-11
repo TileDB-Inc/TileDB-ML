@@ -99,7 +99,9 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset[DataType]):
                 "of TileDB arrays X, Y should be of equal domain extent inside the batch."
             )
 
-    def __to_csr(self, array_id: str, buffer: Mapping[str, np.array], offset: int) -> csr_matrix:
+    def __to_csr(
+        self, array_id: str, buffer: Mapping[str, np.array], offset: int
+    ) -> csr_matrix:
         """
         :param array_id: The matrix on which the transformation will have effect 'X' for x_array and 'Y' for y_array
         :param buffer: The buffered slice of the matrix to be batched
