@@ -32,7 +32,9 @@ ROWS = 1000
 # We test for single and multiple attributes
 @pytest.mark.parametrize(
     "num_of_attributes",
-    [1, 2, 3],
+    [
+        1,
+    ],
 )
 @pytest.mark.parametrize("batch_shuffle", [True, False])
 @pytest.mark.parametrize(
