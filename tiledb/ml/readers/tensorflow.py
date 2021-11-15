@@ -43,7 +43,7 @@ class TensorflowTileDBDenseDataset(FlatMapDataset):
         will work, but in case it's not equal the tile extent of the first dimension of
         the TileDB array, you won't achieve highest read speed. For more details on tiles,
         tile extent and indices in TileDB, please check here:
-        https://docs.tiledb.com/main/solutions/tiledb-embedded/performance-tips/choosing-tiling-and-cell-layout#dense-arrays
+        https://docs.tiledb.com/main/how-to/performance/performance-tips/choosing-tiling-and-cell-layout#dense-arrays
 
         :param x_array: Array that contains features.
         :param y_array: Array that contains labels.
