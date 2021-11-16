@@ -2,6 +2,7 @@
 
 import os
 import platform
+import time
 from abc import ABC, abstractmethod
 from enum import Enum, unique
 from typing import Any, Generic, Mapping, Optional, Tuple, TypeVar
@@ -24,6 +25,10 @@ class ModelFileProperties(Enum):
     TILEDB_ML_MODEL_STAGE = "TILEDB_ML_MODEL_STAGE"
     TILEDB_ML_MODEL_PYTHON_VERSION = "TILEDB_ML_MODEL_PYTHON_VERSION"
     TILEDB_ML_MODEL_PREVIEW = "TILEDB_ML_MODEL_PREVIEW"
+
+
+def current_milli_time() -> int:
+    return round(time.time() * 1000)
 
 
 class TileDBModel(ABC, Generic[Model]):

@@ -20,7 +20,7 @@ from tensorflow.python.keras.utils import generic_utils
 
 import tiledb
 
-from .base import Meta, TileDBModel, Timestamp
+from .base import Meta, TileDBModel, Timestamp, current_milli_time
 
 
 class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
@@ -88,6 +88,8 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
         :param input_shape: The shape that the custom model expects as input
         :return: Tensorflow model.
         """
+        # TODO: Change timestamp when issue in core is resolved
+
         with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
             model_array_results = model_array[:]
             model_config = json.loads(model_array.meta["model_config"])
@@ -257,7 +259,10 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
     ) -> None:
         """Write Tensorflow model to a TileDB array."""
         assert self.model
-        with tiledb.open(self.uri, "w", ctx=self.ctx) as tf_model_tiledb:
+        # TODO: Change timestamp when issue in core is resolved
+        with tiledb.open(
+            self.uri, "w", timestamp=current_milli_time(), ctx=self.ctx
+        ) as tf_model_tiledb:
             if isinstance(self.model, (Functional, Sequential)):
                 tf_model_tiledb[:] = {
                     "model_weights": np.array([serialized_weights]),
