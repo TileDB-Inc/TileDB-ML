@@ -88,6 +88,8 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
         :param input_shape: The shape that the custom model expects as input
         :return: Tensorflow model.
         """
+        # TODO: Change timestamp when issue in core is resolved
+
         with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
             model_array_results = model_array[:]
             model_config = json.loads(model_array.meta["model_config"])
@@ -257,6 +259,7 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
     ) -> None:
         """Write Tensorflow model to a TileDB array."""
         assert self.model
+        # TODO: Change timestamp when issue in core is resolved
         with tiledb.open(
             self.uri, "w", timestamp=current_milli_time(), ctx=self.ctx
         ) as tf_model_tiledb:

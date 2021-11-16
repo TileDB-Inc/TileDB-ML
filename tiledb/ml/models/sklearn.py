@@ -47,6 +47,8 @@ class SklearnTileDBModel(TileDBModel[BaseEstimator]):
             in the specified time range.
         :return: A Sklearn model object.
         """
+        # TODO: Change timestamp when issue in core is resolved
+
         model_array = tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp)
         model_array_results = model_array[:]
         model = pickle.loads(model_array_results["model_params"].item(0))
@@ -102,6 +104,8 @@ class SklearnTileDBModel(TileDBModel[BaseEstimator]):
         :param serialized_model: A pickled sklearn model.
         :param meta: Extra metadata to save in a TileDB array.
         """
+        # TODO: Change timestamp when issue in core is resolved
+
         with tiledb.open(
             self.uri, "w", timestamp=current_milli_time(), ctx=self.ctx
         ) as tf_model_tiledb:

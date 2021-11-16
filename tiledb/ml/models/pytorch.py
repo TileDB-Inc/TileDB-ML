@@ -102,6 +102,8 @@ class PyTorchTileDBModel(TileDBModel[torch.nn.Module]):
         :param optimizer: A defined PyTorch optimizer.
         :return: A dictionary with attributes other than model or optimizer state_dict.
         """
+
+        # TODO: Change timestamp when issue in core is resolved
         model_array = tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp)
         model_array_results = model_array[:]
         schema = model_array.schema
@@ -211,6 +213,8 @@ class PyTorchTileDBModel(TileDBModel[torch.nn.Module]):
             optimizer state, extra model information) of a PyTorch model.
         :param meta: Extra metadata to save in a TileDB array.
         """
+
+        # TODO: Change timestamp when issue in core is resolved
         with tiledb.open(
             self.uri, "w", timestamp=current_milli_time(), ctx=self.ctx
         ) as tf_model_tiledb:
