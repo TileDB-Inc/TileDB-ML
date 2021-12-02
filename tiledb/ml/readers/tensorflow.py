@@ -53,6 +53,10 @@ class TensorflowTileDBDenseDataset(FlatMapDataset):
         :param x_attribute_names: The attribute names of x_array.
         :param y_attribute_names: The attribute names of y_array.
         """
+        if type(x_array) is tiledb.SparseArray:
+            raise TypeError(
+                "TensorflowTileDBDenseDataset class should be used with tiledb.DenseArray representation"
+            )
 
         # Check that x and y have the same number of rows
         if x_array.schema.domain.shape[0] != y_array.schema.domain.shape[0]:
