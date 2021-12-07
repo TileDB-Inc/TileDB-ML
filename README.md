@@ -64,7 +64,7 @@ We also provide detailed notebook examples on how to train Tensorflow and PyTorc
 
 [comment]: <> (* [Example on training wih PyTorch and Sparse TileDB arrays]&#40;https://github.com/TileDB-Inc/TileDB-ML/blob/master/examples/readers/pytorch_data_api_tiledb_sparse.ipynb&#41;)
 
-Finally, we also provide an [End-To-End example](https://github.com/TileDB-Inc/TileDB-ML/blob/master/examples/serverless_training) on how to ingest data, train a PyTorch model and serve it with UDFs completely serverlessly on TileDB-Cloud.
+Finally, we also provide an [End-To-End example](https://github.com/TileDB-Inc/TileDB-ML/blob/master/examples/cloud/serverless_training) on how to ingest data, train a PyTorch model and serve it with UDFs completely serverlessly on TileDB-Cloud.
 
 ## Installation
 
