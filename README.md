@@ -134,16 +134,20 @@ TileDB-ML can be installed:
   ```
   python setup.py test
   ```
-## Roadmap
 
-We are already working on the following:
+[comment]: <> (## Roadmap)
 
-[comment]: <> (* C++ integration of TileDB with the Tensorflow Data API through [tensorflow-io]&#40;https://github.com/tensorflow/io&#41;.)
-* Readers from TileDB arrays to other popular machine learning framework Data APIs.
-* Model save/load support for other popular machine learning frameworks like XGBoost and CatBoost.
+[comment]: <> (We are already working on the following:)
 
-Our ultimate goal is ALL machine learning data, from raw data (text, images, audio), to features (Feature Store) and models (Model Registry), represented, stored and managed
-in one **Data Engine**, i.e, TileDB.
+[comment]: <> ([comment]: <> &#40;* C++ integration of TileDB with the Tensorflow Data API through [tensorflow-io]&#40;https://github.com/tensorflow/io&#41;.&#41;)
+
+[comment]: <> (* Readers from TileDB arrays to other popular machine learning framework Data APIs.)
+
+[comment]: <> (* Model save/load support for other popular machine learning frameworks like XGBoost and CatBoost.)
+
+[comment]: <> (Our ultimate goal is ALL machine learning data, from raw data &#40;text, images, audio&#41;, to features &#40;Feature Store&#41; and models &#40;Model Registry&#41;, represented, stored and managed)
+
+[comment]: <> (in one **Data Engine**, i.e, TileDB.)
 
 
 ## Note
@@ -151,7 +155,7 @@ in one **Data Engine**, i.e, TileDB.
 Here we would like to highlight that our current implementations are not optimal, and they don't support the aforementioned machine learning
 frameworks 100%, e.g., serialization of model parts like numpy arrays, takes place with Pickle (which is far from optimal)
 because of its ``Python Only`` nature and insecurity as described [here](https://docs.python.org/3/library/pickle.html).
-We mainly provide a proof of concept, showing the universal data management ability of TileDB, and how elegantly applies in 
+We mainly show the universal data management ability of TileDB, and how elegantly applies in 
 machine learning data of any kind. Optimizations will follow as soon as possible.
 
 In any case, note that the TileDB-ML repository is under development, and **the API is subject to change**.
