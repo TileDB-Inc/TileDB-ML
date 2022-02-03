@@ -17,36 +17,28 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
 
-    - name: 'Print python version'
-      run: |
-        which python
-        which pip
-        python --version
-
-    - name: 'Upgrade pip'
-      run: python -m pip install --upgrade pip
-
     - name: 'Install dependencies'
-      run: pip install -e .[full]
-
-    - name: 'Run tests'
-      if: ${{ matrix.os != 'macos-latest' }}
       run: |
-        pip install pytest-mock pytest-cov
-        pytest tests/
+        pip install --upgrade pip
+        pip install -e .[full]
 
-    - name: Run mypy
-      if: ${{ matrix.os != 'macos-latest' }}
+    - name: 'Run mypy'
       run: |
         pip install mypy
         mypy .
+
+    - name: 'Run tests'
+      if: ${{ matrix.os != 'macos-latest' || matrix.python-version != '3.7' }}
+      run: |
+        pip install pytest-mock pytest-xdist
+        pytest -n auto tests/
 
     - name: 'Run test coverage statistics'
       id: stats
       if: ${{ matrix.os == 'macos-latest' && matrix.python-version == '3.7' }}
       run: |
-        pip install pytest-mock pytest-cov
-        TEST_COVERAGE="$(pytest --cov-report term:skip-covered --cov=tiledb tests/ | grep '^TOTAL' | awk -v N=4 '{print $N}')"
+        pip install pytest-mock pytest-xdist pytest-cov
+        TEST_COVERAGE="$(pytest -n auto --cov-report=term-missing --cov=tiledb tests/ | grep '^TOTAL' | awk -v N=4 '{print $N}')"
         echo "::set-output name=COVERAGE::$TEST_COVERAGE"
 
     - name: 'Create Test Coverage Badge'
