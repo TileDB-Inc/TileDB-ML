@@ -437,7 +437,7 @@ class TestTensorflowKerasModel:
         if optimizer:
             model.compile(loss=loss, optimizer=optimizer, metrics=[metrics])
 
-        mocker.patch("tiledb.ml._cloud_utils.get_s3_prefix", return_value=None)
+        mocker.patch("tiledb.ml.models._cloud_utils.get_s3_prefix", return_value=None)
         # With model given as argument
         input_shape = tuple(np.random.randint(20, size=2))
         if not model.built:
@@ -447,7 +447,7 @@ class TestTensorflowKerasModel:
         with pytest.raises(ValueError):
             tiledb_model_obj.get_cloud_uri(tiledb_uri)
 
-        mocker.patch("tiledb.ml._cloud_utils.get_s3_prefix", return_value="bar")
+        mocker.patch("tiledb.ml.models._cloud_utils.get_s3_prefix", return_value="bar")
         actual = tiledb_model_obj.get_cloud_uri(tiledb_uri)
         expected = "tiledb://{}/{}".format(
             tiledb_model_obj.namespace, os.path.join("bar", tiledb_uri)
@@ -497,7 +497,7 @@ def test_file_properties_in_tiledb_cloud_case(tmpdir, mocker):
     mocker.patch(
         "tiledb.ml.models.base.TileDBModel.get_cloud_uri", return_value=tiledb_array
     )
-    mocker.patch("tiledb.ml._cloud_utils.update_file_properties")
+    mocker.patch("tiledb.ml.models._cloud_utils.update_file_properties")
 
     tiledb_array = os.path.join(tmpdir, "model_array")
     tiledb_obj = TensorflowKerasTileDBModel(

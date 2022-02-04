@@ -199,7 +199,7 @@ class PyTorchTileDBModel(TileDBModel[torch.nn.Module]):
 
         # In case we are on TileDB-Cloud we have to update model array's file properties
         if self.namespace:
-            from tiledb.ml._cloud_utils import update_file_properties
+            from ._cloud_utils import update_file_properties
 
             update_file_properties(self.uri, self._file_properties)
 

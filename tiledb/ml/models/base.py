@@ -37,8 +37,8 @@ class TileDBModel(ABC, Generic[Model]):
     store machine learning models (Tensorflow, PyTorch, etc) as TileDB arrays.
     """
 
-    Framework: Optional[str] = None
-    FrameworkVersion: Optional[str] = None
+    Framework: str
+    FrameworkVersion: str
 
     def __init__(
         self,
@@ -114,7 +114,7 @@ class TileDBModel(ABC, Generic[Model]):
             array.meta[key] = value
 
     def get_cloud_uri(self, uri: str) -> str:
-        from tiledb.ml._cloud_utils import get_s3_prefix
+        from ._cloud_utils import get_s3_prefix
 
         s3_prefix = get_s3_prefix(self.namespace)
         if s3_prefix is None:
@@ -122,4 +122,5 @@ class TileDBModel(ABC, Generic[Model]):
                 f"You must set the default s3 prefix path for ML models in "
                 f"{self.namespace} profile settings on TileDB-Cloud"
             )
+
         return "tiledb://{}/{}".format(self.namespace, os.path.join(s3_prefix, uri))

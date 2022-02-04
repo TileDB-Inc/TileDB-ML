@@ -1,7 +1,4 @@
-from tiledb.ml._cloud_utils import get_s3_prefix
-
-CLOUD_MODELS = "ml_models"
-FILETYPE_ML_MODEL = "ml_model"
+from tiledb.ml.models._cloud_utils import get_s3_prefix
 
 
 class TestCloudUtils:
