@@ -140,7 +140,7 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset[DataType]):
         return buffer_csr
 
     def __iter__(self) -> Iterator[DataType]:
-        worker_info = torch.utils.data.get_worker_info()  # type: ignore
+        worker_info = torch.utils.data.get_worker_info()
 
         # Get number of observations
         rows = self.x.schema.domain.shape[0]
