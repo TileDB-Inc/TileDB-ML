@@ -10,7 +10,8 @@ from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.framework import constant_op
 
 import tiledb
-from tiledb.ml._parallel_utils import run_io_tasks_in_parallel
+
+from ._parallel_utils import parallel_slice
 
 
 class TensorflowTileDBSparseDataset(tf.data.Dataset):
@@ -205,7 +206,7 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
         y_attribute_names: Sequence[str],
         rows: int,
         batch_size: int,
-        buffer_size: Optional[int],
+        buffer_size: int,
         batch_shuffle: bool,
     ) -> Iterator[Tuple[tf.sparse.SparseTensor, ...]]:
         """
@@ -229,7 +230,7 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
         # https://github.com/tensorflow/tensorflow/issues/44565
         with ThreadPoolExecutor(max_workers=2) as executor:
             for offset in offsets:
-                x_buffer, y_buffer = run_io_tasks_in_parallel(
+                x_buffer, y_buffer = parallel_slice(
                     executor,
                     (x, y),
                     buffer_size,
@@ -302,7 +303,7 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
         y_attribute_names: Sequence[str],
         rows: int,
         batch_size: int,
-        buffer_size: Optional[int],
+        buffer_size: int,
         batch_shuffle: bool,
     ) -> Iterator[Tuple[Union[tf.sparse.SparseTensor, np.ndarray], ...]]:
         """
@@ -325,7 +326,7 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
         # https://github.com/tensorflow/tensorflow/issues/44565
         with ThreadPoolExecutor(max_workers=1) as executor:
             for offset in offsets:
-                x_buffer, y_buffer = run_io_tasks_in_parallel(
+                x_buffer, y_buffer = parallel_slice(
                     executor,
                     (x, y),
                     buffer_size,

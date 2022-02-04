@@ -8,7 +8,8 @@ import numpy as np
 import torch
 
 import tiledb
-from tiledb.ml._parallel_utils import run_io_tasks_in_parallel
+
+from ._parallel_utils import parallel_slice
 
 DataType = Tuple[np.ndarray, ...]
 
@@ -111,7 +112,7 @@ class PyTorchTileDBDenseDataset(torch.utils.data.IterableDataset[DataType]):
         with ThreadPoolExecutor(max_workers=2) as executor:
             for offset in offsets:
                 # Summon the buffer_sized data from back-end in case buffer_size is enabled
-                x_buffer, y_buffer = run_io_tasks_in_parallel(
+                x_buffer, y_buffer = parallel_slice(
                     executor,
                     (self.x, self.y),
                     self.buffer_size,
