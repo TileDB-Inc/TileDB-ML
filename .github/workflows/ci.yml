@@ -30,15 +30,15 @@ jobs:
     - name: 'Run tests'
       if: ${{ matrix.os != 'macos-latest' || matrix.python-version != '3.7' }}
       run: |
-        pip install pytest-mock pytest-xdist
-        pytest -n auto tests/
+        pip install pytest-mock
+        pytest tests/
 
     - name: 'Run test coverage statistics'
       id: stats
       if: ${{ matrix.os == 'macos-latest' && matrix.python-version == '3.7' }}
       run: |
-        pip install pytest-mock pytest-xdist pytest-cov
-        TEST_COVERAGE="$(pytest -n auto --cov-report=term-missing --cov=tiledb tests/ | grep '^TOTAL' | awk -v N=4 '{print $N}')"
+        pip install pytest-mock pytest-cov
+        TEST_COVERAGE="$(pytest --cov-report=term-missing --cov=tiledb tests/ | grep '^TOTAL' | awk -v N=4 '{print $N}')"
         echo "::set-output name=COVERAGE::$TEST_COVERAGE"
 
     - name: 'Create Test Coverage Badge'
