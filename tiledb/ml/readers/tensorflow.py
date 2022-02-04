@@ -11,7 +11,8 @@ import tensorflow as tf
 from tensorflow.python.data.ops.dataset_ops import FlatMapDataset
 
 import tiledb
-from tiledb.ml._parallel_utils import run_io_tasks_in_parallel
+
+from ._parallel_utils import parallel_slice
 
 
 class TensorflowTileDBDenseDataset(FlatMapDataset):
@@ -143,7 +144,7 @@ class TensorflowTileDBDenseDataset(FlatMapDataset):
         y_attribute_names: Sequence[str],
         rows: int,
         batch_size: int,
-        buffer_size: Optional[int],
+        buffer_size: int,
         batch_shuffle: bool,
         within_batch_shuffle: bool,
     ) -> Iterator[Tuple[np.ndarray, ...]]:
@@ -166,7 +167,7 @@ class TensorflowTileDBDenseDataset(FlatMapDataset):
         # Loop over batches
         with ThreadPoolExecutor(max_workers=2) as executor:
             for offset in offsets:
-                x_buffer, y_buffer = run_io_tasks_in_parallel(
+                x_buffer, y_buffer = parallel_slice(
                     executor,
                     (x, y),
                     buffer_size,

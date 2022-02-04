@@ -8,7 +8,8 @@ import torch
 from scipy.sparse import csr_matrix
 
 import tiledb
-from tiledb.ml._parallel_utils import run_io_tasks_in_parallel
+
+from ._parallel_utils import parallel_slice
 
 DataType = Tuple[torch.Tensor, ...]
 
@@ -168,7 +169,7 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset[DataType]):
             for offset in offsets:
                 # Yield the next training batch
                 # Fetch the buffer_sized data from back-end in case buffer_size is enabled
-                x_buffer, y_buffer = run_io_tasks_in_parallel(
+                x_buffer, y_buffer = parallel_slice(
                     executor,
                     (self.x, self.y),
                     self.buffer_size,
