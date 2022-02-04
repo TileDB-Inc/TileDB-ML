@@ -1,4 +1,4 @@
-"""Functionality for loading data directly from TileDB arrays into the Tensorflow Data API."""
+"""Functionality for loading data from TileDB dense arrays to the Tensorflow Data API."""
 
 from __future__ import annotations
 
@@ -8,18 +8,14 @@ from typing import Iterator, Optional, Sequence, Tuple, cast
 
 import numpy as np
 import tensorflow as tf
-from tensorflow.python.data.ops.dataset_ops import FlatMapDataset
 
 import tiledb
 
 from ._parallel_utils import parallel_slice
 
 
-class TensorflowTileDBDenseDataset(FlatMapDataset):
-    """
-    Class that implements all functionality needed to load data from TileDB directly to the
-    Tensorflow Data API, by employing generators.
-    """
+class TensorflowTileDBDenseDataset(tf.data.Dataset):
+    """Load data from a dense TileDB array to the Tensorflow Data API."""
 
     def __new__(
         cls,
@@ -48,25 +44,27 @@ class TensorflowTileDBDenseDataset(FlatMapDataset):
 
         :param x_array: Array that contains features.
         :param y_array: Array that contains labels.
-        :param batch_size: The size of the batch that the implemented _generator method will return.
+        :param batch_size: The size of the batch that the implemented _generator method
+            will return.
         :param batch_shuffle: True if we want to shuffle batches.
         :param within_batch_shuffle: True if we want to shuffle records in each batch.
         :param x_attribute_names: The attribute names of x_array.
         :param y_attribute_names: The attribute names of y_array.
         """
-        if type(x_array) is tiledb.SparseArray:
+        if isinstance(x_array, tiledb.SparseArray):
             raise TypeError(
-                "TensorflowTileDBDenseDataset class should be used with tiledb.DenseArray representation"
+                "TensorflowTileDBDenseDataset accepts tiledb.DenseArray instances only"
             )
 
         # Check that x and y have the same number of rows
         if x_array.schema.domain.shape[0] != y_array.schema.domain.shape[0]:
             raise ValueError(
                 "X and Y should have the same number of rows, i.e., the 1st dimension "
-                "of TileDB arrays X, Y should be of equal domain extent."
+                "of TileDB arrays X, Y should be of equal domain extent"
             )
 
-        # If a user doesn't pass explicit attribute names to return per batch, we return all attributes.
+        # If a user doesn't pass explicit attribute names to return per batch,
+        # we return all attributes.
         if not x_attribute_names:
             x_attribute_names = [
                 x_array.schema.attr(idx).name for idx in range(x_array.schema.nattr)
@@ -77,25 +75,22 @@ class TensorflowTileDBDenseDataset(FlatMapDataset):
                 y_array.schema.attr(idx).name for idx in range(y_array.schema.nattr)
             ]
 
-        # Set the buffer_size appropriately and check its size
-        buffer_size_checked = buffer_size or batch_size
-        if buffer_size_checked < batch_size:
-            raise ValueError("Buffer size should be geq to the batch size.")
-
-        # Get number of observations
-        rows = x_array.schema.domain.shape[0]
-
-        # Get x and y shapes
-        x_shape = (None,) + x_array.schema.domain.shape[1:]
-        y_shape = (None,) + y_array.schema.domain.shape[1:]
+        if buffer_size and buffer_size < batch_size:
+            raise ValueError("Buffer size should be greater or equal to batch size")
 
         # Signatures for x and y
         x_signature = tuple(
-            tf.TensorSpec(shape=x_shape, dtype=x_array.schema.attr(attr).dtype)
+            tf.TensorSpec(
+                shape=(None, *x_array.schema.domain.shape[1:]),
+                dtype=x_array.schema.attr(attr).dtype,
+            )
             for attr in x_attribute_names
         )
         y_signature = tuple(
-            tf.TensorSpec(shape=y_shape, dtype=y_array.schema.attr(attr).dtype)
+            tf.TensorSpec(
+                shape=(None, *y_array.schema.domain.shape[1:]),
+                dtype=y_array.schema.attr(attr).dtype,
+            )
             for attr in y_attribute_names
         )
 
@@ -105,9 +100,9 @@ class TensorflowTileDBDenseDataset(FlatMapDataset):
             y=y_array,
             x_attribute_names=x_attribute_names,
             y_attribute_names=y_attribute_names,
-            rows=rows,
+            rows=x_array.schema.domain.shape[0],
             batch_size=batch_size,
-            buffer_size=buffer_size_checked,
+            buffer_size=buffer_size or batch_size,
             batch_shuffle=batch_shuffle,
             within_batch_shuffle=within_batch_shuffle,
         )
@@ -161,12 +156,9 @@ class TensorflowTileDBDenseDataset(FlatMapDataset):
         :param within_batch_shuffle: True if we want to shuffle records in each batch.
         :return: An iterator of x and y batches.
         """
-
-        offsets = np.arange(0, rows, buffer_size)
-
         # Loop over batches
         with ThreadPoolExecutor(max_workers=2) as executor:
-            for offset in offsets:
+            for offset in range(0, rows, buffer_size):
                 x_buffer, y_buffer = parallel_slice(
                     executor,
                     (x, y),
@@ -192,8 +184,8 @@ class TensorflowTileDBDenseDataset(FlatMapDataset):
                     }
 
                     if within_batch_shuffle:
-                        # We get batch length based on the first attribute, because last batch might be smaller than the
-                        # batch size
+                        # We get batch length based on the first attribute
+                        # because last batch might be smaller than the batch size
                         rand_permutation = np.arange(
                             x_batch[x_attribute_names[0]].shape[0]
                         )
