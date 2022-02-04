@@ -150,11 +150,11 @@ class TestPyTorchModel:
         tiledb_array = os.path.join(tmpdir, "model_array")
         tiledb_obj = PyTorchTileDBModel(uri=tiledb_array, model=saved_net)
 
-        mocker.patch("tiledb.ml._cloud_utils.get_s3_prefix", return_value=None)
+        mocker.patch("tiledb.ml.models._cloud_utils.get_s3_prefix", return_value=None)
         with pytest.raises(ValueError):
             tiledb_obj.get_cloud_uri(tiledb_array)
 
-        mocker.patch("tiledb.ml._cloud_utils.get_s3_prefix", return_value="bar")
+        mocker.patch("tiledb.ml.models._cloud_utils.get_s3_prefix", return_value="bar")
         actual = tiledb_obj.get_cloud_uri(tiledb_array)
         expected = "tiledb://{}/{}".format(
             tiledb_obj.namespace, os.path.join("bar", tiledb_array)
@@ -186,7 +186,7 @@ class TestPyTorchModel:
         mocker.patch(
             "tiledb.ml.models.base.TileDBModel.get_cloud_uri", return_value=tiledb_array
         )
-        mocker.patch("tiledb.ml._cloud_utils.update_file_properties")
+        mocker.patch("tiledb.ml.models._cloud_utils.update_file_properties")
 
         tiledb_obj = PyTorchTileDBModel(
             uri=tiledb_array, namespace="test_namespace", model=saved_net

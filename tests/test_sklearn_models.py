@@ -49,11 +49,11 @@ class TestSklearnModel:
         model = net()
         tiledb_sklearn_obj = SklearnTileDBModel(uri=tiledb_array, model=model)
 
-        mocker.patch("tiledb.ml._cloud_utils.get_s3_prefix", return_value=None)
+        mocker.patch("tiledb.ml.models._cloud_utils.get_s3_prefix", return_value=None)
         with pytest.raises(ValueError):
             tiledb_sklearn_obj.get_cloud_uri(tiledb_array)
 
-        mocker.patch("tiledb.ml._cloud_utils.get_s3_prefix", return_value="bar")
+        mocker.patch("tiledb.ml.models._cloud_utils.get_s3_prefix", return_value="bar")
         actual = tiledb_sklearn_obj.get_cloud_uri(tiledb_array)
         expected = "tiledb://{}/{}".format(
             tiledb_sklearn_obj.namespace, os.path.join("bar", tiledb_array)
@@ -85,7 +85,7 @@ class TestSklearnModel:
         mocker.patch(
             "tiledb.ml.models.base.TileDBModel.get_cloud_uri", return_value=tiledb_array
         )
-        mocker.patch("tiledb.ml._cloud_utils.update_file_properties")
+        mocker.patch("tiledb.ml.models._cloud_utils.update_file_properties")
 
         tiledb_obj = SklearnTileDBModel(
             uri=tiledb_array, namespace="test_namespace", model=model
