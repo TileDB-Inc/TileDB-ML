@@ -1,18 +1,14 @@
-"""Functionality for loading data from TileDB dense arrays to the Tensorflow Data API."""
+"""Functionality for loading data from TileDB arrays to the Tensorflow Data API."""
 
-from __future__ import annotations
-
-from concurrent.futures import ThreadPoolExecutor
 from functools import partial
-from typing import Any, Iterator, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, Iterator, Optional, Sequence, Tuple, Union
 
-import numpy as np
 import tensorflow as tf
 import wrapt
 
 import tiledb
 
-from ._parallel_utils import parallel_slice
+from . import _tensorflow_generators as tf_gen
 
 
 def _get_attr_names(array: tiledb.Array) -> Sequence[str]:
@@ -58,11 +54,11 @@ class TensorflowTileDBDataset(wrapt.ObjectProxy):
         """
         rows: int = x_array.schema.domain.shape[0]
 
-        # Check that x and y have the same number of rows
+        # Check that x_array and y_array have the same number of rows
         if rows != y_array.schema.domain.shape[0]:
             raise ValueError(
-                "X and Y should have the same number of rows, i.e., the 1st dimension "
-                "of TileDB arrays X, Y should be of equal domain extent"
+                "x_array and y_array should have the same number of rows, i.e. the "
+                "first dimension of x_array and y_array should be of equal domain extent"
             )
 
         if buffer_size is None:
@@ -80,11 +76,21 @@ class TensorflowTileDBDataset(wrapt.ObjectProxy):
         output_signature = _get_signature(x_array, x_attribute_names)
         output_signature += _get_signature(y_array, y_attribute_names)
 
+        generator: Callable[..., Iterator[Tuple[Any, ...]]]
+        if isinstance(x_array, tiledb.DenseArray):
+            if not isinstance(y_array, tiledb.DenseArray):
+                raise TypeError("if x_array is dense, y_array must be dense too")
+            generator = tf_gen.dense_dense_generator
+        elif isinstance(y_array, tiledb.DenseArray):
+            generator = tf_gen.sparse_dense_generator
+        else:
+            generator = tf_gen.sparse_sparse_generator
+
         dataset = tf.data.Dataset.from_generator(
-            generator=partial(
-                self._generator,
-                x=x_array,
-                y=y_array,
+            partial(
+                generator,
+                x_array=x_array,
+                y_array=y_array,
                 x_attribute_names=x_attribute_names,
                 y_attribute_names=y_attribute_names,
                 rows=rows,
@@ -99,20 +105,6 @@ class TensorflowTileDBDataset(wrapt.ObjectProxy):
 
     def __len__(self) -> int:
         return self._rows
-
-    @classmethod
-    def _generator(
-        cls,
-        x: tiledb.Array,
-        y: tiledb.Array,
-        x_attribute_names: Sequence[str],
-        y_attribute_names: Sequence[str],
-        rows: int,
-        batch_size: int,
-        buffer_size: int,
-        **kwargs: Any,
-    ) -> Iterator[Tuple[Union[tf.SparseTensor, np.ndarray], ...]]:
-        raise NotImplementedError("Abstract method")
 
 
 class TensorflowTileDBDenseDataset(TensorflowTileDBDataset):
@@ -168,77 +160,48 @@ class TensorflowTileDBDenseDataset(TensorflowTileDBDataset):
             within_batch_shuffle=within_batch_shuffle,
         )
 
-    @classmethod
-    def _generator(
-        cls,
-        x: tiledb.Array,
-        y: tiledb.Array,
-        x_attribute_names: Sequence[str],
-        y_attribute_names: Sequence[str],
-        rows: int,
-        batch_size: int,
-        buffer_size: int,
-        **kwargs: Any,
-    ) -> Iterator[Tuple[np.ndarray, ...]]:
-        """
-        Generator for yielding training batches.
 
-        :param x: An opened TileDB array which contains features.
-        :param y: An opened TileDB array which contains labels.
+class TensorflowTileDBSparseDataset(TensorflowTileDBDataset):
+    """Load data from a sparse TileDB array to the Tensorflow Data API."""
+
+    # We have to track the following issues on *working with sparse input*
+    # and *convert SparseTensor to Tensor* respectively.
+    # TODO: TF https://github.com/tensorflow/tensorflow/issues/47532
+    # TODO: TF https://github.com/tensorflow/tensorflow/issues/47931
+
+    def __init__(
+        self,
+        x_array: tiledb.SparseArray,
+        y_array: tiledb.Array,
+        batch_size: int,
+        buffer_size: Optional[int],
+        x_attribute_names: Sequence[str] = (),
+        y_attribute_names: Sequence[str] = (),
+        batch_shuffle: bool = False,
+    ):
+        """
+        Return a Tensorflow Dataset object which loads data from TileDB arrays by
+        employing a generator.
+
+        :param x_array: Array that contains features.
+        :param y_array: Array that contains labels.
+        :param batch_size: The size of the batch that the implemented _generator method
+            will return.
+        :param batch_shuffle: True if we want to shuffle batches.
         :param x_attribute_names: The attribute names of x_array.
         :param y_attribute_names: The attribute names of y_array.
-        :param rows: The number of observations in x, y datasets.
-        :param batch_size: Size of batch, i.e., number of rows returned per call.
-        :param batch_shuffle: True if we want to shuffle batches.
-        :param within_batch_shuffle: True if we want to shuffle records in each batch.
-        :return: An iterator of x and y batches.
         """
-        # Loop over batches
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            for offset in range(0, rows, buffer_size):
-                x_buffer, y_buffer = parallel_slice(
-                    executor,
-                    (x, y),
-                    buffer_size,
-                    offset,
-                )
+        if isinstance(x_array, tiledb.DenseArray):
+            raise TypeError(
+                "TensorflowTileDBSparseDataset accepts tiledb.SparseArray instances only"
+            )
 
-                # Split the buffer_size into batch_size chunks
-                batch_offsets = np.arange(0, buffer_size, batch_size)
-
-                # Shuffle offsets in case we need batch shuffling
-                if kwargs["batch_shuffle"]:
-                    np.random.shuffle(batch_offsets)
-
-                for batch_offset in batch_offsets:
-                    x_batch = {
-                        attr: data[batch_offset : batch_offset + batch_size]
-                        for attr, data in x_buffer.items()
-                    }
-                    y_batch = {
-                        attr: data[batch_offset : batch_offset + batch_size]
-                        for attr, data in y_buffer.items()
-                    }
-
-                    if kwargs["within_batch_shuffle"]:
-                        # We get batch length based on the first attribute
-                        # because last batch might be smaller than the batch size
-                        rand_permutation = np.arange(
-                            x_batch[x_attribute_names[0]].shape[0]
-                        )
-
-                        np.random.shuffle(rand_permutation)
-
-                        # Yield the next training batch
-                        yield tuple(
-                            x_batch[attr][rand_permutation]
-                            for attr in x_attribute_names
-                        ) + tuple(
-                            y_batch[attr][rand_permutation]
-                            for attr in y_attribute_names
-                        )
-                    else:
-                        # Yield the next training batch
-                        yield tuple(
-                            x_batch[attr] for attr in x_attribute_names
-                        ) + tuple(y_batch[attr] for attr in y_attribute_names)
+        super().__init__(
+            x_array=x_array,
+            y_array=y_array,
+            batch_size=batch_size,
+            buffer_size=buffer_size,
+            x_attribute_names=x_attribute_names,
+            y_attribute_names=y_attribute_names,
+            batch_shuffle=batch_shuffle,
+        )

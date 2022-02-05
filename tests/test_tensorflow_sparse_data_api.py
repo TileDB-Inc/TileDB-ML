@@ -8,7 +8,7 @@ import pytest
 import tensorflow as tf
 
 import tiledb
-from tiledb.ml.readers.tensorflow_sparse import TensorflowTileDBSparseDataset
+from tiledb.ml.readers.tensorflow import TensorflowTileDBSparseDataset
 
 from .utils import create_sparse_array_one_hot_2d, ingest_in_tiledb
 
