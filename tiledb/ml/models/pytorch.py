@@ -156,7 +156,7 @@ class PyTorchTileDBModel(TileDBModel[torch.nn.Module]):
         attrs.append(
             tiledb.Attr(
                 name="model_state_dict",
-                dtype="S1",
+                dtype=bytes,
                 var=True,
                 filters=tiledb.FilterList([tiledb.ZstdFilter()]),
                 ctx=self.ctx,
@@ -168,7 +168,7 @@ class PyTorchTileDBModel(TileDBModel[torch.nn.Module]):
             attrs.append(
                 tiledb.Attr(
                     name="optimizer_state_dict",
-                    dtype="S1",
+                    dtype=bytes,
                     var=True,
                     filters=tiledb.FilterList([tiledb.ZstdFilter()]),
                     ctx=self.ctx,
@@ -181,7 +181,7 @@ class PyTorchTileDBModel(TileDBModel[torch.nn.Module]):
                 attrs.append(
                     tiledb.Attr(
                         name=key,
-                        dtype="S1",
+                        dtype=bytes,
                         var=True,
                         filters=tiledb.FilterList([tiledb.ZstdFilter()]),
                         ctx=self.ctx,
