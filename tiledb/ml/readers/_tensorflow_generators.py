@@ -90,6 +90,7 @@ def sparse_sparse_generator(
     batch_size: int,
     buffer_size: int,
     batch_shuffle: bool,
+    within_batch_shuffle: bool,
 ) -> Iterator[Tuple[tf.SparseTensor, ...]]:
     """
     Generator for yielding training batches.
@@ -189,6 +190,7 @@ def sparse_dense_generator(
     batch_size: int,
     buffer_size: int,
     batch_shuffle: bool,
+    within_batch_shuffle: bool,
 ) -> Iterator[Tuple[Union[tf.SparseTensor, np.ndarray], ...]]:
     """
     Generator for yielding training batches.

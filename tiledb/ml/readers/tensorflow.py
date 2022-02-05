@@ -30,8 +30,17 @@ def _get_signature(
     )
 
 
+# TODO: We have to track the following issues:
+# - https://github.com/tensorflow/tensorflow/issues/47532
+# - https://github.com/tensorflow/tensorflow/issues/47931
+
+
 class TensorflowTileDBDataset(wrapt.ObjectProxy):
-    """Load data from a TileDB array to the Tensorflow Data API."""
+    """A tf.data.Dataset proxy class for loading data from TileDB arrays.
+
+    In addition to the tf.data.Dataset API, this class also provides __len__ for returning
+    the number of rows in the dataset.
+    """
 
     def __init__(
         self,
@@ -41,16 +50,19 @@ class TensorflowTileDBDataset(wrapt.ObjectProxy):
         buffer_size: Optional[int] = None,
         x_attribute_names: Sequence[str] = (),
         y_attribute_names: Sequence[str] = (),
-        **kwargs: Any,
+        batch_shuffle: bool = False,
+        within_batch_shuffle: bool = False,
     ):
         """
-        Return a Tensorflow Dataset object which loads data from TileDB arrays.
+        Instantiate a TensorflowTileDBDataset.
 
-        :param x_array: Array that contains features.
-        :param y_array: Array that contains labels.
+        :param x_array: TileDB array of the features.
+        :param y_array: TileDB array of the labels.
         :param batch_size: Size of each batch.
         :param x_attribute_names: Attribute names of x_array.
         :param y_attribute_names: Attribute names of y_array.
+        :param batch_shuffle: True for shuffling batches.
+        :param within_batch_shuffle: True for shuffling records in each batch.
         """
         rows: int = x_array.schema.domain.shape[0]
 
@@ -96,7 +108,8 @@ class TensorflowTileDBDataset(wrapt.ObjectProxy):
                 rows=rows,
                 batch_size=batch_size,
                 buffer_size=buffer_size,
-                **kwargs,
+                batch_shuffle=batch_shuffle,
+                within_batch_shuffle=within_batch_shuffle,
             ),
             output_signature=output_signature,
         )
@@ -105,103 +118,3 @@ class TensorflowTileDBDataset(wrapt.ObjectProxy):
 
     def __len__(self) -> int:
         return self._rows
-
-
-class TensorflowTileDBDenseDataset(TensorflowTileDBDataset):
-    """Load data from a dense TileDB array to the Tensorflow Data API."""
-
-    def __init__(
-        self,
-        x_array: tiledb.DenseArray,
-        y_array: tiledb.DenseArray,
-        batch_size: int,
-        buffer_size: Optional[int] = None,
-        x_attribute_names: Sequence[str] = (),
-        y_attribute_names: Sequence[str] = (),
-        batch_shuffle: bool = False,
-        within_batch_shuffle: bool = False,
-    ):
-        """
-        Return a Tensorflow Dataset object which loads data from TileDB arrays
-        by employing a generator.
-
-        For optimal reads from a TileDB array, it is recommended to set the batch size
-        equal to the tile extent of the dimension we query (here, we always query the
-        first dimension of a TileDB array) in order to get a slice (batch) of the data.
-        For example, in case the tile extent of the first dimension of a TileDB array
-        (x or y) is equal to 32, it's recommended to set batch_size=32. Any batch size
-        will work, but in case it's not equal the tile extent of the first dimension of
-        the TileDB array, you won't achieve highest read speed. For more details on tiles,
-        tile extent and indices in TileDB, please check here:
-        https://docs.tiledb.com/main/how-to/performance/performance-tips/choosing-tiling-and-cell-layout#dense-arrays
-
-        :param x_array: Array that contains features.
-        :param y_array: Array that contains labels.
-        :param batch_size: The size of the batch that the implemented _generator method
-            will return.
-        :param batch_shuffle: True if we want to shuffle batches.
-        :param within_batch_shuffle: True if we want to shuffle records in each batch.
-        :param x_attribute_names: The attribute names of x_array.
-        :param y_attribute_names: The attribute names of y_array.
-        """
-        if isinstance(x_array, tiledb.SparseArray):
-            raise TypeError(
-                "TensorflowTileDBDenseDataset accepts tiledb.DenseArray instances only"
-            )
-
-        super().__init__(
-            x_array=x_array,
-            y_array=y_array,
-            batch_size=batch_size,
-            buffer_size=buffer_size,
-            x_attribute_names=x_attribute_names,
-            y_attribute_names=y_attribute_names,
-            batch_shuffle=batch_shuffle,
-            within_batch_shuffle=within_batch_shuffle,
-        )
-
-
-class TensorflowTileDBSparseDataset(TensorflowTileDBDataset):
-    """Load data from a sparse TileDB array to the Tensorflow Data API."""
-
-    # We have to track the following issues on *working with sparse input*
-    # and *convert SparseTensor to Tensor* respectively.
-    # TODO: TF https://github.com/tensorflow/tensorflow/issues/47532
-    # TODO: TF https://github.com/tensorflow/tensorflow/issues/47931
-
-    def __init__(
-        self,
-        x_array: tiledb.SparseArray,
-        y_array: tiledb.Array,
-        batch_size: int,
-        buffer_size: Optional[int],
-        x_attribute_names: Sequence[str] = (),
-        y_attribute_names: Sequence[str] = (),
-        batch_shuffle: bool = False,
-    ):
-        """
-        Return a Tensorflow Dataset object which loads data from TileDB arrays by
-        employing a generator.
-
-        :param x_array: Array that contains features.
-        :param y_array: Array that contains labels.
-        :param batch_size: The size of the batch that the implemented _generator method
-            will return.
-        :param batch_shuffle: True if we want to shuffle batches.
-        :param x_attribute_names: The attribute names of x_array.
-        :param y_attribute_names: The attribute names of y_array.
-        """
-        if isinstance(x_array, tiledb.DenseArray):
-            raise TypeError(
-                "TensorflowTileDBSparseDataset accepts tiledb.SparseArray instances only"
-            )
-
-        super().__init__(
-            x_array=x_array,
-            y_array=y_array,
-            batch_size=batch_size,
-            buffer_size=buffer_size,
-            x_attribute_names=x_attribute_names,
-            y_attribute_names=y_attribute_names,
-            batch_shuffle=batch_shuffle,
-        )
