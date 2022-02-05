@@ -69,25 +69,30 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
         if buffer_size and buffer_size < batch_size:
             raise ValueError("Buffer size should be greater or equal to batch size")
 
-        if isinstance(y_array, tiledb.SparseArray):
-            # Signatures for x and y
-            x_signature = tuple(
-                tf.SparseTensorSpec(
-                    shape=(None, *x_array.schema.domain.shape[1:]),
-                    dtype=x_array.schema.attr(attr).dtype,
-                )
-                for attr in x_attribute_names
+        x_signature = tuple(
+            tf.SparseTensorSpec(
+                shape=(None, *x_array.schema.domain.shape[1:]),
+                dtype=x_array.schema.attr(attr).dtype,
             )
-            y_signature = tuple(
-                tf.SparseTensorSpec(
-                    shape=(None, *y_array.schema.domain.shape[1:]),
-                    dtype=y_array.schema.attr(attr).dtype,
-                )
-                for attr in y_attribute_names
-            )
+            for attr in x_attribute_names
+        )
 
-            generator_ = partial(
-                cls._generator_sparse_sparse,
+        is_y_sparse = isinstance(y_array, tiledb.SparseArray)
+        y_signature = tuple(
+            (tf.SparseTensorSpec if is_y_sparse else tf.TensorSpec)(
+                shape=(None, *y_array.schema.domain.shape[1:]),
+                dtype=y_array.schema.attr(attr).dtype,
+            )
+            for attr in y_attribute_names
+        )
+
+        return tf.data.Dataset.from_generator(
+            partial(
+                (
+                    cls._generator_sparse_sparse
+                    if is_y_sparse
+                    else cls._generator_sparse_dense
+                ),
                 x=x_array,
                 y=y_array,
                 x_attribute_names=x_attribute_names,
@@ -96,45 +101,9 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
                 batch_size=batch_size,
                 buffer_size=buffer_size or batch_size,
                 batch_shuffle=batch_shuffle,
-            )
-
-            return tf.data.Dataset.from_generator(
-                generator=generator_,
-                output_signature=x_signature + y_signature,
-            )
-        else:
-            # Signatures for x and y
-            x_signature = tuple(
-                tf.SparseTensorSpec(
-                    shape=(None, *x_array.schema.domain.shape[1:]),
-                    dtype=x_array.schema.attr(attr).dtype,
-                )
-                for attr in x_attribute_names
-            )
-            y_signature = tuple(
-                tf.TensorSpec(
-                    shape=(None, *y_array.schema.domain.shape[1:]),
-                    dtype=y_array.schema.attr(attr).dtype,
-                )
-                for attr in y_attribute_names
-            )
-
-            generator_ = partial(
-                cls._generator_sparse_dense,
-                x=x_array,
-                y=y_array,
-                x_attribute_names=x_attribute_names,
-                y_attribute_names=y_attribute_names,
-                rows=x_array.schema.domain.shape[0],
-                batch_size=batch_size,
-                buffer_size=buffer_size or batch_size,
-                batch_shuffle=batch_shuffle,
-            )
-
-            return tf.data.Dataset.from_generator(
-                generator=generator_,
-                output_signature=x_signature + y_signature,
-            )
+            ),
+            output_signature=x_signature + y_signature,
+        )
 
     @staticmethod
     def _check_row_dims(
