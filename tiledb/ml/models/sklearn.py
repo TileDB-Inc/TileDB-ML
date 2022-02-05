@@ -80,7 +80,7 @@ class SklearnTileDBModel(TileDBModel[BaseEstimator]):
         attrs = [
             tiledb.Attr(
                 name="model_params",
-                dtype="S1",
+                dtype=bytes,
                 var=True,
                 filters=tiledb.FilterList([tiledb.ZstdFilter()]),
                 ctx=self.ctx,

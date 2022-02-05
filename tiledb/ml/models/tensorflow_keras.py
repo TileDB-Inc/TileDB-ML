@@ -186,14 +186,14 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
             attrs = [
                 tiledb.Attr(
                     name="model_weights",
-                    dtype="S1",
+                    dtype=bytes,
                     var=True,
                     filters=tiledb.FilterList([tiledb.ZstdFilter()]),
                     ctx=self.ctx,
                 ),
                 tiledb.Attr(
                     name="optimizer_weights",
-                    dtype="S1",
+                    dtype=bytes,
                     var=True,
                     filters=tiledb.FilterList([tiledb.ZstdFilter()]),
                     ctx=self.ctx,
@@ -204,7 +204,7 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
                 # String names of weights of each layer of the model
                 tiledb.Attr(
                     name="weight_names",
-                    dtype="S1",
+                    dtype=bytes,
                     var=True,
                     filters=tiledb.FilterList([tiledb.ZstdFilter()]),
                     ctx=self.ctx,
@@ -212,7 +212,7 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
                 # The values of weights of each layer of the model
                 tiledb.Attr(
                     name="weight_values",
-                    dtype="S1",
+                    dtype=bytes,
                     var=True,
                     filters=tiledb.FilterList([tiledb.ZstdFilter()]),
                     ctx=self.ctx,
@@ -220,7 +220,7 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
                 # Layer names TF format of the saved/loaded model
                 tiledb.Attr(
                     name="layer_name",
-                    dtype="U1",
+                    dtype=str,
                     var=True,
                     filters=tiledb.FilterList([tiledb.ZstdFilter()]),
                     ctx=self.ctx,
@@ -228,7 +228,7 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
                 # The weight values of the optimizer in case the model is saved compiled
                 tiledb.Attr(
                     name="optimizer_weights",
-                    dtype="S1",
+                    dtype=bytes,
                     var=True,
                     filters=tiledb.FilterList([tiledb.ZstdFilter()]),
                     ctx=self.ctx,
