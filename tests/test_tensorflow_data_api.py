@@ -310,37 +310,28 @@ class TestTileDBTensorflowDataAPI:
         )
 
         with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
-
             attribute_names = [
                 "features_" + str(attr) for attr in range(num_of_attributes)
             ]
-
-            # This is a UT for generator only so TensorflowTileDBSparseDataset constructor
-            # will not be called and hence the correction of buffer_size from None to batch_size
-            # will be skipped and thus we hard code it for the test
-            buffer_size = buffer_size or BATCH_SIZE
-            generated_data = next(
-                TensorflowTileDBDenseDataset._generator(
-                    x=x,
-                    y=y,
-                    batch_size=BATCH_SIZE,
-                    batch_shuffle=batch_shuffle,
-                    buffer_size=buffer_size,
-                    within_batch_shuffle=within_batch_shuffle,
-                    x_attribute_names=attribute_names,
-                    y_attribute_names=attribute_names,
-                    rows=ROWS,
-                )
+            dataset = TensorflowTileDBDenseDataset(
+                x_array=x,
+                y_array=y,
+                batch_size=BATCH_SIZE,
+                batch_shuffle=batch_shuffle,
+                buffer_size=buffer_size,
+                within_batch_shuffle=within_batch_shuffle,
+                x_attribute_names=attribute_names,
+                y_attribute_names=attribute_names,
             )
-
+            generated_data = next(iter(dataset))
             assert len(generated_data) == 2 * num_of_attributes
 
             for attr in range(num_of_attributes):
-                assert generated_data[attr].shape <= (
+                assert tuple(generated_data[attr].shape) <= (
                     BATCH_SIZE,
                     *input_shape[1:],
                 )
-                assert generated_data[num_of_attributes + attr].shape <= (
+                assert tuple(generated_data[num_of_attributes + attr].shape) <= (
                     BATCH_SIZE,
                     NUM_OF_CLASSES,
                 )

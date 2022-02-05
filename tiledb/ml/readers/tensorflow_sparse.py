@@ -1,7 +1,6 @@
 """Functionality for loading data from TileDB sparse arrays to the Tensorflow Data API."""
 
 from concurrent.futures import ThreadPoolExecutor
-from functools import partial
 from typing import Iterator, Mapping, Optional, Sequence, Tuple, Union
 
 import numpy as np
@@ -11,9 +10,10 @@ import tensorflow as tf
 import tiledb
 
 from ._parallel_utils import parallel_slice
+from .tensorflow import TensorflowTileDBDataset
 
 
-class TensorflowTileDBSparseDataset(tf.data.Dataset):
+class TensorflowTileDBSparseDataset(TensorflowTileDBDataset):
     """Load data from a sparse TileDB array to the Tensorflow Data API."""
 
     # We have to track the following issues on *working with sparse input*
@@ -21,16 +21,16 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
     # TODO: TF https://github.com/tensorflow/tensorflow/issues/47532
     # TODO: TF https://github.com/tensorflow/tensorflow/issues/47931
 
-    def __new__(
-        cls,
+    def __init__(
+        self,
         x_array: tiledb.SparseArray,
         y_array: tiledb.Array,
         batch_size: int,
         buffer_size: Optional[int],
-        batch_shuffle: bool = False,
         x_attribute_names: Sequence[str] = (),
         y_attribute_names: Sequence[str] = (),
-    ) -> tf.data.Dataset:
+        batch_shuffle: bool = False,
+    ):
         """
         Return a Tensorflow Dataset object which loads data from TileDB arrays by
         employing a generator.
@@ -48,61 +48,19 @@ class TensorflowTileDBSparseDataset(tf.data.Dataset):
                 "TensorflowTileDBSparseDataset accepts tiledb.SparseArray instances only"
             )
 
-        # Check that x and y have the same number of rows
-        if x_array.schema.domain.shape[0] != y_array.schema.domain.shape[0]:
-            raise ValueError(
-                "X and Y should have the same number of rows, i.e., the 1st dimension "
-                "of TileDB arrays X, Y should be of equal domain extent"
-            )
+        if isinstance(y_array, tiledb.SparseArray):
+            setattr(self, "_generator", self._generator_sparse_sparse)
+        else:
+            setattr(self, "_generator", self._generator_sparse_dense)
 
-        # If no attribute names are passed explicitly, return all attributes
-        if not x_attribute_names:
-            x_attribute_names = [
-                x_array.schema.attr(idx).name for idx in range(x_array.schema.nattr)
-            ]
-
-        if not y_attribute_names:
-            y_attribute_names = [
-                y_array.schema.attr(idx).name for idx in range(y_array.schema.nattr)
-            ]
-
-        if buffer_size and buffer_size < batch_size:
-            raise ValueError("Buffer size should be greater or equal to batch size")
-
-        x_signature = tuple(
-            tf.SparseTensorSpec(
-                shape=(None, *x_array.schema.domain.shape[1:]),
-                dtype=x_array.schema.attr(attr).dtype,
-            )
-            for attr in x_attribute_names
-        )
-
-        is_y_sparse = isinstance(y_array, tiledb.SparseArray)
-        y_signature = tuple(
-            (tf.SparseTensorSpec if is_y_sparse else tf.TensorSpec)(
-                shape=(None, *y_array.schema.domain.shape[1:]),
-                dtype=y_array.schema.attr(attr).dtype,
-            )
-            for attr in y_attribute_names
-        )
-
-        return tf.data.Dataset.from_generator(
-            partial(
-                (
-                    cls._generator_sparse_sparse
-                    if is_y_sparse
-                    else cls._generator_sparse_dense
-                ),
-                x=x_array,
-                y=y_array,
-                x_attribute_names=x_attribute_names,
-                y_attribute_names=y_attribute_names,
-                rows=x_array.schema.domain.shape[0],
-                batch_size=batch_size,
-                buffer_size=buffer_size or batch_size,
-                batch_shuffle=batch_shuffle,
-            ),
-            output_signature=x_signature + y_signature,
+        super().__init__(
+            x_array=x_array,
+            y_array=y_array,
+            batch_size=batch_size,
+            buffer_size=buffer_size,
+            x_attribute_names=x_attribute_names,
+            y_attribute_names=y_attribute_names,
+            batch_shuffle=batch_shuffle,
         )
 
     @staticmethod
