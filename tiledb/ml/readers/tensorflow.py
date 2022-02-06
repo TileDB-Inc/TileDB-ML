@@ -75,7 +75,7 @@ def TensorflowTileDBDataset(
             y_array=y_array,
             x_attribute_names=x_attribute_names,
             y_attribute_names=y_attribute_names,
-            rows=rows,
+            offsets=range(0, rows, batch_size),
             batch_size=batch_size,
             buffer_size=buffer_size,
             batch_shuffle=batch_shuffle,

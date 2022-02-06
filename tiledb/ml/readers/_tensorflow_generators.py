@@ -15,7 +15,7 @@ def dense_dense_generator(
     y_array: tiledb.DenseArray,
     x_attribute_names: Sequence[str],
     y_attribute_names: Sequence[str],
-    rows: int,
+    offsets: range,
     batch_size: int,
     buffer_size: int,
     batch_shuffle: bool = False,
@@ -26,17 +26,16 @@ def dense_dense_generator(
 
     :param x_array: An opened TileDB array which contains features.
     :param y_array: An opened TileDB array which contains labels.
-    :param x_attribute_names: The attribute names of x_array.
-    :param y_attribute_names: The attribute names of y_array.
-    :param rows: The number of observations in x_array/y_array.
+    :param x_attribute_names: Attribute names of x_array.
+    :param y_attribute_names: Attribute names of y_array.
+    :param offsets: Row start offsets in x_array/y_array.
     :param batch_size: Size of batch, i.e., number of rows returned per call.
-    :param batch_shuffle: True if we want to shuffle batches.
-    :param within_batch_shuffle: True if we want to shuffle records in each batch.
+    :param batch_shuffle: True for shuffling batches.
+    :param within_batch_shuffle: True for shuffling records in each batch.
     :return: An iterator of x and y batches.
     """
-    # Loop over batches
     with ThreadPoolExecutor(max_workers=2) as executor:
-        for offset in range(0, rows, buffer_size):
+        for offset in offsets:
             x_buffer, y_buffer = parallel_slice(
                 executor,
                 (x_array, y_array),
@@ -86,7 +85,7 @@ def sparse_sparse_generator(
     y_array: tiledb.SparseArray,
     x_attribute_names: Sequence[str],
     y_attribute_names: Sequence[str],
-    rows: int,
+    offsets: range,
     batch_size: int,
     buffer_size: int,
     batch_shuffle: bool,
@@ -97,20 +96,20 @@ def sparse_sparse_generator(
 
     :param x_array: An opened TileDB array which contains features.
     :param y_array: An opened TileDB array which contains labels.
-    :param x_attribute_names: The attribute names of x_array.
-    :param y_attribute_names: The attribute names of y_array.
-    :param rows: The number of observations in x_array/y_array.
+    :param x_attribute_names: Attribute names of x_array.
+    :param y_attribute_names: Attribute names of y_array.
+    :param offsets: Row start offsets in x_array/y_array.
     :param batch_size: Size of batch, i.e., number of rows returned per call.
-    :param batch_shuffle: True if we want to shuffle batches.
+    :param batch_shuffle: True for shuffling batches.
+    :param within_batch_shuffle: True for shuffling records in each batch.
     :return: An iterator of x and y batches.
     """
     x_shape = x_array.schema.domain.shape[1:]
     y_shape = y_array.schema.domain.shape[1:]
 
-    # Loop over batches
     # https://github.com/tensorflow/tensorflow/issues/44565
     with ThreadPoolExecutor(max_workers=2) as executor:
-        for offset in range(0, rows, buffer_size):
+        for offset in offsets:
             x_buffer, y_buffer = parallel_slice(
                 executor,
                 (x_array, y_array),
@@ -186,7 +185,7 @@ def sparse_dense_generator(
     y_array: tiledb.DenseArray,
     x_attribute_names: Sequence[str],
     y_attribute_names: Sequence[str],
-    rows: int,
+    offsets: range,
     batch_size: int,
     buffer_size: int,
     batch_shuffle: bool,
@@ -197,19 +196,19 @@ def sparse_dense_generator(
 
     :param x_array: An opened TileDB array which contains features.
     :param y_array: An opened TileDB array which contains labels.
-    :param x_attribute_names: The attribute names of x_array.
-    :param y_attribute_names: The attribute names of y_array.
-    :param rows: The number of observations in x_array/y_array.
+    :param x_attribute_names: Attribute names of x_array.
+    :param y_attribute_names: Attribute names of y_array.
+    :param offsets: Row start offsets in x_array/y_array.
     :param batch_size: Size of batch, i.e., number of rows returned per call.
-    :param batch_shuffle: True if we want to shuffle batches.
+    :param batch_shuffle: True for shuffling batches.
+    :param within_batch_shuffle: True for shuffling records in each batch.
     :return: An iterator of x and y batches.
     """
     x_shape = x_array.schema.domain.shape[1:]
 
-    # Loop over batches
     # https://github.com/tensorflow/tensorflow/issues/44565
     with ThreadPoolExecutor(max_workers=1) as executor:
-        for offset in range(0, rows, buffer_size):
+        for offset in offsets:
             x_buffer, y_buffer = parallel_slice(
                 executor,
                 (x_array, y_array),
