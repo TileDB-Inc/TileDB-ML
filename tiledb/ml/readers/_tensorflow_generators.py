@@ -7,8 +7,6 @@ import tensorflow as tf
 
 import tiledb
 
-from ._parallel_utils import parallel_slice
-
 
 def dense_dense_generator(
     x_array: tiledb.DenseArray,
@@ -36,11 +34,9 @@ def dense_dense_generator(
     """
     with ThreadPoolExecutor(max_workers=2) as executor:
         for offset in offsets:
-            x_buffer, y_buffer = parallel_slice(
-                executor,
+            x_buffer, y_buffer = executor.map(
+                lambda array: array[offset : offset + buffer_size],  # type: ignore
                 (x_array, y_array),
-                buffer_size,
-                offset,
             )
 
             # Split the buffer_size into batch_size chunks
@@ -110,11 +106,9 @@ def sparse_sparse_generator(
     # https://github.com/tensorflow/tensorflow/issues/44565
     with ThreadPoolExecutor(max_workers=2) as executor:
         for offset in offsets:
-            x_buffer, y_buffer = parallel_slice(
-                executor,
+            x_buffer, y_buffer = executor.map(
+                lambda array: array[offset : offset + buffer_size],  # type: ignore
                 (x_array, y_array),
-                buffer_size,
-                offset,
             )
 
             # COO to CSR transformation for batching and row slicing
@@ -209,11 +203,9 @@ def sparse_dense_generator(
     # https://github.com/tensorflow/tensorflow/issues/44565
     with ThreadPoolExecutor(max_workers=1) as executor:
         for offset in offsets:
-            x_buffer, y_buffer = parallel_slice(
-                executor,
+            x_buffer, y_buffer = executor.map(
+                lambda array: array[offset : offset + buffer_size],  # type: ignore
                 (x_array, y_array),
-                buffer_size,
-                offset,
             )
 
             # COO to CSR transformation for batching and row slicing
