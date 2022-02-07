@@ -1,11 +1,13 @@
 from concurrent.futures import ThreadPoolExecutor
-from typing import Iterator, Mapping, Sequence, Tuple, Union
+from typing import Any, Iterator, Mapping, Sequence, Tuple, Union
 
 import numpy as np
 import scipy.sparse
 import tensorflow as tf
 
 import tiledb
+
+Tensor = Union[tf.Tensor, tf.SparseTensor]
 
 
 def dense_dense_generator(
@@ -18,7 +20,7 @@ def dense_dense_generator(
     buffer_size: int,
     batch_shuffle: bool = False,
     within_batch_shuffle: bool = False,
-) -> Iterator[Tuple[np.ndarray, ...]]:
+) -> Iterator[Tuple[tf.Tensor, ...]]:
     """
     Generator for yielding training batches.
 
@@ -38,15 +40,9 @@ def dense_dense_generator(
                 lambda array: array[offset : offset + buffer_size],  # type: ignore
                 (x_array, y_array),
             )
-
-            # Split the buffer_size into batch_size chunks
-            batch_offsets = np.arange(0, buffer_size, batch_size)
-
-            # Shuffle offsets in case we need batch shuffling
-            if batch_shuffle:
-                np.random.shuffle(batch_offsets)
-
-            for batch_offset in batch_offsets:
+            for batch_offset in _iter_batch_offsets(
+                buffer_size, batch_size, batch_shuffle
+            ):
                 x_batch = {
                     attr: data[batch_offset : batch_offset + batch_size]
                     for attr, data in x_buffer.items()
@@ -59,21 +55,15 @@ def dense_dense_generator(
                 if within_batch_shuffle:
                     # We get batch length based on the first attribute
                     # because last batch might be smaller than the batch size
-                    rand_permutation = np.arange(x_batch[x_attribute_names[0]].shape[0])
-
-                    np.random.shuffle(rand_permutation)
-
-                    # Yield the next training batch
-                    yield tuple(
-                        x_batch[attr][rand_permutation] for attr in x_attribute_names
-                    ) + tuple(
-                        y_batch[attr][rand_permutation] for attr in y_attribute_names
-                    )
+                    idx = np.arange(x_batch[x_attribute_names[0]].shape[0])
+                    np.random.shuffle(idx)
                 else:
-                    # Yield the next training batch
-                    yield tuple(x_batch[attr] for attr in x_attribute_names) + tuple(
-                        y_batch[attr] for attr in y_attribute_names
-                    )
+                    idx = Ellipsis
+
+                # Yield the next training batch
+                x_tensors = _get_dense_tensors(x_batch, x_attribute_names, idx)
+                y_tensors = _get_dense_tensors(y_batch, y_attribute_names, idx)
+                yield x_tensors + y_tensors
 
 
 def sparse_sparse_generator(
@@ -100,78 +90,48 @@ def sparse_sparse_generator(
     :param within_batch_shuffle: True for shuffling records in each batch.
     :return: An iterator of x and y batches.
     """
-    x_shape = x_array.schema.domain.shape[1:]
-    y_shape = y_array.schema.domain.shape[1:]
-
     # https://github.com/tensorflow/tensorflow/issues/44565
     with ThreadPoolExecutor(max_workers=2) as executor:
+        x_dense_shape = (batch_size, x_array.schema.domain.shape[1])
+        y_dense_shape = (batch_size, y_array.schema.domain.shape[1])
+
         for offset in offsets:
             x_buffer, y_buffer = executor.map(
                 lambda array: array[offset : offset + buffer_size],  # type: ignore
                 (x_array, y_array),
             )
-
             # COO to CSR transformation for batching and row slicing
-            x_buffer_csr = to_csr(x_array, x_attribute_names[0], x_buffer, offset)
-            y_buffer_csr = to_csr(y_array, y_attribute_names[0], y_buffer, offset)
+            x_buffer_csr = _to_csr(x_array, x_attribute_names[0], x_buffer, offset)
+            y_buffer_csr = _to_csr(y_array, y_attribute_names[0], y_buffer, offset)
 
-            # Split the buffer_size into batch_size chunks
-            batch_offsets = np.arange(0, buffer_size, batch_size)
-
-            # Shuffle offsets in case we need batch shuffling
-            if batch_shuffle:
-                np.random.shuffle(batch_offsets)
-
-            for batch_offset in batch_offsets:
-                x_batch = x_buffer_csr[batch_offset : batch_offset + batch_size]
-
-                if x_batch.data.size == 0:
+            for batch_offset in _iter_batch_offsets(
+                buffer_size, batch_size, batch_shuffle
+            ):
+                x_batch_csr = x_buffer_csr[batch_offset : batch_offset + batch_size]
+                if x_batch_csr.data.size == 0:
                     return
 
-                y_batch = y_buffer_csr[batch_offset : batch_offset + batch_size]
+                y_batch_csr = y_buffer_csr[batch_offset : batch_offset + batch_size]
 
-                # Keep row records number for cross-check between x_array and y_array batches
-                # Last index excluded shows to empty
-                samples_num_x = x_batch.indptr[:-1]
-
-                # Transform back to COO for torch.sparse_coo_tensor to digest
-                x_batch_coo = x_batch.tocoo()
-                x_coords = np.stack((x_batch_coo.row, x_batch_coo.col), axis=-1)
-
-                # Keep row records number for cross-check between x_array and y_array batches
-                # Last index excluded shows to empty
-                samples_num_y = y_batch.indptr[:-1]
-
-                # Transform back to COO for torch.sparse_coo_tensor to digest
-                y_batch_coo = y_batch.tocoo()
-                y_coords = np.stack((y_batch_coo.row, y_batch_coo.col), axis=-1)
-
-                if np.unique(samples_num_x).size != np.unique(samples_num_y).size:
+                # Keep row records number for cross-check between x_array and y_array
+                # batches. Last index excluded shows to empty
+                samples_num_x = np.unique(x_batch_csr.indptr[:-1]).size
+                samples_num_y = np.unique(y_batch_csr.indptr[:-1]).size
+                if samples_num_x != samples_num_y:
                     raise ValueError(
                         "x_array and y_array should have the same number of rows, "
                         "i.e. the first dimension of x_array and y_array should be of "
                         "equal domain extent inside the batch"
                     )
 
-                yield tuple(
-                    tf.SparseTensor(
-                        indices=tf.constant(x_coords, dtype=tf.int64),
-                        values=tf.constant(
-                            x_batch_coo.data, dtype=x_array.schema.attr(attr).dtype
-                        ),
-                        dense_shape=(batch_size, x_shape[0]),
-                    )
-                    for attr in x_attribute_names
-                ) + tuple(
-                    tf.SparseTensor(
-                        indices=tf.constant(y_coords, dtype=tf.int64),
-                        values=tf.constant(
-                            y_batch_coo.data, dtype=y_array.schema.attr(attr).dtype
-                        ),
-                        dense_shape=(batch_size, y_shape[0]),
-                    )
-                    for attr in y_attribute_names
+                # Transform back to COO for torch.sparse_coo_tensor to digest
+                x_tensors = _get_sparse_tensors(
+                    x_batch_csr, x_array, x_attribute_names, x_dense_shape
                 )
+                y_tensors = _get_sparse_tensors(
+                    y_batch_csr, y_array, y_attribute_names, y_dense_shape
+                )
+                yield x_tensors + y_tensors
 
 
 def sparse_dense_generator(
@@ -184,7 +144,7 @@ def sparse_dense_generator(
     buffer_size: int,
     batch_shuffle: bool,
     within_batch_shuffle: bool,
-) -> Iterator[Tuple[Union[tf.SparseTensor, np.ndarray], ...]]:
+) -> Iterator[Tuple[Tensor, ...]]:
     """
     Generator for yielding training batches.
 
@@ -198,30 +158,23 @@ def sparse_dense_generator(
     :param within_batch_shuffle: True for shuffling records in each batch.
     :return: An iterator of x and y batches.
     """
-    x_shape = x_array.schema.domain.shape[1:]
-
     # https://github.com/tensorflow/tensorflow/issues/44565
     with ThreadPoolExecutor(max_workers=2) as executor:
+        x_dense_shape = (batch_size, x_array.schema.domain.shape[1])
+
         for offset in offsets:
             x_buffer, y_buffer = executor.map(
                 lambda array: array[offset : offset + buffer_size],  # type: ignore
                 (x_array, y_array),
             )
-
             # COO to CSR transformation for batching and row slicing
-            x_buffer_csr = to_csr(x_array, x_attribute_names[0], x_buffer, offset)
+            x_buffer_csr = _to_csr(x_array, x_attribute_names[0], x_buffer, offset)
 
-            # Split the buffer_size into batch_size chunks
-            batch_offsets = np.arange(0, buffer_size, batch_size)
-
-            # Shuffle offsets in case we need batch shuffling
-            if batch_shuffle:
-                np.random.shuffle(batch_offsets)
-
-            for batch_offset in batch_offsets:
-                x_batch = x_buffer_csr[batch_offset : batch_offset + batch_size]
-
-                if x_batch.data.size == 0:
+            for batch_offset in _iter_batch_offsets(
+                buffer_size, batch_size, batch_shuffle
+            ):
+                x_batch_csr = x_buffer_csr[batch_offset : batch_offset + batch_size]
+                if x_batch_csr.data.size == 0:
                     return
 
                 y_batch = {
@@ -229,41 +182,65 @@ def sparse_dense_generator(
                     for attr, data in y_buffer.items()
                 }
 
-                # Keep row records number for cross-check between x_array and y_array batches
-                # Last index excluded shows to empty
-                samples_num_x = x_batch.indptr[:-1]
-
-                # Transform back to COO for torch.sparse_coo_tensor to digest
-                x_batch_coo = x_batch.tocoo()
-                x_coords = np.stack((x_batch_coo.row, x_batch_coo.col), axis=-1)
-
+                # Keep row records number for cross-check between x_array and y_array
+                # batches. Last index excluded shows to empty
+                samples_num_x = np.unique(x_batch_csr.indptr[:-1]).size
                 # for the check slice the row dimension of y_array dense array
-                if (
-                    np.unique(samples_num_x).size
-                    != y_batch[y_attribute_names[0]].shape[0]
-                ):
+                samples_num_y = y_batch[y_attribute_names[0]].shape[0]
+                if samples_num_x != samples_num_y:
                     raise ValueError(
                         "x_array and y_array should have the same number of rows, "
                         "i.e. the first dimension of x_array and y_array should be of "
                         "equal domain extent inside the batch"
                     )
 
-                yield tuple(
-                    tf.SparseTensor(
-                        indices=tf.constant(x_coords, dtype=tf.int64),
-                        values=tf.constant(
-                            x_batch_coo.data, dtype=x_array.schema.attr(attr).dtype
-                        ),
-                        dense_shape=(batch_size, x_shape[0]),
-                    )
-                    for attr in x_attribute_names
-                ) + tuple(y_batch[attr] for attr in y_attribute_names)
+                # Transform back to COO for torch.sparse_coo_tensor to digest
+                x_tensors = _get_sparse_tensors(
+                    x_batch_csr, x_array, x_attribute_names, x_dense_shape
+                )
+                y_tensors = _get_dense_tensors(y_batch, y_attribute_names)
+                yield x_tensors + y_tensors
 
 
-def to_csr(
+def _iter_batch_offsets(
+    buffer_size: int, batch_size: int, batch_shuffle: bool
+) -> Iterator[int]:
+    # Split the buffer_size into batch_size chunks
+    batch_offsets = np.arange(0, buffer_size, batch_size)
+    # Shuffle offsets in case we need batch shuffling
+    if batch_shuffle:
+        np.random.shuffle(batch_offsets)
+    return iter(batch_offsets)
+
+
+def _get_dense_tensors(
+    batch: Mapping[str, np.ndarray], attrs: Sequence[str], idx: Any = Ellipsis
+) -> Tuple[tf.Tensor, ...]:
+    return tuple(tf.convert_to_tensor(batch[attr][idx]) for attr in attrs)
+
+
+def _get_sparse_tensors(
+    batch_csr: scipy.sparse.csr_matrix,
+    array: tiledb.SparseArray,
+    attrs: Sequence[str],
+    dense_shape: Tuple[int, ...],
+) -> Tuple[tf.SparseTensor, ...]:
+    batch_coo = batch_csr.tocoo()
+    coords = np.stack((batch_coo.row, batch_coo.col), axis=-1)
+    return tuple(
+        tf.SparseTensor(
+            indices=tf.constant(coords, dtype=tf.int64),
+            values=tf.constant(batch_coo.data, dtype=array.schema.attr(attr).dtype),
+            dense_shape=dense_shape,
+        )
+        for attr in attrs
+    )
+
+
+def _to_csr(
     array: tiledb.Array,
     attribute_names: str,
-    buffer: Mapping[str, np.array],
+    buffer: Mapping[str, np.ndarray],
     offset: int,
 ) -> scipy.sparse.csr_matrix:
     """
