@@ -101,9 +101,6 @@ def sparse_sparse_generator(
                 x_batch = SparseBatch(
                     x_buffer_csr[batch_slice], x_attrs, x_array, x_dense_shape
                 )
-                if not x_batch:
-                    return
-
                 y_batch = SparseBatch(
                     y_buffer_csr[batch_slice], y_attrs, y_array, y_dense_shape
                 )
@@ -113,8 +110,8 @@ def sparse_sparse_generator(
                         "i.e. the first dimension of x_array and y_array should be of "
                         "equal domain extent inside the batch"
                     )
-
-                yield x_batch.get_tensors() + y_batch.get_tensors()
+                if x_batch:
+                    yield x_batch.get_tensors() + y_batch.get_tensors()
 
 
 def sparse_dense_generator(
@@ -160,9 +157,6 @@ def sparse_dense_generator(
                 x_batch = SparseBatch(
                     x_buffer_csr[batch_slice], x_attrs, x_array, x_dense_shape
                 )
-                if not x_batch:
-                    return
-
                 y_batch = DenseBatch(y_buffer, y_attrs, batch_slice)
                 if len(x_batch) != len(y_batch):
                     raise ValueError(
@@ -170,8 +164,8 @@ def sparse_dense_generator(
                         "i.e. the first dimension of x_array and y_array should be of "
                         "equal domain extent inside the batch"
                     )
-
-                yield x_batch.get_tensors() + y_batch.get_tensors()
+                if x_batch:
+                    yield x_batch.get_tensors() + y_batch.get_tensors()
 
 
 class DenseBatch:
