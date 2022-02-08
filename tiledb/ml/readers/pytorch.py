@@ -6,6 +6,7 @@ from typing import Iterator, Optional, Sequence, Tuple
 
 import numpy as np
 import torch
+from torch.utils.data._utils.worker import WorkerInfo, get_worker_info
 
 import tiledb
 
@@ -47,37 +48,20 @@ class PyTorchTileDBDataset(torch.utils.data.IterableDataset[DataType]):
         self.buffer_size = buffer_size
         self.batch_shuffle = batch_shuffle
         self.within_batch_shuffle = within_batch_shuffle
-        self.x_attribute_names = x_attribute_names
-        self.y_attribute_names = y_attribute_names
+        self.x_attrs = x_attribute_names
+        self.y_attrs = y_attribute_names
 
 
 class PyTorchTileDBDenseDataset(PyTorchTileDBDataset):
     """Loads data from TileDB to the PyTorch Dataloader API."""
 
     def __iter__(self) -> Iterator[DataType]:
-        worker_info = torch.utils.data.get_worker_info()
-
-        # Get number of observations
-        rows = self.x.schema.domain.shape[0]
-
-        if worker_info is None:
-            # Single worker - return full iterator
-            iter_start = 0
-            iter_end = rows
-        else:
-            # Multiple workers - split workload
-            per_worker = int(math.ceil(rows / worker_info.num_workers))
-            worker_id = worker_info.id
-            iter_start = worker_id * per_worker
-            iter_end = min(iter_start + per_worker, rows)
-
         batch_size = self.batch_size
         buffer_size = self.buffer_size
-        offsets = np.arange(iter_start, iter_end, buffer_size)
-
-        # Loop over batches
+        rows = self.x.schema.domain.shape[0]
+        worker_info = get_worker_info()
         with ThreadPoolExecutor(max_workers=2) as executor:
-            for offset in offsets:
+            for offset in _get_offset_range(rows, buffer_size, worker_info):
                 x_buffer, y_buffer = executor.map(
                     lambda array: array[offset : offset + buffer_size],  # type: ignore
                     (self.x, self.y),
@@ -103,25 +87,21 @@ class PyTorchTileDBDenseDataset(PyTorchTileDBDataset):
                     if self.within_batch_shuffle:
                         # We get batch length based on the first attribute,
                         # because last batch might be smaller than the batch size
-                        rand_permutation = np.arange(
-                            x_batch[self.x_attribute_names[0]].shape[0]
-                        )
+                        rand_permutation = np.arange(x_batch[self.x_attrs[0]].shape[0])
 
                         np.random.shuffle(rand_permutation)
 
                         # Yield the next training batch
                         yield tuple(
-                            x_batch[attr][rand_permutation]
-                            for attr in self.x_attribute_names
+                            x_batch[attr][rand_permutation] for attr in self.x_attrs
                         ) + tuple(
-                            y_batch[attr][rand_permutation]
-                            for attr in self.y_attribute_names
+                            y_batch[attr][rand_permutation] for attr in self.y_attrs
                         )
                     else:
                         # Yield the next training batch
-                        yield tuple(
-                            x_batch[attr] for attr in self.x_attribute_names
-                        ) + tuple(y_batch[attr] for attr in self.y_attribute_names)
+                        yield tuple(x_batch[attr] for attr in self.x_attrs) + tuple(
+                            y_batch[attr] for attr in self.y_attrs
+                        )
 
     def __len__(self) -> int:
         return int(self.x.shape[0])
@@ -129,3 +109,17 @@ class PyTorchTileDBDenseDataset(PyTorchTileDBDataset):
 
 def _get_attr_names(array: tiledb.Array) -> Sequence[str]:
     return tuple(array.schema.attr(idx).name for idx in range(array.schema.nattr))
+
+
+def _get_offset_range(rows: int, step: int, worker_info: Optional[WorkerInfo]) -> range:
+    if worker_info is None:
+        # Single worker - return full range
+        start = 0
+        stop = rows
+    else:
+        # Multiple workers - split range
+        per_worker = int(math.ceil(rows / worker_info.num_workers))
+        worker_id = worker_info.id
+        start = worker_id * per_worker
+        stop = min(start + per_worker, rows)
+    return range(start, stop, step)
