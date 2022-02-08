@@ -10,10 +10,10 @@ from torch.utils.data._utils.worker import WorkerInfo, get_worker_info
 
 import tiledb
 
-DataType = Tuple[torch.Tensor, ...]
+from ._pytorch_batch import PyTorchBatch
 
 
-class PyTorchTileDBDataset(torch.utils.data.IterableDataset[DataType]):
+class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Tuple[torch.Tensor, ...]]):
     def __init__(
         self,
         x_array: tiledb.Array,
@@ -55,53 +55,40 @@ class PyTorchTileDBDataset(torch.utils.data.IterableDataset[DataType]):
 class PyTorchTileDBDenseDataset(PyTorchTileDBDataset):
     """Loads data from TileDB to the PyTorch Dataloader API."""
 
-    def __iter__(self) -> Iterator[DataType]:
+    def __iter__(self) -> Iterator[Tuple[torch.Tensor, ...]]:
         batch_size = self.batch_size
         buffer_size = self.buffer_size
         rows = self.x.schema.domain.shape[0]
         worker_info = get_worker_info()
+
+        x_batch = PyTorchBatch(self.x, self.x_attrs, batch_size)
+        y_batch = PyTorchBatch(self.y, self.y_attrs, batch_size)
         with ThreadPoolExecutor(max_workers=2) as executor:
             for offset in _get_offset_range(rows, buffer_size, worker_info):
                 x_buffer, y_buffer = executor.map(
                     lambda array: array[offset : offset + buffer_size],  # type: ignore
                     (self.x, self.y),
                 )
+                x_batch.set_buffer_offset(x_buffer, offset)
+                y_batch.set_buffer_offset(y_buffer, offset)
 
                 # Split the buffer_size into batch_size chunks
                 batch_offsets = np.arange(0, buffer_size, batch_size)
-
-                # Shuffle offsets in case we need batch shuffling
                 if self.batch_shuffle:
                     np.random.shuffle(batch_offsets)
 
                 for batch_offset in batch_offsets:
-                    x_batch = {
-                        attr: data[batch_offset : batch_offset + batch_size]
-                        for attr, data in x_buffer.items()
-                    }
-                    y_batch = {
-                        attr: data[batch_offset : batch_offset + batch_size]
-                        for attr, data in y_buffer.items()
-                    }
+                    batch_slice = slice(batch_offset, batch_offset + batch_size)
+                    x_batch.set_batch_slice(batch_slice)
+                    y_batch.set_batch_slice(batch_slice)
 
                     if self.within_batch_shuffle:
-                        # We get batch length based on the first attribute,
-                        # because last batch might be smaller than the batch size
-                        rand_permutation = np.arange(x_batch[self.x_attrs[0]].shape[0])
-
-                        np.random.shuffle(rand_permutation)
-
-                        # Yield the next training batch
-                        yield tuple(
-                            x_batch[attr][rand_permutation] for attr in self.x_attrs
-                        ) + tuple(
-                            y_batch[attr][rand_permutation] for attr in self.y_attrs
-                        )
+                        idx = np.arange(len(x_batch))
+                        np.random.shuffle(idx)
                     else:
-                        # Yield the next training batch
-                        yield tuple(x_batch[attr] for attr in self.x_attrs) + tuple(
-                            y_batch[attr] for attr in self.y_attrs
-                        )
+                        idx = Ellipsis
+
+                    yield x_batch.get_tensors(idx) + y_batch.get_tensors(idx)
 
     def __len__(self) -> int:
         return int(self.x.shape[0])
