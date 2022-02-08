@@ -34,19 +34,22 @@ def dense_dense_generator(
     :param within_batch_shuffle: True for shuffling records in each batch.
     :return: An iterator of x and y batches.
     """
+    x_batch_factory = DenseBatchFactory(x_attrs)
+    y_batch_factory = DenseBatchFactory(y_attrs)
     with ThreadPoolExecutor(max_workers=2) as executor:
         for offset in offsets:
             x_buffer, y_buffer = executor.map(
                 lambda array: array[offset : offset + buffer_size],  # type: ignore
                 (x_array, y_array),
             )
+            x_batch_factory.set_buffer_offset(x_buffer, offset)
+            y_batch_factory.set_buffer_offset(y_buffer, offset)
             for batch_offset in _iter_batch_offsets(
                 buffer_size, batch_size, batch_shuffle
             ):
                 batch_slice = slice(batch_offset, batch_offset + batch_size)
-                x_batch = DenseBatch(x_buffer, x_attrs, batch_slice)
-                y_batch = DenseBatch(y_buffer, y_attrs, batch_slice)
-
+                x_batch = x_batch_factory.get_batch(batch_slice)
+                y_batch = y_batch_factory.get_batch(batch_slice)
                 if within_batch_shuffle:
                     idx = np.arange(len(x_batch))
                     np.random.shuffle(idx)
@@ -80,30 +83,23 @@ def sparse_sparse_generator(
     :param within_batch_shuffle: True for shuffling records in each batch.
     :return: An iterator of x and y batches.
     """
+    x_batch_factory = SparseBatchFactory(x_array, x_attrs, batch_size)
+    y_batch_factory = SparseBatchFactory(y_array, y_attrs, batch_size)
     # https://github.com/tensorflow/tensorflow/issues/44565
     with ThreadPoolExecutor(max_workers=2) as executor:
-        x_dense_shape = (batch_size, x_array.schema.domain.shape[1])
-        y_dense_shape = (batch_size, y_array.schema.domain.shape[1])
-
         for offset in offsets:
             x_buffer, y_buffer = executor.map(
                 lambda array: array[offset : offset + buffer_size],  # type: ignore
                 (x_array, y_array),
             )
-            # COO to CSR transformation for batching and row slicing
-            x_buffer_csr = _to_csr(x_array, x_attrs[0], x_buffer, offset)
-            y_buffer_csr = _to_csr(y_array, y_attrs[0], y_buffer, offset)
-
+            x_batch_factory.set_buffer_offset(x_buffer, offset)
+            y_batch_factory.set_buffer_offset(y_buffer, offset)
             for batch_offset in _iter_batch_offsets(
                 buffer_size, batch_size, batch_shuffle
             ):
                 batch_slice = slice(batch_offset, batch_offset + batch_size)
-                x_batch = SparseBatch(
-                    x_buffer_csr[batch_slice], x_attrs, x_array, x_dense_shape
-                )
-                y_batch = SparseBatch(
-                    y_buffer_csr[batch_slice], y_attrs, y_array, y_dense_shape
-                )
+                x_batch = x_batch_factory.get_batch(batch_slice)
+                y_batch = y_batch_factory.get_batch(batch_slice)
                 if len(x_batch) != len(y_batch):
                     raise ValueError(
                         "x_array and y_array should have the same number of rows, "
@@ -138,26 +134,23 @@ def sparse_dense_generator(
     :param within_batch_shuffle: True for shuffling records in each batch.
     :return: An iterator of x and y batches.
     """
+    x_batch_factory = SparseBatchFactory(x_array, x_attrs, batch_size)
+    y_batch_factory = DenseBatchFactory(y_attrs)
     # https://github.com/tensorflow/tensorflow/issues/44565
     with ThreadPoolExecutor(max_workers=2) as executor:
-        x_dense_shape = (batch_size, x_array.schema.domain.shape[1])
-
         for offset in offsets:
             x_buffer, y_buffer = executor.map(
                 lambda array: array[offset : offset + buffer_size],  # type: ignore
                 (x_array, y_array),
             )
-            # COO to CSR transformation for batching and row slicing
-            x_buffer_csr = _to_csr(x_array, x_attrs[0], x_buffer, offset)
-
+            x_batch_factory.set_buffer_offset(x_buffer, offset)
+            y_batch_factory.set_buffer_offset(y_buffer, offset)
             for batch_offset in _iter_batch_offsets(
                 buffer_size, batch_size, batch_shuffle
             ):
                 batch_slice = slice(batch_offset, batch_offset + batch_size)
-                x_batch = SparseBatch(
-                    x_buffer_csr[batch_slice], x_attrs, x_array, x_dense_shape
-                )
-                y_batch = DenseBatch(y_buffer, y_attrs, batch_slice)
+                x_batch = x_batch_factory.get_batch(batch_slice)
+                y_batch = y_batch_factory.get_batch(batch_slice)
                 if len(x_batch) != len(y_batch):
                     raise ValueError(
                         "x_array and y_array should have the same number of rows, "
@@ -183,17 +176,28 @@ class DenseBatch:
         )
 
 
+class DenseBatchFactory:
+    def __init__(self, attrs: Sequence[str]):
+        self._attrs = attrs
+
+    def set_buffer_offset(self, buffer: Mapping[str, np.ndarray], offset: int) -> None:
+        self._buffer = buffer
+
+    def get_batch(self, batch_slice: slice) -> DenseBatch:
+        return DenseBatch(self._buffer, self._attrs, batch_slice)
+
+
 class SparseBatch:
     def __init__(
         self,
         batch_csr: scipy.sparse.csr_matrix,
-        attrs: Sequence[str],
         array: tiledb.Array,
+        attrs: Sequence[str],
         dense_shape: Tuple[int, ...],
     ):
         self._batch_csr = batch_csr
-        self._attrs = attrs
         self._schema = array.schema
+        self._attrs = attrs
         self._dense_shape = dense_shape
 
     def __bool__(self) -> bool:
@@ -216,6 +220,38 @@ class SparseBatch:
         )
 
 
+class SparseBatchFactory:
+    def __init__(
+        self,
+        array: tiledb.SparseArray,
+        attrs: Sequence[str],
+        batch_size: int,
+    ):
+        self._array = array
+        self._attrs = attrs
+        self._dense_shape = (batch_size, array.schema.domain.shape[1])
+
+    def set_buffer_offset(self, buffer: Mapping[str, np.ndarray], offset: int) -> None:
+        # COO to CSR transformation for batching and row slicing
+        dim = self._array.schema.domain.dim
+        row = buffer[dim(0).name]
+        col = buffer[dim(1).name]
+        # Normalize indices: We want the coords indices to be in the [0, batch_size]
+        # range. If we do not normalize the sparse tensor is being created but with a
+        # dimension [0, max(coord_index)], which is overkill
+        row_size_norm = row.max() - row.min() + 1
+        col_size_norm = col.max() + 1
+        self._buffer_csr = scipy.sparse.csr_matrix(
+            (buffer[self._attrs[0]], (row - offset, col)),
+            shape=(row_size_norm, col_size_norm),
+        )
+
+    def get_batch(self, batch_slice: slice) -> SparseBatch:
+        return SparseBatch(
+            self._buffer_csr[batch_slice], self._array, self._attrs, self._dense_shape
+        )
+
+
 def _iter_batch_offsets(
     buffer_size: int, batch_size: int, batch_shuffle: bool
 ) -> Iterator[int]:
@@ -225,29 +261,3 @@ def _iter_batch_offsets(
     if batch_shuffle:
         np.random.shuffle(batch_offsets)
     return iter(batch_offsets)
-
-
-def _to_csr(
-    array: tiledb.Array,
-    attr: str,
-    buffer: Mapping[str, np.ndarray],
-    offset: int,
-) -> scipy.sparse.csr_matrix:
-    """
-    :param array: The matrix on which the transformation will have effect
-    :param buffer: The buffered slice of the matrix to be batched
-    :param offset: The starting offset of the buffered slice
-    :returns A CSR representation of the buffered slice of the matrix
-    """
-    dim = array.schema.domain.dim
-    row = buffer[dim(0).name]
-    col = buffer[dim(1).name]
-    # Normalize indices for torch.sparse.Tensor We want the coords indices in every
-    # iteration to be in the range of [0, self.batch_size] so the torch.sparse.Tensors
-    # can be created batch-wise. If we do not normalize the sparse tensor is being
-    # created but with a dimension [0, max(coord_index)], which is overkill
-    row_size_norm = row.max() - row.min() + 1
-    col_size_norm = col.max() + 1
-    return scipy.sparse.csr_matrix(
-        (buffer[attr], (row - offset, col)), shape=(row_size_norm, col_size_norm)
-    )
