@@ -206,8 +206,8 @@ class SparseBatch:
         return len(self._batch_csr.data) > 0
 
     def __len__(self) -> int:
-        # Last index excluded shows to empty
-        return len(np.unique(self._batch_csr.indptr[:-1]))
+        # return number of non-zero rows
+        return int((self._batch_csr.getnnz(axis=1) > 0).sum())
 
     def get_tensors(self) -> Tuple[tf.SparseTensor, ...]:
         batch_coo = self._batch_csr.tocoo()
