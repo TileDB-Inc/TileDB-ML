@@ -201,7 +201,7 @@ def sparse_dense_generator(
     x_shape = x_array.schema.domain.shape[1:]
 
     # https://github.com/tensorflow/tensorflow/issues/44565
-    with ThreadPoolExecutor(max_workers=1) as executor:
+    with ThreadPoolExecutor(max_workers=2) as executor:
         for offset in offsets:
             x_buffer, y_buffer = executor.map(
                 lambda array: array[offset : offset + buffer_size],  # type: ignore
