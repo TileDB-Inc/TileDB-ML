@@ -9,8 +9,6 @@ from scipy.sparse import csr_matrix
 
 import tiledb
 
-from ._parallel_utils import parallel_slice
-
 DataType = Tuple[torch.Tensor, ...]
 
 
@@ -159,7 +157,9 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset[DataType]):
             # iter_end = min(iter_start + per_worker, rows)
             raise NotImplementedError("https://github.com/pytorch/pytorch/issues/20248")
 
-        offsets = np.arange(iter_start, iter_end, self.buffer_size)
+        batch_size = self.batch_size
+        buffer_size = self.buffer_size
+        offsets = np.arange(iter_start, iter_end, buffer_size)
 
         x_shape = self.x.schema.domain.shape[1:]
         y_shape = self.y.schema.domain.shape[1:]
@@ -167,13 +167,9 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset[DataType]):
         # Loop over batches
         with ThreadPoolExecutor(max_workers=2) as executor:
             for offset in offsets:
-                # Yield the next training batch
-                # Fetch the buffer_sized data from back-end in case buffer_size is enabled
-                x_buffer, y_buffer = parallel_slice(
-                    executor,
+                x_buffer, y_buffer = executor.map(
+                    lambda array: array[offset : offset + buffer_size],  # type: ignore
                     (self.x, self.y),
-                    self.buffer_size,
-                    offset,
                 )
 
                 # COO to CSR transformation for batching and row slicing
@@ -183,27 +179,23 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset[DataType]):
                     y_buffer_csr = self.__to_csr("Y", y_buffer, offset)
 
                 # Split the buffer_size into batch_size chunks
-                batch_offsets = np.arange(0, self.buffer_size, self.batch_size)
+                batch_offsets = np.arange(0, buffer_size, batch_size)
 
                 # Shuffle offsets in case we need batch shuffling
                 if self.batch_shuffle:
                     np.random.shuffle(batch_offsets)
 
                 for batch_offset in batch_offsets:
-                    x_batch = x_buffer_csr[
-                        batch_offset : batch_offset + self.batch_size
-                    ]
+                    x_batch = x_buffer_csr[batch_offset : batch_offset + batch_size]
 
                     if x_batch.data.size == 0:
                         return
 
                     if isinstance(self.y, tiledb.SparseArray):
-                        y_batch = y_buffer_csr[
-                            batch_offset : batch_offset + self.batch_size
-                        ]
+                        y_batch = y_buffer_csr[batch_offset : batch_offset + batch_size]
                     else:
                         y_batch = {
-                            attr: data[batch_offset : batch_offset + self.batch_size]
+                            attr: data[batch_offset : batch_offset + batch_size]
                             for attr, data in y_buffer.items()
                         }
 
@@ -223,7 +215,7 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset[DataType]):
                         torch.sparse_coo_tensor(
                             torch.tensor(x_coords).t(),
                             x_batch_coo.data,
-                            (self.batch_size, x_shape[0]),
+                            (batch_size, x_shape[0]),
                             requires_grad=False,
                         )
                         for attr in self.x_attribute_names
@@ -245,7 +237,7 @@ class PyTorchTileDBSparseDataset(torch.utils.data.IterableDataset[DataType]):
                             torch.sparse_coo_tensor(
                                 torch.tensor(y_coords).t(),
                                 y_batch_coo.data,
-                                (self.batch_size, y_shape[0]),
+                                (batch_size, y_shape[0]),
                                 requires_grad=False,
                             )
                             for attr in self.y_attribute_names

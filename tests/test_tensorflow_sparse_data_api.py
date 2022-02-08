@@ -8,7 +8,7 @@ import pytest
 import tensorflow as tf
 
 import tiledb
-from tiledb.ml.readers.tensorflow_sparse import TensorflowTileDBSparseDataset
+from tiledb.ml.readers.tensorflow import TensorflowTileDBDataset
 
 from .utils import create_sparse_array_one_hot_2d, ingest_in_tiledb
 
@@ -42,61 +42,6 @@ ROWS = 1000
     [50, None],
 )
 class TestTileDBTensorflowSparseDataAPI:
-    def test_except_with_dense_x_array(
-        self,
-        tmpdir,
-        input_shape,
-        num_of_attributes,
-        batch_shuffle,
-        buffer_size,
-    ):
-        array_uuid = str(uuid.uuid4())
-        tiledb_uri_x = os.path.join(tmpdir, "x" + array_uuid)
-        tiledb_uri_y = os.path.join(tmpdir, "y" + array_uuid)
-
-        ingest_in_tiledb(
-            uri=tiledb_uri_x,
-            data=np.random.rand(ROWS, *input_shape[1:]),
-            batch_size=BATCH_SIZE,
-            sparse=False,
-            num_of_attributes=num_of_attributes,
-        )
-
-        ingest_in_tiledb(
-            uri=tiledb_uri_y,
-            data=np.random.rand(ROWS, NUM_OF_CLASSES),
-            batch_size=BATCH_SIZE,
-            sparse=False,
-            num_of_attributes=num_of_attributes,
-        )
-
-        with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
-            with pytest.raises(TypeError):
-                TensorflowTileDBSparseDataset(
-                    x_array=x,
-                    y_array=y,
-                    batch_size=BATCH_SIZE,
-                    batch_shuffle=batch_shuffle,
-                    buffer_size=buffer_size,
-                    x_attribute_names=[
-                        "features_" + str(attr) for attr in range(num_of_attributes)
-                    ],
-                    y_attribute_names=[
-                        "features_" + str(attr) for attr in range(num_of_attributes)
-                    ],
-                )
-
-        # Same test without attribute names explicitly provided by the user
-        with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
-            with pytest.raises(TypeError):
-                TensorflowTileDBSparseDataset(
-                    x_array=x,
-                    y_array=y,
-                    batch_size=BATCH_SIZE,
-                    batch_shuffle=batch_shuffle,
-                    buffer_size=buffer_size,
-                )
-
     def test_tiledb_tf_sparse_data_api_with_sparse_data_sparse_label(
         self, tmpdir, input_shape, num_of_attributes, batch_shuffle, buffer_size
     ):
@@ -120,7 +65,7 @@ class TestTileDBTensorflowSparseDataAPI:
         )
 
         with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
-            tiledb_dataset = TensorflowTileDBSparseDataset(
+            tiledb_dataset = TensorflowTileDBDataset(
                 x_array=x,
                 y_array=y,
                 batch_size=BATCH_SIZE,
@@ -137,7 +82,7 @@ class TestTileDBTensorflowSparseDataAPI:
             assert isinstance(tiledb_dataset, tf.data.Dataset)
 
             # Same test without attribute names explicitly provided by the user
-            tiledb_dataset = TensorflowTileDBSparseDataset(
+            tiledb_dataset = TensorflowTileDBDataset(
                 x_array=x,
                 y_array=y,
                 batch_size=BATCH_SIZE,
@@ -172,7 +117,7 @@ class TestTileDBTensorflowSparseDataAPI:
 
         with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
             with pytest.raises(TypeError):
-                TensorflowTileDBSparseDataset(
+                TensorflowTileDBDataset(
                     x_array=x,
                     y_array=y,
                     batch_size=BATCH_SIZE,
@@ -189,7 +134,7 @@ class TestTileDBTensorflowSparseDataAPI:
         # Same test without attribute names explicitly provided by the user
         with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
             with pytest.raises(TypeError):
-                TensorflowTileDBSparseDataset(
+                TensorflowTileDBDataset(
                     x_array=x,
                     y_array=y,
                     batch_size=BATCH_SIZE,
@@ -220,7 +165,7 @@ class TestTileDBTensorflowSparseDataAPI:
         )
 
         with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
-            tiledb_dataset = TensorflowTileDBSparseDataset(
+            tiledb_dataset = TensorflowTileDBDataset(
                 x_array=x,
                 y_array=y,
                 batch_size=BATCH_SIZE,
@@ -237,7 +182,7 @@ class TestTileDBTensorflowSparseDataAPI:
             assert isinstance(tiledb_dataset, tf.data.Dataset)
 
             # Same test without attribute names explicitly provided by the user
-            tiledb_dataset = TensorflowTileDBSparseDataset(
+            tiledb_dataset = TensorflowTileDBDataset(
                 x_array=x,
                 y_array=y,
                 batch_size=BATCH_SIZE,
@@ -274,7 +219,7 @@ class TestTileDBTensorflowSparseDataAPI:
         )
 
         with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
-            tiledb_dataset = TensorflowTileDBSparseDataset(
+            tiledb_dataset = TensorflowTileDBDataset(
                 x_array=x,
                 y_array=y,
                 batch_size=BATCH_SIZE,
@@ -293,7 +238,7 @@ class TestTileDBTensorflowSparseDataAPI:
                     pass
 
             # Same test without attribute names explicitly provided by the user
-            tiledb_dataset = TensorflowTileDBSparseDataset(
+            tiledb_dataset = TensorflowTileDBDataset(
                 x_array=x,
                 y_array=y,
                 batch_size=BATCH_SIZE,
@@ -330,7 +275,7 @@ class TestTileDBTensorflowSparseDataAPI:
 
         with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
             with pytest.raises(Exception):
-                TensorflowTileDBSparseDataset(
+                TensorflowTileDBDataset(
                     x_array=x,
                     y_array=y,
                     batch_size=BATCH_SIZE,
@@ -347,7 +292,7 @@ class TestTileDBTensorflowSparseDataAPI:
         # Same test without attribute names explicitly provided by the user
         with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
             with pytest.raises(Exception):
-                TensorflowTileDBSparseDataset(
+                TensorflowTileDBDataset(
                     x_array=x,
                     y_array=y,
                     batch_size=BATCH_SIZE,
@@ -380,7 +325,7 @@ class TestTileDBTensorflowSparseDataAPI:
         )
 
         with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
-            tiledb_dataset = TensorflowTileDBSparseDataset(
+            tiledb_dataset = TensorflowTileDBDataset(
                 x_array=x,
                 y_array=y,
                 batch_size=BATCH_SIZE,
@@ -398,7 +343,7 @@ class TestTileDBTensorflowSparseDataAPI:
                     pass
 
             # Same test without attribute names explicitly provided by the user
-            tiledb_dataset = TensorflowTileDBSparseDataset(
+            tiledb_dataset = TensorflowTileDBDataset(
                 x_array=x,
                 y_array=y,
                 batch_size=BATCH_SIZE,
@@ -435,34 +380,25 @@ class TestTileDBTensorflowSparseDataAPI:
             attribute_names = [
                 "features_" + str(attr) for attr in range(num_of_attributes)
             ]
-
-            # This is a UT for generator only so TensorflowTileDBSparseDataset constructor
-            # will not be called and hence the correction of buffer_size from None to batch_size
-            # will be skipped and thus we hard code it for the test
-            buffer_size = buffer_size or BATCH_SIZE
-            generated_data = next(
-                TensorflowTileDBSparseDataset._generator_sparse_dense(
-                    x=x,
-                    y=y,
-                    batch_size=BATCH_SIZE,
-                    buffer_size=buffer_size,
-                    batch_shuffle=batch_shuffle,
-                    x_attribute_names=attribute_names,
-                    y_attribute_names=attribute_names,
-                    rows=ROWS,
-                )
+            dataset = TensorflowTileDBDataset(
+                x_array=x,
+                y_array=y,
+                batch_size=BATCH_SIZE,
+                buffer_size=buffer_size,
+                batch_shuffle=batch_shuffle,
+                x_attribute_names=attribute_names,
+                y_attribute_names=attribute_names,
             )
-
+            generated_data = next(iter(dataset))
             assert len(generated_data) == 2 * num_of_attributes
 
             for attr in range(num_of_attributes):
-                assert isinstance(generated_data[attr], tf.sparse.SparseTensor)
-                assert isinstance(generated_data[attr + num_of_attributes], np.ndarray)
+                assert isinstance(generated_data[attr], tf.SparseTensor)
+                assert isinstance(generated_data[attr + num_of_attributes], tf.Tensor)
 
                 # Coords should be equal to batch for both x and y
                 assert generated_data[attr].indices.shape[0] <= BATCH_SIZE
-
-                assert generated_data[attr + num_of_attributes].shape <= (
+                assert tuple(generated_data[attr + num_of_attributes].shape) <= (
                     BATCH_SIZE,
                     NUM_OF_CLASSES,
                 )
@@ -476,8 +412,7 @@ class TestTileDBTensorflowSparseDataAPI:
 
         ingest_in_tiledb(
             uri=tiledb_uri_x,
-            # Add one extra row on X
-            data=create_sparse_array_one_hot_2d(ROWS + 1, input_shape[0]),
+            data=create_sparse_array_one_hot_2d(ROWS, input_shape[0]),
             batch_size=BATCH_SIZE,
             sparse=True,
             num_of_attributes=num_of_attributes,
@@ -495,29 +430,22 @@ class TestTileDBTensorflowSparseDataAPI:
                 "features_" + str(attr) for attr in range(num_of_attributes)
             ]
 
-            # This is a UT for generator only so TensorflowTileDBSparseDataset constructor
-            # will not be called and hence the correction of buffer_size from None to batch_size
-            # will be skipped and thus we hard code it for the test
-            buffer_size = buffer_size or BATCH_SIZE
-            generated_data = next(
-                TensorflowTileDBSparseDataset._generator_sparse_sparse(
-                    x=x,
-                    y=y,
-                    batch_size=BATCH_SIZE,
-                    buffer_size=buffer_size,
-                    batch_shuffle=batch_shuffle,
-                    x_attribute_names=attribute_names,
-                    y_attribute_names=attribute_names,
-                    rows=ROWS,
-                )
+            dataset = TensorflowTileDBDataset(
+                x_array=x,
+                y_array=y,
+                batch_size=BATCH_SIZE,
+                buffer_size=buffer_size,
+                batch_shuffle=batch_shuffle,
+                x_attribute_names=attribute_names,
+                y_attribute_names=attribute_names,
             )
-
+            generated_data = next(iter(dataset))
             assert len(generated_data) == 2 * num_of_attributes
 
             for attr in range(num_of_attributes):
-                assert isinstance(generated_data[attr], tf.sparse.SparseTensor)
+                assert isinstance(generated_data[attr], tf.SparseTensor)
                 assert isinstance(
-                    generated_data[attr + num_of_attributes], tf.sparse.SparseTensor
+                    generated_data[attr + num_of_attributes], tf.SparseTensor
                 )
 
                 # Coords should be equal to batch for both x and y

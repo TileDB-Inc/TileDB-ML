@@ -9,8 +9,6 @@ import torch
 
 import tiledb
 
-from ._parallel_utils import parallel_slice
-
 DataType = Tuple[np.ndarray, ...]
 
 
@@ -106,21 +104,20 @@ class PyTorchTileDBDenseDataset(torch.utils.data.IterableDataset[DataType]):
             iter_start = worker_id * per_worker
             iter_end = min(iter_start + per_worker, rows)
 
-        offsets = np.arange(iter_start, iter_end, self.buffer_size)
+        batch_size = self.batch_size
+        buffer_size = self.buffer_size
+        offsets = np.arange(iter_start, iter_end, buffer_size)
 
         # Loop over batches
         with ThreadPoolExecutor(max_workers=2) as executor:
             for offset in offsets:
-                # Summon the buffer_sized data from back-end in case buffer_size is enabled
-                x_buffer, y_buffer = parallel_slice(
-                    executor,
+                x_buffer, y_buffer = executor.map(
+                    lambda array: array[offset : offset + buffer_size],  # type: ignore
                     (self.x, self.y),
-                    self.buffer_size,
-                    offset,
                 )
 
                 # Split the buffer_size into batch_size chunks
-                batch_offsets = np.arange(0, self.buffer_size, self.batch_size)
+                batch_offsets = np.arange(0, buffer_size, batch_size)
 
                 # Shuffle offsets in case we need batch shuffling
                 if self.batch_shuffle:
@@ -128,11 +125,11 @@ class PyTorchTileDBDenseDataset(torch.utils.data.IterableDataset[DataType]):
 
                 for batch_offset in batch_offsets:
                     x_batch = {
-                        attr: data[batch_offset : batch_offset + self.batch_size]
+                        attr: data[batch_offset : batch_offset + batch_size]
                         for attr, data in x_buffer.items()
                     }
                     y_batch = {
-                        attr: data[batch_offset : batch_offset + self.batch_size]
+                        attr: data[batch_offset : batch_offset + batch_size]
                         for attr, data in y_buffer.items()
                     }
 
