@@ -29,7 +29,7 @@ def train() -> None:
     import torch.optim as optim
 
     from tiledb.ml.models.pytorch import PyTorchTileDBModel
-    from tiledb.ml.readers.pytorch import PyTorchTileDBDenseDataset
+    from tiledb.ml.readers.pytorch import PyTorchTileDBDataset
 
     class Net(nn.Module):
         def __init__(self, shape: Tuple[int, int]):
@@ -50,7 +50,7 @@ def train() -> None:
             return logits
 
     with tiledb.open(IMAGES_URI) as x, tiledb.open(LABELS_URI) as y:
-        tiledb_dataset = PyTorchTileDBDenseDataset(
+        tiledb_dataset = PyTorchTileDBDataset(
             x_array=x, y_array=y, batch_size=IO_BATCH_SIZE
         )
         train_loader = torch.utils.data.DataLoader(tiledb_dataset, batch_size=None)

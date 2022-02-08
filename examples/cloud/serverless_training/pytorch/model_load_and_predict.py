@@ -29,7 +29,7 @@ def predict() -> List[int]:
     import torch.optim as optim
 
     from tiledb.ml.models.pytorch import PyTorchTileDBModel
-    from tiledb.ml.readers.pytorch import PyTorchTileDBDenseDataset
+    from tiledb.ml.readers.pytorch import PyTorchTileDBDataset
 
     class Net(nn.Module):
         def __init__(self, shape: Tuple[int, int]):
@@ -59,7 +59,7 @@ def predict() -> List[int]:
 
     with tiledb.open(IMAGES_URI) as x, tiledb.open(LABELS_URI) as y:
         with torch.no_grad():
-            tiledb_dataset = PyTorchTileDBDenseDataset(
+            tiledb_dataset = PyTorchTileDBDataset(
                 x_array=x, y_array=y, batch_size=IO_BATCH_SIZE
             )
             data_loader = torch.utils.data.DataLoader(tiledb_dataset, batch_size=None)

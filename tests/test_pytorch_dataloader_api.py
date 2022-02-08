@@ -7,7 +7,7 @@ import pytest
 import torch
 
 import tiledb
-from tiledb.ml.readers.pytorch import PyTorchTileDBDenseDataset
+from tiledb.ml.readers.pytorch import PyTorchTileDBDataset
 
 from .utils import ingest_in_tiledb
 
@@ -76,7 +76,7 @@ class TestPytorchDenseDataloader:
         )
 
         with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
-            tiledb_dataset = PyTorchTileDBDenseDataset(
+            tiledb_dataset = PyTorchTileDBDataset(
                 x_array=x,
                 y_array=y,
                 batch_size=BATCH_SIZE,
@@ -93,7 +93,7 @@ class TestPytorchDenseDataloader:
             assert isinstance(tiledb_dataset, torch.utils.data.IterableDataset)
 
             # Same test without attribute names explicitly provided by the user
-            tiledb_dataset = PyTorchTileDBDenseDataset(
+            tiledb_dataset = PyTorchTileDBDataset(
                 x_array=x,
                 y_array=y,
                 batch_size=BATCH_SIZE,
@@ -135,7 +135,7 @@ class TestPytorchDenseDataloader:
 
         with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
             with pytest.raises(ValueError):
-                PyTorchTileDBDenseDataset(
+                PyTorchTileDBDataset(
                     x_array=x,
                     y_array=y,
                     batch_size=BATCH_SIZE,
@@ -179,7 +179,7 @@ class TestPytorchDenseDataloader:
         )
 
         with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
-            tiledb_dataset = PyTorchTileDBDenseDataset(
+            tiledb_dataset = PyTorchTileDBDataset(
                 x_array=x,
                 y_array=y,
                 batch_size=BATCH_SIZE,
@@ -197,7 +197,7 @@ class TestPytorchDenseDataloader:
             assert len(tiledb_dataset) == ROWS
 
             # Same test without attribute names explicitly provided by the user
-            tiledb_dataset = PyTorchTileDBDenseDataset(
+            tiledb_dataset = PyTorchTileDBDataset(
                 x_array=x,
                 y_array=y,
                 batch_size=BATCH_SIZE,
@@ -238,7 +238,7 @@ class TestPytorchDenseDataloader:
         )
 
         with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
-            tiledb_dataset = PyTorchTileDBDenseDataset(
+            tiledb_dataset = PyTorchTileDBDataset(
                 x_array=x,
                 y_array=y,
                 batch_size=BATCH_SIZE,
@@ -298,7 +298,7 @@ class TestPytorchDenseDataloader:
 
         with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
 
-            tiledb_dataset = PyTorchTileDBDenseDataset(
+            tiledb_dataset = PyTorchTileDBDataset(
                 x_array=x,
                 y_array=y,
                 batch_size=BATCH_SIZE,

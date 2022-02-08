@@ -14,6 +14,8 @@ from ._pytorch_batch import PyTorchBatch
 
 
 class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Tuple[torch.Tensor, ...]]):
+    """Loads data from TileDB to the PyTorch Dataloader API."""
+
     def __init__(
         self,
         x_array: tiledb.Array,
@@ -25,7 +27,8 @@ class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Tuple[torch.Tensor, 
         x_attribute_names: Sequence[str] = (),
         y_attribute_names: Sequence[str] = (),
     ):
-        if x_array.schema.domain.shape[0] != y_array.schema.domain.shape[0]:
+        super().__init__()
+        if x_array.shape[0] != y_array.shape[0]:
             raise ValueError(
                 "X and Y should have the same number of rows, i.e., the 1st dimension "
                 "of TileDB arrays X, Y should be of equal domain extent."
@@ -51,15 +54,13 @@ class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Tuple[torch.Tensor, 
         self.x_attrs = x_attribute_names
         self.y_attrs = y_attribute_names
 
-
-class PyTorchTileDBDenseDataset(PyTorchTileDBDataset):
-    """Loads data from TileDB to the PyTorch Dataloader API."""
-
     def __iter__(self) -> Iterator[Tuple[torch.Tensor, ...]]:
         batch_size = self.batch_size
         buffer_size = self.buffer_size
-        rows = self.x.schema.domain.shape[0]
+        rows = self.x.shape[0]
         worker_info = get_worker_info()
+        if worker_info is not None and isinstance(self.x, tiledb.SparseArray):
+            raise NotImplementedError("https://github.com/pytorch/pytorch/issues/20248")
 
         x_batch = PyTorchBatch(self.x, self.x_attrs, batch_size)
         y_batch = PyTorchBatch(self.y, self.y_attrs, batch_size)
@@ -81,14 +82,20 @@ class PyTorchTileDBDenseDataset(PyTorchTileDBDataset):
                     batch_slice = slice(batch_offset, batch_offset + batch_size)
                     x_batch.set_batch_slice(batch_slice)
                     y_batch.set_batch_slice(batch_slice)
+                    if len(x_batch) != len(y_batch):
+                        raise ValueError(
+                            "x_array and y_array should have the same number of rows, "
+                            "i.e. the first dimension of x_array and y_array should be "
+                            "of equal domain extent inside the batch"
+                        )
+                    if x_batch:
+                        if self.within_batch_shuffle:
+                            idx = np.arange(len(x_batch))
+                            np.random.shuffle(idx)
+                        else:
+                            idx = Ellipsis
 
-                    if self.within_batch_shuffle:
-                        idx = np.arange(len(x_batch))
-                        np.random.shuffle(idx)
-                    else:
-                        idx = Ellipsis
-
-                    yield x_batch.get_tensors(idx) + y_batch.get_tensors(idx)
+                        yield x_batch.get_tensors(idx) + y_batch.get_tensors(idx)
 
     def __len__(self) -> int:
         return int(self.x.shape[0])
