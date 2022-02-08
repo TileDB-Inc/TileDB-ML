@@ -1,17 +1,20 @@
 """Functionality for loading data from TileDB arrays to the Tensorflow Data API."""
 
+from concurrent.futures import ThreadPoolExecutor
 from functools import partial
-from typing import Any, Callable, Iterator, Optional, Sequence, Tuple, Union
+from typing import Iterator, Optional, Sequence, Tuple, Union
 
+import numpy as np
 import tensorflow as tf
 
 import tiledb
 
-from . import _tensorflow_generators as tf_gen
+from ._tensorflow_batch import TensorflowBatch
 
 # TODO: We have to track the following issues:
 # - https://github.com/tensorflow/tensorflow/issues/47532
 # - https://github.com/tensorflow/tensorflow/issues/47931
+# - https://github.com/tensorflow/tensorflow/issues/44565
 
 
 def TensorflowTileDBDataset(
@@ -34,9 +37,12 @@ def TensorflowTileDBDataset(
     :param batch_shuffle: True for shuffling batches.
     :param within_batch_shuffle: True for shuffling records in each batch.
     """
-    rows: int = x_array.schema.domain.shape[0]
+    if isinstance(x_array, tiledb.DenseArray):
+        if isinstance(y_array, tiledb.SparseArray):
+            raise TypeError("Dense x_array and sparse y_array not currently supported")
 
     # Check that x_array and y_array have the same number of rows
+    rows: int = x_array.schema.domain.shape[0]
     if rows != y_array.schema.domain.shape[0]:
         raise ValueError(
             "x_array and y_array should have the same number of rows, i.e. the "
@@ -57,20 +63,9 @@ def TensorflowTileDBDataset(
 
     output_signature = _get_signature(x_array, x_attribute_names)
     output_signature += _get_signature(y_array, y_attribute_names)
-
-    generator: Callable[..., Iterator[Tuple[Any, ...]]]
-    if isinstance(x_array, tiledb.DenseArray):
-        if not isinstance(y_array, tiledb.DenseArray):
-            raise TypeError("if x_array is dense, y_array must be dense too")
-        generator = tf_gen.dense_dense_generator
-    elif isinstance(y_array, tiledb.DenseArray):
-        generator = tf_gen.sparse_dense_generator
-    else:
-        generator = tf_gen.sparse_sparse_generator
-
     dataset = tf.data.Dataset.from_generator(
         partial(
-            generator,
+            _generator,
             x_array=x_array,
             y_array=y_array,
             x_attrs=x_attribute_names,
@@ -104,3 +99,50 @@ def _get_signature(
         )
         for attr in attrs
     )
+
+
+def _generator(
+    x_array: tiledb.Array,
+    y_array: tiledb.Array,
+    x_attrs: Sequence[str],
+    y_attrs: Sequence[str],
+    offsets: range,
+    batch_size: int,
+    buffer_size: int,
+    batch_shuffle: bool = False,
+    within_batch_shuffle: bool = False,
+) -> Iterator[Tuple[Union[tf.Tensor, tf.SparseTensor], ...]]:
+    x_batch = TensorflowBatch(x_array, x_attrs, batch_size)
+    y_batch = TensorflowBatch(y_array, y_attrs, batch_size)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        for offset in offsets:
+            x_buffer, y_buffer = executor.map(
+                lambda array: array[offset : offset + buffer_size],  # type: ignore
+                (x_array, y_array),
+            )
+            x_batch.set_buffer_offset(x_buffer, offset)
+            y_batch.set_buffer_offset(y_buffer, offset)
+
+            # Split the buffer_size into batch_size chunks
+            batch_offsets = np.arange(0, buffer_size, batch_size)
+            if batch_shuffle:
+                np.random.shuffle(batch_offsets)
+
+            for batch_offset in batch_offsets:
+                batch_slice = slice(batch_offset, batch_offset + batch_size)
+                x_batch.set_batch_slice(batch_slice)
+                y_batch.set_batch_slice(batch_slice)
+                if len(x_batch) != len(y_batch):
+                    raise ValueError(
+                        "x_array and y_array should have the same number of rows, "
+                        "i.e. the first dimension of x_array and y_array should be of "
+                        "equal domain extent inside the batch"
+                    )
+                if x_batch:
+                    if within_batch_shuffle:
+                        idx = np.arange(len(x_batch))
+                        np.random.shuffle(idx)
+                    else:
+                        idx = Ellipsis
+
+                    yield x_batch.get_tensors(idx) + y_batch.get_tensors(idx)
