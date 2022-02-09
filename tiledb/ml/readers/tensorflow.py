@@ -9,7 +9,7 @@ import tensorflow as tf
 
 import tiledb
 
-from ._tensorflow_batch import TensorflowBatch
+from ._batch_utils import BaseDenseBatch, BaseSparseBatch
 
 # TODO: We have to track the following issues:
 # - https://github.com/tensorflow/tensorflow/issues/47532
@@ -110,8 +110,8 @@ def _generator(
     batch_shuffle: bool = False,
     within_batch_shuffle: bool = False,
 ) -> Iterator[Tuple[Union[tf.Tensor, tf.SparseTensor], ...]]:
-    x_batch = TensorflowBatch(x_array, x_attrs, batch_size)
-    y_batch = TensorflowBatch(y_array, y_attrs, batch_size)
+    x_batch = TensorflowBatch(x_array.schema, x_attrs, batch_size)
+    y_batch = TensorflowBatch(y_array.schema, y_attrs, batch_size)
     with ThreadPoolExecutor(max_workers=2) as executor:
         for offset in offsets:
             x_buffer, y_buffer = executor.map(
@@ -144,3 +144,33 @@ def _generator(
                         idx = Ellipsis
 
                     yield x_batch.get_tensors(idx) + y_batch.get_tensors(idx)
+
+
+class TensorflowDenseBatch(BaseDenseBatch[tf.Tensor]):
+    @staticmethod
+    def _tensor_from_numpy(data: np.ndarray) -> tf.Tensor:
+        return tf.convert_to_tensor(data)
+
+
+class TensorflowSparseBatch(BaseSparseBatch[tf.SparseTensor]):
+    @staticmethod
+    def _tensor_from_coo(
+        data: np.ndarray,
+        coords: np.ndarray,
+        dense_shape: Tuple[int, ...],
+        dtype: np.dtype,
+    ) -> tf.SparseTensor:
+        return tf.SparseTensor(
+            indices=tf.constant(coords, dtype=tf.int64),
+            values=tf.constant(data, dtype=dtype),
+            dense_shape=dense_shape,
+        )
+
+
+def TensorflowBatch(
+    schema: tiledb.ArraySchema, attrs: Sequence[str], batch_size: int
+) -> Union[TensorflowDenseBatch, TensorflowSparseBatch]:
+    if schema.sparse:
+        return TensorflowSparseBatch(attrs, schema, batch_size)
+    else:
+        return TensorflowDenseBatch(attrs)

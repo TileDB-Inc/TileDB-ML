@@ -2,7 +2,7 @@
 
 import math
 from concurrent.futures import ThreadPoolExecutor
-from typing import Iterator, Optional, Sequence, Tuple
+from typing import Iterator, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch
@@ -10,7 +10,7 @@ from torch.utils.data._utils.worker import WorkerInfo, get_worker_info
 
 import tiledb
 
-from ._pytorch_batch import PyTorchBatch
+from ._batch_utils import BaseDenseBatch, BaseSparseBatch
 
 
 class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Tuple[torch.Tensor, ...]]):
@@ -62,8 +62,8 @@ class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Tuple[torch.Tensor, 
         if worker_info is not None and isinstance(self.x, tiledb.SparseArray):
             raise NotImplementedError("https://github.com/pytorch/pytorch/issues/20248")
 
-        x_batch = PyTorchBatch(self.x, self.x_attrs, batch_size)
-        y_batch = PyTorchBatch(self.y, self.y_attrs, batch_size)
+        x_batch = PyTorchBatch(self.x.schema, self.x_attrs, batch_size)
+        y_batch = PyTorchBatch(self.y.schema, self.y_attrs, batch_size)
         with ThreadPoolExecutor(max_workers=2) as executor:
             for offset in _get_offset_range(rows, buffer_size, worker_info):
                 x_buffer, y_buffer = executor.map(
@@ -117,3 +117,34 @@ def _get_offset_range(rows: int, step: int, worker_info: Optional[WorkerInfo]) -
         start = worker_id * per_worker
         stop = min(start + per_worker, rows)
     return range(start, stop, step)
+
+
+class PyTorchDenseBatch(BaseDenseBatch[torch.Tensor]):
+    @staticmethod
+    def _tensor_from_numpy(data: np.ndarray) -> torch.Tensor:
+        return torch.from_numpy(data)
+
+
+class PyTorchSparseBatch(BaseSparseBatch[torch.Tensor]):
+    @staticmethod
+    def _tensor_from_coo(
+        data: np.ndarray,
+        coords: np.ndarray,
+        dense_shape: Tuple[int, ...],
+        dtype: np.dtype,
+    ) -> torch.Tensor:
+        return torch.sparse_coo_tensor(
+            torch.tensor(coords).t(),
+            data,
+            dense_shape,
+            requires_grad=False,
+        )
+
+
+def PyTorchBatch(
+    schema: tiledb.ArraySchema, attrs: Sequence[str], batch_size: int
+) -> Union[PyTorchDenseBatch, PyTorchSparseBatch]:
+    if schema.sparse:
+        return PyTorchSparseBatch(attrs, schema, batch_size)
+    else:
+        return PyTorchDenseBatch(attrs)
