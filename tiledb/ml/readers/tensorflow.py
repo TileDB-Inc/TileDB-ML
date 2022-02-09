@@ -42,8 +42,8 @@ def TensorflowTileDBDataset(
             raise TypeError("Dense x_array and sparse y_array not currently supported")
 
     # Check that x_array and y_array have the same number of rows
-    rows: int = x_array.schema.domain.shape[0]
-    if rows != y_array.schema.domain.shape[0]:
+    rows: int = x_array.shape[0]
+    if rows != y_array.shape[0]:
         raise ValueError(
             "x_array and y_array should have the same number of rows, i.e. the "
             "first dimension of x_array and y_array should be of equal domain extent"
@@ -70,7 +70,6 @@ def TensorflowTileDBDataset(
             y_array=y_array,
             x_attrs=x_attribute_names,
             y_attrs=y_attribute_names,
-            offsets=range(0, rows, batch_size),
             batch_size=batch_size,
             buffer_size=buffer_size,
             batch_shuffle=batch_shuffle,
@@ -81,7 +80,7 @@ def TensorflowTileDBDataset(
 
 
 def _get_attr_names(array: tiledb.Array) -> Sequence[str]:
-    return tuple(array.schema.attr(idx).name for idx in range(array.schema.nattr))
+    return tuple(array.attr(idx).name for idx in range(array.schema.nattr))
 
 
 def _get_signature(
@@ -91,10 +90,7 @@ def _get_signature(
         tf.SparseTensorSpec if isinstance(array, tiledb.SparseArray) else tf.TensorSpec
     )
     return tuple(
-        cls(
-            shape=(None, *array.schema.domain.shape[1:]),
-            dtype=array.schema.attr(attr).dtype,
-        )
+        cls(shape=(None, *array.shape[1:]), dtype=array.attr(attr).dtype)
         for attr in attrs
     )
 
@@ -104,7 +100,6 @@ def _generator(
     y_array: tiledb.Array,
     x_attrs: Sequence[str],
     y_attrs: Sequence[str],
-    offsets: range,
     batch_size: int,
     buffer_size: int,
     batch_shuffle: bool = False,
@@ -113,7 +108,7 @@ def _generator(
     x_batch = TensorflowBatch(x_array.schema, x_attrs, batch_size)
     y_batch = TensorflowBatch(y_array.schema, y_attrs, batch_size)
     with ThreadPoolExecutor(max_workers=2) as executor:
-        for offset in offsets:
+        for offset in range(0, x_array.shape[0], buffer_size):
             x_buffer, y_buffer = executor.map(
                 lambda array: array[offset : offset + buffer_size],  # type: ignore
                 (x_array, y_array),

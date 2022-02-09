@@ -8,7 +8,7 @@ import pytest
 import tensorflow as tf
 
 import tiledb
-from tiledb.ml.readers.tensorflow import TensorflowTileDBDataset
+from tiledb.ml.readers.tensorflow import TensorflowTileDBDataset, _generator
 
 from .utils import create_sparse_array_one_hot_2d, ingest_in_tiledb
 
@@ -380,28 +380,48 @@ class TestTileDBTensorflowSparseDataAPI:
             attribute_names = [
                 "features_" + str(attr) for attr in range(num_of_attributes)
             ]
-            dataset = TensorflowTileDBDataset(
+            kwargs = dict(
                 x_array=x,
                 y_array=y,
                 batch_size=BATCH_SIZE,
-                buffer_size=buffer_size,
                 batch_shuffle=batch_shuffle,
-                x_attribute_names=attribute_names,
-                y_attribute_names=attribute_names,
             )
-            generated_data = next(iter(dataset))
-            assert len(generated_data) == 2 * num_of_attributes
+            # Test the generator twice: once with the public api (TensorflowTileDBDataset)
+            # and once with calling _generator directly. Although the former calls the
+            # latter internally, it is not reported as covered by the coverage report
+            # due to https://github.com/tensorflow/tensorflow/issues/33759
+            generators = [
+                iter(
+                    TensorflowTileDBDataset(
+                        x_attribute_names=attribute_names,
+                        y_attribute_names=attribute_names,
+                        buffer_size=buffer_size,
+                        **kwargs
+                    )
+                ),
+                _generator(
+                    x_attrs=attribute_names,
+                    y_attrs=attribute_names,
+                    buffer_size=buffer_size or BATCH_SIZE,
+                    **kwargs
+                ),
+            ]
+            for generator in generators:
+                generated_data = next(generator)
+                assert len(generated_data) == 2 * num_of_attributes
 
-            for attr in range(num_of_attributes):
-                assert isinstance(generated_data[attr], tf.SparseTensor)
-                assert isinstance(generated_data[attr + num_of_attributes], tf.Tensor)
+                for attr in range(num_of_attributes):
+                    assert isinstance(generated_data[attr], tf.SparseTensor)
+                    assert isinstance(
+                        generated_data[attr + num_of_attributes], tf.Tensor
+                    )
 
-                # Coords should be equal to batch for both x and y
-                assert generated_data[attr].indices.shape[0] <= BATCH_SIZE
-                assert tuple(generated_data[attr + num_of_attributes].shape) <= (
-                    BATCH_SIZE,
-                    NUM_OF_CLASSES,
-                )
+                    # Coords should be equal to batch for both x and y
+                    assert generated_data[attr].indices.shape[0] <= BATCH_SIZE
+                    assert tuple(generated_data[attr + num_of_attributes].shape) <= (
+                        BATCH_SIZE,
+                        NUM_OF_CLASSES,
+                    )
 
     def test_generator_sparse_x_sparse_y_batch_output(
         self, tmpdir, input_shape, num_of_attributes, batch_shuffle, buffer_size
@@ -429,29 +449,48 @@ class TestTileDBTensorflowSparseDataAPI:
             attribute_names = [
                 "features_" + str(attr) for attr in range(num_of_attributes)
             ]
-
-            dataset = TensorflowTileDBDataset(
+            kwargs = dict(
                 x_array=x,
                 y_array=y,
                 batch_size=BATCH_SIZE,
-                buffer_size=buffer_size,
                 batch_shuffle=batch_shuffle,
-                x_attribute_names=attribute_names,
-                y_attribute_names=attribute_names,
             )
-            generated_data = next(iter(dataset))
-            assert len(generated_data) == 2 * num_of_attributes
+            # Test the generator twice: once with the public api (TensorflowTileDBDataset)
+            # and once with calling _generator directly. Although the former calls the
+            # latter internally, it is not reported as covered by the coverage report
+            # due to https://github.com/tensorflow/tensorflow/issues/33759
+            generators = [
+                iter(
+                    TensorflowTileDBDataset(
+                        x_attribute_names=attribute_names,
+                        y_attribute_names=attribute_names,
+                        buffer_size=buffer_size,
+                        **kwargs
+                    )
+                ),
+                _generator(
+                    x_attrs=attribute_names,
+                    y_attrs=attribute_names,
+                    buffer_size=buffer_size or BATCH_SIZE,
+                    **kwargs
+                ),
+            ]
+            for generator in generators:
+                generated_data = next(generator)
+                assert len(generated_data) == 2 * num_of_attributes
 
-            for attr in range(num_of_attributes):
-                assert isinstance(generated_data[attr], tf.SparseTensor)
-                assert isinstance(
-                    generated_data[attr + num_of_attributes], tf.SparseTensor
-                )
+                for attr in range(num_of_attributes):
+                    assert isinstance(generated_data[attr], tf.SparseTensor)
+                    assert isinstance(
+                        generated_data[attr + num_of_attributes], tf.SparseTensor
+                    )
 
-                # Coords should be equal to batch for both x and y
-                assert generated_data[attr].indices.shape[0] <= BATCH_SIZE
+                    # Coords should be equal to batch for both x and y
+                    assert generated_data[attr].indices.shape[0] <= BATCH_SIZE
 
-                assert tuple(generated_data[attr + num_of_attributes].shape.dims) <= (
-                    BATCH_SIZE,
-                    NUM_OF_CLASSES,
-                )
+                    assert tuple(
+                        generated_data[attr + num_of_attributes].shape.dims
+                    ) <= (
+                        BATCH_SIZE,
+                        NUM_OF_CLASSES,
+                    )

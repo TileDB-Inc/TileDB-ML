@@ -8,7 +8,7 @@ import pytest
 import tensorflow as tf
 
 import tiledb
-from tiledb.ml.readers.tensorflow import TensorflowTileDBDataset
+from tiledb.ml.readers.tensorflow import TensorflowTileDBDataset, _generator
 
 from .utils import ingest_in_tiledb
 
@@ -197,28 +197,45 @@ class TestTileDBTensorflowDataAPI:
             attribute_names = [
                 "features_" + str(attr) for attr in range(num_of_attributes)
             ]
-            dataset = TensorflowTileDBDataset(
+            kwargs = dict(
                 x_array=x,
                 y_array=y,
                 batch_size=BATCH_SIZE,
                 batch_shuffle=batch_shuffle,
-                buffer_size=buffer_size,
                 within_batch_shuffle=within_batch_shuffle,
-                x_attribute_names=attribute_names,
-                y_attribute_names=attribute_names,
             )
-            generated_data = next(iter(dataset))
-            assert len(generated_data) == 2 * num_of_attributes
-
-            for attr in range(num_of_attributes):
-                assert tuple(generated_data[attr].shape) <= (
-                    BATCH_SIZE,
-                    *input_shape[1:],
-                )
-                assert tuple(generated_data[num_of_attributes + attr].shape) <= (
-                    BATCH_SIZE,
-                    NUM_OF_CLASSES,
-                )
+            # Test the generator twice: once with the public api (TensorflowTileDBDataset)
+            # and once with calling _generator directly. Although the former calls the
+            # latter internally, it is not reported as covered by the coverage report
+            # due to https://github.com/tensorflow/tensorflow/issues/33759
+            generators = [
+                iter(
+                    TensorflowTileDBDataset(
+                        x_attribute_names=attribute_names,
+                        y_attribute_names=attribute_names,
+                        buffer_size=buffer_size,
+                        **kwargs
+                    )
+                ),
+                _generator(
+                    x_attrs=attribute_names,
+                    y_attrs=attribute_names,
+                    buffer_size=buffer_size or BATCH_SIZE,
+                    **kwargs
+                ),
+            ]
+            for generator in generators:
+                generated_data = next(generator)
+                assert len(generated_data) == 2 * num_of_attributes
+                for attr in range(num_of_attributes):
+                    assert tuple(generated_data[attr].shape) <= (
+                        BATCH_SIZE,
+                        *input_shape[1:],
+                    )
+                    assert tuple(generated_data[num_of_attributes + attr].shape) <= (
+                        BATCH_SIZE,
+                        NUM_OF_CLASSES,
+                    )
 
     def test_buffer_size_geq_batch_size_exception(
         self,
