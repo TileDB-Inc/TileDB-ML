@@ -90,12 +90,8 @@ class TestTileDBTensorflowDataAPI:
                 batch_shuffle=batch_shuffle,
                 buffer_size=buffer_size,
                 within_batch_shuffle=within_batch_shuffle,
-                x_attribute_names=[
-                    "features_" + str(attr) for attr in range(num_of_attributes)
-                ],
-                y_attribute_names=[
-                    "features_" + str(attr) for attr in range(num_of_attributes)
-                ],
+                x_attrs=["features_" + str(attr) for attr in range(num_of_attributes)],
+                y_attrs=["features_" + str(attr) for attr in range(num_of_attributes)],
             )
 
             assert isinstance(tiledb_dataset, tf.data.Dataset)
@@ -150,10 +146,10 @@ class TestTileDBTensorflowDataAPI:
                     batch_shuffle=batch_shuffle,
                     buffer_size=buffer_size,
                     within_batch_shuffle=within_batch_shuffle,
-                    x_attribute_names=[
+                    x_attrs=[
                         "features_" + str(attr) for attr in range(num_of_attributes)
                     ],
-                    y_attribute_names=[
+                    y_attrs=[
                         "features_" + str(attr) for attr in range(num_of_attributes)
                     ],
                 )
@@ -199,12 +195,13 @@ class TestTileDBTensorflowDataAPI:
         )
 
         with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
-            attribute_names = [
-                "features_" + str(attr) for attr in range(num_of_attributes)
-            ]
+            attrs = ["features_" + str(attr) for attr in range(num_of_attributes)]
             kwargs = dict(
                 x_array=x,
                 y_array=y,
+                x_attrs=attrs,
+                y_attrs=attrs,
+                buffer_size=buffer_size,
                 batch_size=BATCH_SIZE,
                 batch_shuffle=batch_shuffle,
                 within_batch_shuffle=within_batch_shuffle,
@@ -214,20 +211,10 @@ class TestTileDBTensorflowDataAPI:
             # the latter internally, it is not reported as covered by the coverage report
             # due to https://github.com/tensorflow/tensorflow/issues/33759
             generators = [
-                iter(
-                    TensorflowTileDBDataset(
-                        x_attribute_names=attribute_names,
-                        y_attribute_names=attribute_names,
-                        buffer_size=buffer_size,
-                        **kwargs
-                    )
-                ),
+                iter(TensorflowTileDBDataset(**kwargs)),
                 tensor_generator(
                     dense_batch_cls=TensorflowDenseBatch,
                     sparse_batch_cls=TensorflowSparseBatch,
-                    x_attrs=attribute_names,
-                    y_attrs=attribute_names,
-                    buffer_size=buffer_size or BATCH_SIZE,
                     **kwargs
                 ),
             ]
@@ -284,10 +271,10 @@ class TestTileDBTensorflowDataAPI:
                     batch_shuffle=batch_shuffle,
                     buffer_size=buffer_size,
                     within_batch_shuffle=within_batch_shuffle,
-                    x_attribute_names=[
+                    x_attrs=[
                         "features_" + str(attr) for attr in range(num_of_attributes)
                     ],
-                    y_attribute_names=[
+                    y_attrs=[
                         "features_" + str(attr) for attr in range(num_of_attributes)
                     ],
                 )

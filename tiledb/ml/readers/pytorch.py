@@ -22,8 +22,8 @@ class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Sequence[torch.Tenso
         buffer_size: Optional[int] = None,
         batch_shuffle: bool = False,
         within_batch_shuffle: bool = False,
-        x_attribute_names: Sequence[str] = (),
-        y_attribute_names: Sequence[str] = (),
+        x_attrs: Sequence[str] = (),
+        y_attrs: Sequence[str] = (),
     ):
         super().__init__()
         rows: int = x_array.shape[0]
@@ -38,8 +38,8 @@ class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Sequence[torch.Tenso
             sparse_batch_cls=PyTorchSparseBatch,
             x_array=x_array,
             y_array=y_array,
-            x_attrs=x_attribute_names,
-            y_attrs=y_attribute_names,
+            x_attrs=x_attrs,
+            y_attrs=y_attrs,
             batch_size=batch_size,
             buffer_size=buffer_size,
             batch_shuffle=batch_shuffle,

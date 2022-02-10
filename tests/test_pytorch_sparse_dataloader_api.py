@@ -78,12 +78,8 @@ class TestTileDBSparsePyTorchDataloaderAPI:
                 batch_size=BATCH_SIZE,
                 buffer_size=buffer_size,
                 batch_shuffle=batch_shuffle,
-                x_attribute_names=[
-                    "features_" + str(attr) for attr in range(num_of_attributes)
-                ],
-                y_attribute_names=[
-                    "features_" + str(attr) for attr in range(num_of_attributes)
-                ],
+                x_attrs=["features_" + str(attr) for attr in range(num_of_attributes)],
+                y_attrs=["features_" + str(attr) for attr in range(num_of_attributes)],
             )
 
             assert isinstance(tiledb_dataset, torch.utils.data.IterableDataset)
@@ -133,12 +129,8 @@ class TestTileDBSparsePyTorchDataloaderAPI:
                 batch_size=BATCH_SIZE,
                 buffer_size=buffer_size,
                 batch_shuffle=batch_shuffle,
-                x_attribute_names=[
-                    "features_" + str(attr) for attr in range(num_of_attributes)
-                ],
-                y_attribute_names=[
-                    "features_" + str(attr) for attr in range(num_of_attributes)
-                ],
+                x_attrs=["features_" + str(attr) for attr in range(num_of_attributes)],
+                y_attrs=["features_" + str(attr) for attr in range(num_of_attributes)],
             )
 
             assert isinstance(tiledb_dataset, torch.utils.data.IterableDataset)
@@ -190,10 +182,10 @@ class TestTileDBSparsePyTorchDataloaderAPI:
                     batch_size=BATCH_SIZE,
                     buffer_size=buffer_size,
                     batch_shuffle=batch_shuffle,
-                    x_attribute_names=[
+                    x_attrs=[
                         "features_" + str(attr) for attr in range(num_of_attributes)
                     ],
-                    y_attribute_names=[
+                    y_attrs=[
                         "features_" + str(attr) for attr in range(num_of_attributes)
                     ],
                 )
@@ -246,10 +238,10 @@ class TestTileDBSparsePyTorchDataloaderAPI:
                     batch_size=BATCH_SIZE,
                     buffer_size=buffer_size,
                     batch_shuffle=batch_shuffle,
-                    x_attribute_names=[
+                    x_attrs=[
                         "features_" + str(attr) for attr in range(num_of_attributes)
                     ],
-                    y_attribute_names=[
+                    y_attrs=[
                         "features_" + str(attr) for attr in range(num_of_attributes)
                     ],
                 )
@@ -305,12 +297,8 @@ class TestTileDBSparsePyTorchDataloaderAPI:
                 batch_size=BATCH_SIZE,
                 buffer_size=buffer_size,
                 batch_shuffle=batch_shuffle,
-                x_attribute_names=[
-                    "features_" + str(attr) for attr in range(num_of_attributes)
-                ],
-                y_attribute_names=[
-                    "features_" + str(attr) for attr in range(num_of_attributes)
-                ],
+                x_attrs=["features_" + str(attr) for attr in range(num_of_attributes)],
+                y_attrs=["features_" + str(attr) for attr in range(num_of_attributes)],
             )
             generated_data = next(tiledb_dataset.__iter__())
             for attr in range(num_of_attributes):
@@ -380,12 +368,8 @@ class TestTileDBSparsePyTorchDataloaderAPI:
                 batch_size=BATCH_SIZE,
                 buffer_size=buffer_size,
                 batch_shuffle=batch_shuffle,
-                x_attribute_names=[
-                    "features_" + str(attr) for attr in range(num_of_attributes)
-                ],
-                y_attribute_names=[
-                    "features_" + str(attr) for attr in range(num_of_attributes)
-                ],
+                x_attrs=["features_" + str(attr) for attr in range(num_of_attributes)],
+                y_attrs=["features_" + str(attr) for attr in range(num_of_attributes)],
             )
             with pytest.raises(ValueError):
                 next(iter(dataset))
