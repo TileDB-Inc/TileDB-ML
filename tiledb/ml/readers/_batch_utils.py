@@ -62,11 +62,11 @@ class BaseDenseBatch(BaseBatch[Tensor]):
         self._buffer = buffer
 
     def set_batch_slice(self, batch_slice: slice) -> None:
-        _ensure_attr(self, "_buffer", "set_buffer_offset() not called")
+        assert hasattr(self, "_buffer"), "set_buffer_offset() not called"
         self._attr_batches = [self._buffer[attr][batch_slice] for attr in self._attrs]
 
     def get_tensors(self, idx: Any = Ellipsis) -> Tuple[Tensor, ...]:
-        _ensure_attr(self, "_attr_batches", "set_batch_slice() not called")
+        assert hasattr(self, "_attr_batches"), "set_batch_slice() not called"
         if idx is Ellipsis:
             iter_attr_batches = iter(self._attr_batches)
         else:
@@ -74,7 +74,7 @@ class BaseDenseBatch(BaseBatch[Tensor]):
         return tuple(map(self._tensor_from_numpy, iter_attr_batches))
 
     def __len__(self) -> int:
-        _ensure_attr(self, "_attr_batches", "set_batch_slice() not called")
+        assert hasattr(self, "_attr_batches"), "set_batch_slice() not called"
         return len(self._attr_batches[0])
 
     @staticmethod
@@ -109,11 +109,11 @@ class BaseSparseBatch(BaseBatch[Tensor]):
         )
 
     def set_batch_slice(self, batch_slice: slice) -> None:
-        _ensure_attr(self, "_buffer_csr", "set_buffer_offset() not called")
+        assert hasattr(self, "_buffer_csr"), "set_buffer_offset() not called"
         self._batch_csr = self._buffer_csr[batch_slice]
 
     def get_tensors(self, idx: Any = Ellipsis) -> Tuple[Tensor, ...]:
-        _ensure_attr(self, "_batch_csr", "set_batch_slice() not called")
+        assert hasattr(self, "_batch_csr"), "set_batch_slice() not called"
         if idx is not Ellipsis:
             raise NotImplementedError(
                 "within_batch_shuffle not implemented for sparse arrays"
@@ -128,12 +128,12 @@ class BaseSparseBatch(BaseBatch[Tensor]):
         )
 
     def __len__(self) -> int:
-        _ensure_attr(self, "_batch_csr", "set_batch_slice() not called")
+        assert hasattr(self, "_batch_csr"), "set_batch_slice() not called"
         # return number of non-zero rows
         return int((self._batch_csr.getnnz(axis=1) > 0).sum())
 
     def __bool__(self) -> bool:
-        _ensure_attr(self, "_batch_csr", "set_batch_slice() not called")
+        assert hasattr(self, "_batch_csr"), "set_batch_slice() not called"
         # faster version of __len__() > 0
         return len(self._batch_csr.data) > 0
 
@@ -146,8 +146,3 @@ class BaseSparseBatch(BaseBatch[Tensor]):
         dtype: np.dtype,
     ) -> Tensor:
         """Convert a scipy.sparse.coo_matrix to a Tensor"""
-
-
-def _ensure_attr(obj: Any, attr: str, message: str) -> None:
-    if not hasattr(obj, attr):
-        raise RuntimeError(message)
