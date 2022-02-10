@@ -1,15 +1,19 @@
 """Functionality for loading data from TileDB arrays to the Tensorflow Data API."""
 
-from concurrent.futures import ThreadPoolExecutor
 from functools import partial
-from typing import Iterator, Optional, Sequence, Tuple, Union
+from typing import Optional, Sequence, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
 
 import tiledb
 
-from ._batch_utils import BaseDenseBatch, BaseSparseBatch
+from ._batch_utils import (
+    BaseDenseBatch,
+    BaseSparseBatch,
+    get_attr_names,
+    tensor_generator,
+)
 
 # TODO: We have to track the following issues:
 # - https://github.com/tensorflow/tensorflow/issues/47532
@@ -22,10 +26,10 @@ def TensorflowTileDBDataset(
     y_array: tiledb.Array,
     batch_size: int,
     buffer_size: Optional[int] = None,
-    x_attribute_names: Sequence[str] = (),
-    y_attribute_names: Sequence[str] = (),
     batch_shuffle: bool = False,
     within_batch_shuffle: bool = False,
+    x_attribute_names: Sequence[str] = (),
+    y_attribute_names: Sequence[str] = (),
 ) -> tf.data.Dataset:
     """Return a tf.data.Dataset for loading data from TileDB arrays.
 
@@ -49,23 +53,13 @@ def TensorflowTileDBDataset(
             "first dimension of x_array and y_array should be of equal domain extent"
         )
 
-    if buffer_size is None:
-        buffer_size = batch_size
-    elif buffer_size < batch_size:
-        raise ValueError("Buffer size should be greater or equal to batch size")
-
-    # If no attribute names are passed explicitly, return all attributes
-    if not x_attribute_names:
-        x_attribute_names = _get_attr_names(x_array)
-
-    if not y_attribute_names:
-        y_attribute_names = _get_attr_names(y_array)
-
-    output_signature = _get_signature(x_array, x_attribute_names)
-    output_signature += _get_signature(y_array, y_attribute_names)
+    output_signature = _get_signature(x_array.schema, x_attribute_names)
+    output_signature += _get_signature(y_array.schema, y_attribute_names)
     return tf.data.Dataset.from_generator(
         partial(
-            _generator,
+            tensor_generator,
+            dense_batch_cls=TensorflowDenseBatch,
+            sparse_batch_cls=TensorflowSparseBatch,
             x_array=x_array,
             y_array=y_array,
             x_attrs=x_attribute_names,
@@ -79,66 +73,14 @@ def TensorflowTileDBDataset(
     )
 
 
-def _get_attr_names(array: tiledb.Array) -> Sequence[str]:
-    return tuple(array.attr(idx).name for idx in range(array.schema.nattr))
-
-
 def _get_signature(
-    array: tiledb.Array, attrs: Sequence[str]
+    schema: tiledb.ArraySchema, attrs: Sequence[str]
 ) -> Tuple[Union[tf.TensorSpec, tf.SparseTensorSpec], ...]:
-    cls = (
-        tf.SparseTensorSpec if isinstance(array, tiledb.SparseArray) else tf.TensorSpec
-    )
+    cls = tf.SparseTensorSpec if schema.sparse else tf.TensorSpec
     return tuple(
-        cls(shape=(None, *array.shape[1:]), dtype=array.attr(attr).dtype)
-        for attr in attrs
+        cls(shape=(None, *schema.shape[1:]), dtype=schema.attr(attr).dtype)
+        for attr in attrs or get_attr_names(schema)
     )
-
-
-def _generator(
-    x_array: tiledb.Array,
-    y_array: tiledb.Array,
-    x_attrs: Sequence[str],
-    y_attrs: Sequence[str],
-    batch_size: int,
-    buffer_size: int,
-    batch_shuffle: bool = False,
-    within_batch_shuffle: bool = False,
-) -> Iterator[Tuple[Union[tf.Tensor, tf.SparseTensor], ...]]:
-    x_batch = TensorflowBatch(x_array.schema, x_attrs, batch_size)
-    y_batch = TensorflowBatch(y_array.schema, y_attrs, batch_size)
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        for offset in range(0, x_array.shape[0], buffer_size):
-            x_buffer, y_buffer = executor.map(
-                lambda array: array[offset : offset + buffer_size],  # type: ignore
-                (x_array, y_array),
-            )
-            x_batch.set_buffer_offset(x_buffer, offset)
-            y_batch.set_buffer_offset(y_buffer, offset)
-
-            # Split the buffer_size into batch_size chunks
-            batch_offsets = np.arange(0, buffer_size, batch_size)
-            if batch_shuffle:
-                np.random.shuffle(batch_offsets)
-
-            for batch_offset in batch_offsets:
-                batch_slice = slice(batch_offset, batch_offset + batch_size)
-                x_batch.set_batch_slice(batch_slice)
-                y_batch.set_batch_slice(batch_slice)
-                if len(x_batch) != len(y_batch):
-                    raise ValueError(
-                        "x_array and y_array should have the same number of rows, "
-                        "i.e. the first dimension of x_array and y_array should be of "
-                        "equal domain extent inside the batch"
-                    )
-                if x_batch:
-                    if within_batch_shuffle:
-                        idx = np.arange(len(x_batch))
-                        np.random.shuffle(idx)
-                    else:
-                        idx = Ellipsis
-
-                    yield x_batch.get_tensors(idx) + y_batch.get_tensors(idx)
 
 
 class TensorflowDenseBatch(BaseDenseBatch[tf.Tensor]):
@@ -160,12 +102,3 @@ class TensorflowSparseBatch(BaseSparseBatch[tf.SparseTensor]):
             values=tf.constant(data, dtype=dtype),
             dense_shape=dense_shape,
         )
-
-
-def TensorflowBatch(
-    schema: tiledb.ArraySchema, attrs: Sequence[str], batch_size: int
-) -> Union[TensorflowDenseBatch, TensorflowSparseBatch]:
-    if schema.sparse:
-        return TensorflowSparseBatch(attrs, schema, batch_size)
-    else:
-        return TensorflowDenseBatch(attrs)

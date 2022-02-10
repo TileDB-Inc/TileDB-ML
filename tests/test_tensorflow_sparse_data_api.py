@@ -8,7 +8,12 @@ import pytest
 import tensorflow as tf
 
 import tiledb
-from tiledb.ml.readers.tensorflow import TensorflowTileDBDataset, _generator
+from tiledb.ml.readers._batch_utils import tensor_generator
+from tiledb.ml.readers.tensorflow import (
+    TensorflowDenseBatch,
+    TensorflowSparseBatch,
+    TensorflowTileDBDataset,
+)
 
 from .utils import create_sparse_array_one_hot_2d, ingest_in_tiledb
 
@@ -387,8 +392,8 @@ class TestTileDBTensorflowSparseDataAPI:
                 batch_shuffle=batch_shuffle,
             )
             # Test the generator twice: once with the public api (TensorflowTileDBDataset)
-            # and once with calling _generator directly. Although the former calls the
-            # latter internally, it is not reported as covered by the coverage report
+            # and once with calling tensor_generator directly. Although the former calls
+            # the latter internally, it is not reported as covered by the coverage report
             # due to https://github.com/tensorflow/tensorflow/issues/33759
             generators = [
                 iter(
@@ -399,7 +404,9 @@ class TestTileDBTensorflowSparseDataAPI:
                         **kwargs
                     )
                 ),
-                _generator(
+                tensor_generator(
+                    dense_batch_cls=TensorflowDenseBatch,
+                    sparse_batch_cls=TensorflowSparseBatch,
                     x_attrs=attribute_names,
                     y_attrs=attribute_names,
                     buffer_size=buffer_size or BATCH_SIZE,
@@ -456,8 +463,8 @@ class TestTileDBTensorflowSparseDataAPI:
                 batch_shuffle=batch_shuffle,
             )
             # Test the generator twice: once with the public api (TensorflowTileDBDataset)
-            # and once with calling _generator directly. Although the former calls the
-            # latter internally, it is not reported as covered by the coverage report
+            # and once with calling tensor_generator directly. Although the former calls
+            # the latter internally, it is not reported as covered by the coverage report
             # due to https://github.com/tensorflow/tensorflow/issues/33759
             generators = [
                 iter(
@@ -468,7 +475,9 @@ class TestTileDBTensorflowSparseDataAPI:
                         **kwargs
                     )
                 ),
-                _generator(
+                tensor_generator(
+                    dense_batch_cls=TensorflowDenseBatch,
+                    sparse_batch_cls=TensorflowSparseBatch,
                     x_attrs=attribute_names,
                     y_attrs=attribute_names,
                     buffer_size=buffer_size or BATCH_SIZE,

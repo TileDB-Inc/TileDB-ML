@@ -1,5 +1,19 @@
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
-from typing import Any, Generic, Mapping, Sequence, Tuple, TypeVar
+from concurrent.futures import ThreadPoolExecutor
+from typing import (
+    Any,
+    Generic,
+    Iterator,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+    Type,
+    TypeVar,
+    Union,
+)
 
 import numpy as np
 import scipy.sparse as sp
@@ -14,12 +28,12 @@ class BaseBatch(ABC, Generic[Tensor]):
     Base class used for getting tensors from batches of buffers read from a TileDB array.
     """
 
-    def __init__(self, attrs: Sequence[str]):
-        """Initialize this instance with the attributes to create tensors for each batch.
-
-        :param attrs: Sequence of attribute names.
-        """
+    def __init__(
+        self, schema: tiledb.ArraySchema, attrs: Sequence[str], batch_size: int
+    ):
+        self._schema = schema
         self._attrs = attrs
+        self._batch_size = batch_size
 
     @abstractmethod
     def set_buffer_offset(self, buffer: Mapping[str, np.ndarray], offset: int) -> None:
@@ -85,14 +99,13 @@ class BaseDenseBatch(BaseBatch[Tensor]):
 
 class BaseSparseBatch(BaseBatch[Tensor]):
     def __init__(
-        self, attrs: Sequence[str], schema: tiledb.ArraySchema, batch_size: int
+        self, schema: tiledb.ArraySchema, attrs: Sequence[str], batch_size: int
     ):
-        super().__init__(attrs)
-        domain = schema.domain
-        self._row_dim = domain.dim(0).name
-        self._col_dim = domain.dim(1).name
-        self._dense_shape = (batch_size, domain.shape[1])
-        self._schema = schema
+        super().__init__(schema, attrs, batch_size)
+        self._row_dim = schema.domain.dim(0).name
+        self._col_dim = schema.domain.dim(1).name
+        self._dense_shape = (batch_size, schema.shape[1])
+        self._attr_dtypes = tuple(schema.attr(attr).dtype for attr in self._attrs)
 
     def set_buffer_offset(self, buffer: Mapping[str, np.ndarray], offset: int) -> None:
         # COO to CSR transformation for batching and row slicing
@@ -119,12 +132,11 @@ class BaseSparseBatch(BaseBatch[Tensor]):
                 "within_batch_shuffle not implemented for sparse arrays"
             )
         batch_coo = self._batch_csr.tocoo()
+        data = batch_coo.data
         coords = np.stack((batch_coo.row, batch_coo.col), axis=-1)
         return tuple(
-            self._tensor_from_coo(
-                batch_coo.data, coords, self._dense_shape, self._schema.attr(attr).dtype
-            )
-            for attr in self._attrs
+            self._tensor_from_coo(data, coords, self._dense_shape, dtype)
+            for dtype in self._attr_dtypes
         )
 
     def __len__(self) -> int:
@@ -146,3 +158,96 @@ class BaseSparseBatch(BaseBatch[Tensor]):
         dtype: np.dtype,
     ) -> Tensor:
         """Convert a scipy.sparse.coo_matrix to a Tensor"""
+
+
+DenseTensor = TypeVar("DenseTensor")
+SparseTensor = TypeVar("SparseTensor")
+
+
+def tensor_generator(
+    dense_batch_cls: Type[BaseDenseBatch[DenseTensor]],
+    sparse_batch_cls: Type[BaseSparseBatch[SparseTensor]],
+    x_array: tiledb.Array,
+    y_array: tiledb.Array,
+    batch_size: int,
+    buffer_size: Optional[int] = None,
+    batch_shuffle: bool = False,
+    within_batch_shuffle: bool = False,
+    x_attrs: Sequence[str] = (),
+    y_attrs: Sequence[str] = (),
+    start_offset: int = 0,
+    stop_offset: Optional[int] = None,
+) -> Iterator[Tuple[Union[DenseTensor, SparseTensor], ...]]:
+    """
+    Generator for batches of tensors.
+
+    Each yielded batch is a tuple of N tensors of x_array followed by M tensors
+    of y_array, where `N == len(x_attrs)` and `M == len(y_attrs)`.
+
+    :param dense_batch_cls: Type of dense batches.
+    :param sparse_batch_cls: Type of sparse batches.
+    :param x_array: TileDB array of the features.
+    :param y_array: TileDB array of the labels.
+    :param batch_size: Size of each batch.
+    :param buffer_size: Size of the buffer used to read the data; defaults to batch_size.
+    :param batch_shuffle: True for shuffling batches.
+    :param within_batch_shuffle: True for shuffling records in each batch.
+    :param x_attrs: Attribute names of x_array; defaults to all x_array attributes.
+    :param y_attrs: Attribute names of y_array; defaults to all y_array attributes
+    :param start_offset: Start row offset; defaults to 0.
+    :param stop_offset: Stop row offset; defaults to number of rows.
+    """
+    if buffer_size is None:
+        buffer_size = batch_size
+    elif buffer_size < batch_size:
+        raise ValueError("Buffer size should be greater or equal to batch size")
+
+    if stop_offset is None:
+        stop_offset = x_array.shape[0]
+
+    def batch_factory(
+        schema: tiledb.ArraySchema, attrs: Sequence[str]
+    ) -> Union[BaseDenseBatch[DenseTensor], BaseSparseBatch[SparseTensor]]:
+        if not attrs:
+            attrs = get_attr_names(schema)
+        if schema.sparse:
+            return sparse_batch_cls(schema, attrs, batch_size)
+        return dense_batch_cls(schema, attrs, batch_size)
+
+    x_batch = batch_factory(x_array.schema, x_attrs)
+    y_batch = batch_factory(y_array.schema, y_attrs)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        for offset in range(start_offset, stop_offset, buffer_size):
+            x_buffer, y_buffer = executor.map(
+                lambda array: array[offset : offset + buffer_size],  # type: ignore
+                (x_array, y_array),
+            )
+            x_batch.set_buffer_offset(x_buffer, offset)
+            y_batch.set_buffer_offset(y_buffer, offset)
+
+            # Split the buffer_size into batch_size chunks
+            batch_offsets = np.arange(0, buffer_size, batch_size)
+            if batch_shuffle:
+                np.random.shuffle(batch_offsets)
+
+            for batch_offset in batch_offsets:
+                batch_slice = slice(batch_offset, batch_offset + batch_size)
+                x_batch.set_batch_slice(batch_slice)
+                y_batch.set_batch_slice(batch_slice)
+                if len(x_batch) != len(y_batch):
+                    raise ValueError(
+                        "x_array and y_array should have the same number of rows, "
+                        "i.e. the first dimension of x_array and y_array should be "
+                        "of equal domain extent inside the batch"
+                    )
+                if x_batch:
+                    if within_batch_shuffle:
+                        idx = np.arange(len(x_batch))
+                        np.random.shuffle(idx)
+                    else:
+                        idx = Ellipsis
+                    yield x_batch.get_tensors(idx) + y_batch.get_tensors(idx)
+
+
+def get_attr_names(schema: tiledb.ArraySchema) -> Sequence[str]:
+    return tuple(schema.attr(idx).name for idx in range(schema.nattr))

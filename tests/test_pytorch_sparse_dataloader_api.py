@@ -374,17 +374,18 @@ class TestTileDBSparsePyTorchDataloaderAPI:
 
         buffer_size = 10
         with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
+            dataset = PyTorchTileDBDataset(
+                x_array=x,
+                y_array=y,
+                batch_size=BATCH_SIZE,
+                buffer_size=buffer_size,
+                batch_shuffle=batch_shuffle,
+                x_attribute_names=[
+                    "features_" + str(attr) for attr in range(num_of_attributes)
+                ],
+                y_attribute_names=[
+                    "features_" + str(attr) for attr in range(num_of_attributes)
+                ],
+            )
             with pytest.raises(ValueError):
-                _ = PyTorchTileDBDataset(
-                    x_array=x,
-                    y_array=y,
-                    batch_size=BATCH_SIZE,
-                    buffer_size=buffer_size,
-                    batch_shuffle=batch_shuffle,
-                    x_attribute_names=[
-                        "features_" + str(attr) for attr in range(num_of_attributes)
-                    ],
-                    y_attribute_names=[
-                        "features_" + str(attr) for attr in range(num_of_attributes)
-                    ],
-                )
+                next(iter(dataset))
