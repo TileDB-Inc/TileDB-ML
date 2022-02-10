@@ -1,7 +1,7 @@
 """Functionality for loading data from TileDB arrays to the Tensorflow Data API."""
 
 from functools import partial
-from typing import Optional, Sequence, Tuple, Union
+from typing import Iterator, Optional, Sequence, Union
 
 import numpy as np
 import tensorflow as tf
@@ -53,8 +53,6 @@ def TensorflowTileDBDataset(
             "first dimension of x_array and y_array should be of equal domain extent"
         )
 
-    output_signature = _get_signature(x_array.schema, x_attribute_names)
-    output_signature += _get_signature(y_array.schema, y_attribute_names)
     return tf.data.Dataset.from_generator(
         partial(
             tensor_generator,
@@ -69,18 +67,19 @@ def TensorflowTileDBDataset(
             batch_shuffle=batch_shuffle,
             within_batch_shuffle=within_batch_shuffle,
         ),
-        output_signature=output_signature,
+        output_signature=(
+            *_iter_tensor_specs(x_array.schema, x_attribute_names),
+            *_iter_tensor_specs(y_array.schema, y_attribute_names),
+        ),
     )
 
 
-def _get_signature(
+def _iter_tensor_specs(
     schema: tiledb.ArraySchema, attrs: Sequence[str]
-) -> Tuple[Union[tf.TensorSpec, tf.SparseTensorSpec], ...]:
+) -> Iterator[Union[tf.TensorSpec, tf.SparseTensorSpec]]:
     cls = tf.SparseTensorSpec if schema.sparse else tf.TensorSpec
-    return tuple(
-        cls(shape=(None, *schema.shape[1:]), dtype=schema.attr(attr).dtype)
-        for attr in attrs or get_attr_names(schema)
-    )
+    for attr in attrs or get_attr_names(schema):
+        yield cls(shape=(None, *schema.shape[1:]), dtype=schema.attr(attr).dtype)
 
 
 class TensorflowDenseBatch(BaseDenseBatch[tf.Tensor]):
@@ -94,7 +93,7 @@ class TensorflowSparseBatch(BaseSparseBatch[tf.SparseTensor]):
     def _tensor_from_coo(
         data: np.ndarray,
         coords: np.ndarray,
-        dense_shape: Tuple[int, ...],
+        dense_shape: Sequence[int],
         dtype: np.dtype,
     ) -> tf.SparseTensor:
         return tf.SparseTensor(

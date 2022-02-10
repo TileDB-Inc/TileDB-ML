@@ -9,7 +9,6 @@ from typing import (
     Mapping,
     Optional,
     Sequence,
-    Tuple,
     Type,
     TypeVar,
     Union,
@@ -53,9 +52,9 @@ class BaseBatch(ABC, Generic[Tensor]):
         """
 
     @abstractmethod
-    def get_tensors(self, idx: Any = Ellipsis) -> Tuple[Tensor, ...]:
+    def iter_tensors(self, idx: Any = Ellipsis) -> Iterator[Tensor]:
         """
-        Get a tuple of tensors for the current batch, one tensor per attribute
+        Return an iterator of tensors for the current batch, one tensor per attribute
         given in the constructor.
 
         Must be called after `set_batch_slice`.
@@ -79,13 +78,13 @@ class BaseDenseBatch(BaseBatch[Tensor]):
         assert hasattr(self, "_buffer"), "set_buffer_offset() not called"
         self._attr_batches = [self._buffer[attr][batch_slice] for attr in self._attrs]
 
-    def get_tensors(self, idx: Any = Ellipsis) -> Tuple[Tensor, ...]:
+    def iter_tensors(self, idx: Any = Ellipsis) -> Iterator[Tensor]:
         assert hasattr(self, "_attr_batches"), "set_batch_slice() not called"
         if idx is Ellipsis:
             iter_attr_batches = iter(self._attr_batches)
         else:
             iter_attr_batches = (attr_batch[idx] for attr_batch in self._attr_batches)
-        return tuple(map(self._tensor_from_numpy, iter_attr_batches))
+        return map(self._tensor_from_numpy, iter_attr_batches)
 
     def __len__(self) -> int:
         assert hasattr(self, "_attr_batches"), "set_batch_slice() not called"
@@ -125,7 +124,7 @@ class BaseSparseBatch(BaseBatch[Tensor]):
         assert hasattr(self, "_buffer_csr"), "set_buffer_offset() not called"
         self._batch_csr = self._buffer_csr[batch_slice]
 
-    def get_tensors(self, idx: Any = Ellipsis) -> Tuple[Tensor, ...]:
+    def iter_tensors(self, idx: Any = Ellipsis) -> Iterator[Tensor]:
         assert hasattr(self, "_batch_csr"), "set_batch_slice() not called"
         if idx is not Ellipsis:
             raise NotImplementedError(
@@ -134,10 +133,8 @@ class BaseSparseBatch(BaseBatch[Tensor]):
         batch_coo = self._batch_csr.tocoo()
         data = batch_coo.data
         coords = np.stack((batch_coo.row, batch_coo.col), axis=-1)
-        return tuple(
-            self._tensor_from_coo(data, coords, self._dense_shape, dtype)
-            for dtype in self._attr_dtypes
-        )
+        for dtype in self._attr_dtypes:
+            yield self._tensor_from_coo(data, coords, self._dense_shape, dtype)
 
     def __len__(self) -> int:
         assert hasattr(self, "_batch_csr"), "set_batch_slice() not called"
@@ -154,7 +151,7 @@ class BaseSparseBatch(BaseBatch[Tensor]):
     def _tensor_from_coo(
         data: np.ndarray,
         coords: np.ndarray,
-        dense_shape: Tuple[int, ...],
+        dense_shape: Sequence[int],
         dtype: np.dtype,
     ) -> Tensor:
         """Convert a scipy.sparse.coo_matrix to a Tensor"""
@@ -177,11 +174,11 @@ def tensor_generator(
     y_attrs: Sequence[str] = (),
     start_offset: int = 0,
     stop_offset: Optional[int] = None,
-) -> Iterator[Tuple[Union[DenseTensor, SparseTensor], ...]]:
+) -> Iterator[Sequence[Union[DenseTensor, SparseTensor]]]:
     """
     Generator for batches of tensors.
 
-    Each yielded batch is a tuple of N tensors of x_array followed by M tensors
+    Each yielded batch is a sequence of N tensors of x_array followed by M tensors
     of y_array, where `N == len(x_attrs)` and `M == len(y_attrs)`.
 
     :param dense_batch_cls: Type of dense batches.
@@ -246,7 +243,7 @@ def tensor_generator(
                         np.random.shuffle(idx)
                     else:
                         idx = Ellipsis
-                    yield x_batch.get_tensors(idx) + y_batch.get_tensors(idx)
+                    yield (*x_batch.iter_tensors(idx), *y_batch.iter_tensors(idx))
 
 
 def get_attr_names(schema: tiledb.ArraySchema) -> Sequence[str]:

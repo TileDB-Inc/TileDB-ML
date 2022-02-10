@@ -1,7 +1,7 @@
 """Functionality for loading data from TileDB arrays to the PyTorch Dataloader API."""
 
 import math
-from typing import Iterator, Optional, Sequence, Tuple
+from typing import Iterator, Optional, Sequence
 
 import numpy as np
 import torch
@@ -11,7 +11,7 @@ import tiledb
 from ._batch_utils import BaseDenseBatch, BaseSparseBatch, tensor_generator
 
 
-class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Tuple[torch.Tensor, ...]]):
+class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Sequence[torch.Tensor]]):
     """Loads data from TileDB to the PyTorch Dataloader API."""
 
     def __init__(
@@ -46,7 +46,7 @@ class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Tuple[torch.Tensor, 
             within_batch_shuffle=within_batch_shuffle,
         )
 
-    def __iter__(self) -> Iterator[Tuple[torch.Tensor, ...]]:
+    def __iter__(self) -> Iterator[Sequence[torch.Tensor]]:
         kwargs = self._generator_kwargs.copy()
         worker_info = torch.utils.data.get_worker_info()
         if worker_info is not None:
@@ -75,7 +75,7 @@ class PyTorchSparseBatch(BaseSparseBatch[torch.Tensor]):
     def _tensor_from_coo(
         data: np.ndarray,
         coords: np.ndarray,
-        dense_shape: Tuple[int, ...],
+        dense_shape: Sequence[int],
         dtype: np.dtype,
     ) -> torch.Tensor:
         return torch.sparse_coo_tensor(
