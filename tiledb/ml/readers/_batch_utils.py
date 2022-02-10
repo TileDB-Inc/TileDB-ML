@@ -2,17 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
-from typing import (
-    Any,
-    Generic,
-    Iterator,
-    Mapping,
-    Optional,
-    Sequence,
-    Type,
-    TypeVar,
-    Union,
-)
+from typing import Generic, Iterator, Mapping, Optional, Sequence, Type, TypeVar, Union
 
 import numpy as np
 import scipy.sparse as sp
@@ -52,14 +42,15 @@ class BaseBatch(ABC, Generic[Tensor]):
         """
 
     @abstractmethod
-    def iter_tensors(self, idx: Any = Ellipsis) -> Iterator[Tensor]:
+    def iter_tensors(self, perm_idxs: Optional[np.ndarray] = None) -> Iterator[Tensor]:
         """
         Return an iterator of tensors for the current batch, one tensor per attribute
         given in the constructor.
 
         Must be called after `set_batch_slice`.
 
-        :param idx: Optional indexer for the current batch (e.g. to get a permutation).
+        :param perm_idxs: Optional permutation indices for the current batch.
+            If given, it must be an array equal to `np.arange(len(self))` after sorting.
         """
 
     @abstractmethod
@@ -78,13 +69,17 @@ class BaseDenseBatch(BaseBatch[Tensor]):
         assert hasattr(self, "_buffer"), "set_buffer_offset() not called"
         self._attr_batches = [self._buffer[attr][batch_slice] for attr in self._attrs]
 
-    def iter_tensors(self, idx: Any = Ellipsis) -> Iterator[Tensor]:
+    def iter_tensors(self, perm_idxs: Optional[np.ndarray] = None) -> Iterator[Tensor]:
         assert hasattr(self, "_attr_batches"), "set_batch_slice() not called"
-        if idx is Ellipsis:
-            iter_attr_batches = iter(self._attr_batches)
+        if perm_idxs is None:
+            attr_batches = iter(self._attr_batches)
         else:
-            iter_attr_batches = (attr_batch[idx] for attr_batch in self._attr_batches)
-        return map(self._tensor_from_numpy, iter_attr_batches)
+            n = len(self)
+            assert (
+                len(perm_idxs) == n and (np.sort(perm_idxs) == np.arange(n)).all()
+            ), f"Invalid permutation of size {n}: {perm_idxs}"
+            attr_batches = (attr_batch[perm_idxs] for attr_batch in self._attr_batches)
+        return map(self._tensor_from_numpy, attr_batches)
 
     def __len__(self) -> int:
         assert hasattr(self, "_attr_batches"), "set_batch_slice() not called"
@@ -124,9 +119,9 @@ class BaseSparseBatch(BaseBatch[Tensor]):
         assert hasattr(self, "_buffer_csr"), "set_buffer_offset() not called"
         self._batch_csr = self._buffer_csr[batch_slice]
 
-    def iter_tensors(self, idx: Any = Ellipsis) -> Iterator[Tensor]:
+    def iter_tensors(self, perm_idxs: Optional[np.ndarray] = None) -> Iterator[Tensor]:
         assert hasattr(self, "_batch_csr"), "set_batch_slice() not called"
-        if idx is not Ellipsis:
+        if perm_idxs is not None:
             raise NotImplementedError(
                 "within_batch_shuffle not implemented for sparse arrays"
             )
@@ -239,11 +234,14 @@ def tensor_generator(
                     )
                 if x_batch:
                     if within_batch_shuffle:
-                        idx = np.arange(len(x_batch))
-                        np.random.shuffle(idx)
+                        perm_idxs = np.arange(len(x_batch))
+                        np.random.shuffle(perm_idxs)
                     else:
-                        idx = Ellipsis
-                    yield (*x_batch.iter_tensors(idx), *y_batch.iter_tensors(idx))
+                        perm_idxs = None
+                    yield (
+                        *x_batch.iter_tensors(perm_idxs),
+                        *y_batch.iter_tensors(perm_idxs),
+                    )
 
 
 def get_attr_names(schema: tiledb.ArraySchema) -> Sequence[str]:
