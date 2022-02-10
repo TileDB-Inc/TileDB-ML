@@ -63,7 +63,7 @@ def TensorflowTileDBDataset(
 
     output_signature = _get_signature(x_array, x_attribute_names)
     output_signature += _get_signature(y_array, y_attribute_names)
-    dataset = tf.data.Dataset.from_generator(
+    return tf.data.Dataset.from_generator(
         partial(
             _generator,
             x_array=x_array,
@@ -78,8 +78,6 @@ def TensorflowTileDBDataset(
         ),
         output_signature=output_signature,
     )
-    # set the cardinality of the dataset to the number of rows in the array
-    return dataset.apply(tf.data.experimental.assert_cardinality(rows))
 
 
 def _get_attr_names(array: tiledb.Array) -> Sequence[str]:

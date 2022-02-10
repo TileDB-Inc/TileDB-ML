@@ -165,64 +165,6 @@ class TestTileDBTensorflowDataAPI:
                     within_batch_shuffle=within_batch_shuffle,
                 )
 
-    def test_dataset_length(
-        self,
-        tmpdir,
-        input_shape,
-        num_of_attributes,
-        batch_shuffle,
-        within_batch_shuffle,
-        buffer_size,
-    ):
-        array_uuid = str(uuid.uuid4())
-        tiledb_uri_x = os.path.join(tmpdir, "x" + array_uuid)
-        tiledb_uri_y = os.path.join(tmpdir, "y" + array_uuid)
-
-        ingest_in_tiledb(
-            uri=tiledb_uri_x,
-            data=np.random.rand(ROWS, *input_shape[1:]),
-            batch_size=BATCH_SIZE,
-            sparse=False,
-            num_of_attributes=num_of_attributes,
-        )
-        ingest_in_tiledb(
-            uri=tiledb_uri_y,
-            data=np.random.rand(ROWS, NUM_OF_CLASSES),
-            batch_size=BATCH_SIZE,
-            sparse=False,
-            num_of_attributes=num_of_attributes,
-        )
-
-        with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
-            tiledb_dataset = TensorflowTileDBDataset(
-                x_array=x,
-                y_array=y,
-                batch_size=BATCH_SIZE,
-                batch_shuffle=batch_shuffle,
-                buffer_size=buffer_size,
-                within_batch_shuffle=within_batch_shuffle,
-                x_attribute_names=[
-                    "features_" + str(attr) for attr in range(num_of_attributes)
-                ],
-                y_attribute_names=[
-                    "features_" + str(attr) for attr in range(num_of_attributes)
-                ],
-            )
-
-            assert len(tiledb_dataset) == ROWS
-
-            # Same test without attribute names explicitly provided by the user
-            tiledb_dataset = TensorflowTileDBDataset(
-                x_array=x,
-                y_array=y,
-                batch_size=BATCH_SIZE,
-                batch_shuffle=batch_shuffle,
-                buffer_size=buffer_size,
-                within_batch_shuffle=within_batch_shuffle,
-            )
-
-            assert len(tiledb_dataset) == ROWS
-
     def test_dataset_generator_batch_output(
         self,
         tmpdir,
