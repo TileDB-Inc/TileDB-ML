@@ -218,7 +218,9 @@ def tensor_generator(
             y_batch.set_buffer_offset(y_buffer, offset)
 
             # Split the buffer_size into batch_size chunks
-            batch_offsets = np.arange(0, buffer_size, batch_size)
+            batch_offsets = np.arange(
+                0, min(buffer_size, stop_offset - offset), batch_size
+            )
             if batch_shuffle:
                 np.random.shuffle(batch_offsets)
 
