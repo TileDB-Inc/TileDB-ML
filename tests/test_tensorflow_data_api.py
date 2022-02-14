@@ -51,29 +51,20 @@ class TestTileDBTensorflowDataAPI:
             batch_size=BATCH_SIZE,
             num_attrs=num_attrs,
         )
+        attrs = [f"features_{attr}" for attr in range(num_attrs)]
         with tiledb.open(uri_x) as x, tiledb.open(uri_y) as y:
-            dataset = TensorflowTileDBDataset(
-                x_array=x,
-                y_array=y,
-                batch_size=BATCH_SIZE,
-                batch_shuffle=batch_shuffle,
-                buffer_size=buffer_size,
-                within_batch_shuffle=within_batch_shuffle,
-                x_attrs=[f"features_{attr}" for attr in range(num_attrs)],
-                y_attrs=[f"features_{attr}" for attr in range(num_attrs)],
-            )
-            assert isinstance(dataset, tf.data.Dataset)
-
-            # Same test without attribute names explicitly provided by the user
-            dataset = TensorflowTileDBDataset(
-                x_array=x,
-                y_array=y,
-                batch_size=BATCH_SIZE,
-                batch_shuffle=batch_shuffle,
-                buffer_size=buffer_size,
-                within_batch_shuffle=within_batch_shuffle,
-            )
-            assert isinstance(dataset, tf.data.Dataset)
+            for pass_attrs in True, False:
+                dataset = TensorflowTileDBDataset(
+                    x_array=x,
+                    y_array=y,
+                    batch_size=BATCH_SIZE,
+                    batch_shuffle=batch_shuffle,
+                    buffer_size=buffer_size,
+                    within_batch_shuffle=within_batch_shuffle,
+                    x_attrs=attrs if pass_attrs else [],
+                    y_attrs=attrs if pass_attrs else [],
+                )
+                assert isinstance(dataset, tf.data.Dataset)
 
     def test_except_with_diff_number_of_x_y_rows(
         self,
@@ -94,30 +85,20 @@ class TestTileDBTensorflowDataAPI:
             batch_size=BATCH_SIZE,
             num_attrs=num_attrs,
         )
+        attrs = [f"features_{attr}" for attr in range(num_attrs)]
         with tiledb.open(uri_x) as x, tiledb.open(uri_y) as y:
-            with pytest.raises(Exception):
-                TensorflowTileDBDataset(
-                    x_array=x,
-                    y_array=y,
-                    batch_size=BATCH_SIZE,
-                    batch_shuffle=batch_shuffle,
-                    buffer_size=buffer_size,
-                    within_batch_shuffle=within_batch_shuffle,
-                    x_attrs=[f"features_{attr}" for attr in range(num_attrs)],
-                    y_attrs=[f"features_{attr}" for attr in range(num_attrs)],
-                )
-
-        # Same test without attribute names explicitly provided by the user
-        with tiledb.open(uri_x) as x, tiledb.open(uri_y) as y:
-            with pytest.raises(Exception):
-                TensorflowTileDBDataset(
-                    x_array=x,
-                    y_array=y,
-                    batch_size=BATCH_SIZE,
-                    batch_shuffle=batch_shuffle,
-                    buffer_size=buffer_size,
-                    within_batch_shuffle=within_batch_shuffle,
-                )
+            for pass_attrs in True, False:
+                with pytest.raises(Exception):
+                    TensorflowTileDBDataset(
+                        x_array=x,
+                        y_array=y,
+                        batch_size=BATCH_SIZE,
+                        batch_shuffle=batch_shuffle,
+                        buffer_size=buffer_size,
+                        within_batch_shuffle=within_batch_shuffle,
+                        x_attrs=attrs if pass_attrs else [],
+                        y_attrs=attrs if pass_attrs else [],
+                    )
 
     def test_dataset_generator_batch_output(
         self,
@@ -137,42 +118,43 @@ class TestTileDBTensorflowDataAPI:
             batch_size=BATCH_SIZE,
             num_attrs=num_attrs,
         )
+        attrs = [f"features_{attr}" for attr in range(num_attrs)]
         with tiledb.open(uri_x) as x, tiledb.open(uri_y) as y:
-            attrs = [f"features_{attr}" for attr in range(num_attrs)]
-            kwargs = dict(
-                x_array=x,
-                y_array=y,
-                x_attrs=attrs,
-                y_attrs=attrs,
-                buffer_size=buffer_size,
-                batch_size=BATCH_SIZE,
-                batch_shuffle=batch_shuffle,
-                within_batch_shuffle=within_batch_shuffle,
-            )
-            # Test the generator twice: once with the public api (TensorflowTileDBDataset)
-            # and once with calling tensor_generator directly. Although the former calls
-            # the latter internally, it is not reported as covered by the coverage report
-            # due to https://github.com/tensorflow/tensorflow/issues/33759
-            generators = [
-                iter(TensorflowTileDBDataset(**kwargs)),
-                tensor_generator(
-                    dense_batch_cls=TensorflowDenseBatch,
-                    sparse_batch_cls=TensorflowSparseBatch,
-                    **kwargs,
-                ),
-            ]
-            for generator in generators:
-                generated_data = next(generator)
-                assert len(generated_data) == 2 * num_attrs
-                for attr in range(num_attrs):
-                    assert tuple(generated_data[attr].shape) <= (
-                        BATCH_SIZE,
-                        *input_shape[1:],
-                    )
-                    assert tuple(generated_data[num_attrs + attr].shape) <= (
-                        BATCH_SIZE,
-                        NUM_OF_CLASSES,
-                    )
+            for pass_attrs in True, False:
+                kwargs = dict(
+                    x_array=x,
+                    y_array=y,
+                    x_attrs=attrs if pass_attrs else [],
+                    y_attrs=attrs if pass_attrs else [],
+                    buffer_size=buffer_size,
+                    batch_size=BATCH_SIZE,
+                    batch_shuffle=batch_shuffle,
+                    within_batch_shuffle=within_batch_shuffle,
+                )
+                # Test the generator twice: once with the public api (TensorflowTileDBDataset)
+                # and once with calling tensor_generator directly. Although the former calls
+                # the latter internally, it is not reported as covered by the coverage report
+                # due to https://github.com/tensorflow/tensorflow/issues/33759
+                generators = [
+                    iter(TensorflowTileDBDataset(**kwargs)),
+                    tensor_generator(
+                        dense_batch_cls=TensorflowDenseBatch,
+                        sparse_batch_cls=TensorflowSparseBatch,
+                        **kwargs,
+                    ),
+                ]
+                for generator in generators:
+                    generated_data = next(generator)
+                    assert len(generated_data) == 2 * num_attrs
+                    for attr in range(num_attrs):
+                        assert tuple(generated_data[attr].shape) <= (
+                            BATCH_SIZE,
+                            *input_shape[1:],
+                        )
+                        assert tuple(generated_data[num_attrs + attr].shape) <= (
+                            BATCH_SIZE,
+                            NUM_OF_CLASSES,
+                        )
 
     def test_buffer_size_geq_batch_size_exception(
         self,
@@ -192,20 +174,22 @@ class TestTileDBTensorflowDataAPI:
             batch_size=BATCH_SIZE,
             num_attrs=num_attrs,
         )
+        attrs = [f"features_{attr}" for attr in range(num_attrs)]
         with tiledb.open(uri_x) as x, tiledb.open(uri_y) as y:
-            dataset = TensorflowTileDBDataset(
-                x_array=x,
-                y_array=y,
-                batch_size=BATCH_SIZE,
-                # Set the buffer_size less than the batch_size
-                buffer_size=BATCH_SIZE - 1,
-                batch_shuffle=batch_shuffle,
-                within_batch_shuffle=within_batch_shuffle,
-                x_attrs=[f"features_{attr}" for attr in range(num_attrs)],
-                y_attrs=[f"features_{attr}" for attr in range(num_attrs)],
-            )
-            with pytest.raises(Exception) as excinfo:
-                next(iter(dataset))
-            assert str(excinfo.value).startswith(
-                "ValueError: Buffer size should be greater or equal to batch size"
-            )
+            for pass_attrs in True, False:
+                dataset = TensorflowTileDBDataset(
+                    x_array=x,
+                    y_array=y,
+                    batch_size=BATCH_SIZE,
+                    # Set the buffer_size less than the batch_size
+                    buffer_size=BATCH_SIZE - 1,
+                    batch_shuffle=batch_shuffle,
+                    within_batch_shuffle=within_batch_shuffle,
+                    x_attrs=attrs if pass_attrs else [],
+                    y_attrs=attrs if pass_attrs else [],
+                )
+                with pytest.raises(Exception) as excinfo:
+                    next(iter(dataset))
+                assert str(excinfo.value).startswith(
+                    "ValueError: Buffer size should be greater or equal to batch size"
+                )

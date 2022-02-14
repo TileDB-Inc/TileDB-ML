@@ -39,29 +39,20 @@ class TestPytorchDenseDataloader:
             batch_size=BATCH_SIZE,
             num_attrs=num_attrs,
         )
+        attrs = [f"features_{attr}" for attr in range(num_attrs)]
         with tiledb.open(uri_x) as x, tiledb.open(uri_y) as y:
-            dataset = PyTorchTileDBDataset(
-                x_array=x,
-                y_array=y,
-                batch_size=BATCH_SIZE,
-                buffer_size=buffer_size,
-                batch_shuffle=batch_shuffle,
-                within_batch_shuffle=within_batch_shuffle,
-                x_attrs=[f"features_{attr}" for attr in range(num_attrs)],
-                y_attrs=[f"features_{attr}" for attr in range(num_attrs)],
-            )
-            assert isinstance(dataset, torch.utils.data.IterableDataset)
-
-            # Same test without attribute names explicitly provided by the user
-            dataset = PyTorchTileDBDataset(
-                x_array=x,
-                y_array=y,
-                batch_size=BATCH_SIZE,
-                buffer_size=buffer_size,
-                batch_shuffle=batch_shuffle,
-                within_batch_shuffle=within_batch_shuffle,
-            )
-            assert isinstance(dataset, torch.utils.data.IterableDataset)
+            for pass_attrs in True, False:
+                dataset = PyTorchTileDBDataset(
+                    x_array=x,
+                    y_array=y,
+                    batch_size=BATCH_SIZE,
+                    buffer_size=buffer_size,
+                    batch_shuffle=batch_shuffle,
+                    within_batch_shuffle=within_batch_shuffle,
+                    x_attrs=attrs if pass_attrs else [],
+                    y_attrs=attrs if pass_attrs else [],
+                )
+                assert isinstance(dataset, torch.utils.data.IterableDataset)
 
     def test_except_with_diff_number_of_x_y_rows(
         self,
@@ -82,18 +73,20 @@ class TestPytorchDenseDataloader:
             batch_size=BATCH_SIZE,
             num_attrs=num_attrs,
         )
+        attrs = [f"features_{attr}" for attr in range(num_attrs)]
         with tiledb.open(uri_x) as x, tiledb.open(uri_y) as y:
-            with pytest.raises(ValueError):
-                PyTorchTileDBDataset(
-                    x_array=x,
-                    y_array=y,
-                    batch_size=BATCH_SIZE,
-                    buffer_size=buffer_size,
-                    batch_shuffle=batch_shuffle,
-                    within_batch_shuffle=within_batch_shuffle,
-                    x_attrs=[f"features_{attr}" for attr in range(num_attrs)],
-                    y_attrs=[f"features_{attr}" for attr in range(num_attrs)],
-                )
+            for pass_attrs in True, False:
+                with pytest.raises(ValueError):
+                    PyTorchTileDBDataset(
+                        x_array=x,
+                        y_array=y,
+                        batch_size=BATCH_SIZE,
+                        buffer_size=buffer_size,
+                        batch_shuffle=batch_shuffle,
+                        within_batch_shuffle=within_batch_shuffle,
+                        x_attrs=attrs if pass_attrs else [],
+                        y_attrs=attrs if pass_attrs else [],
+                    )
 
     @pytest.mark.parametrize("workers", [1, 2, 3])
     def test_dataset_generator_batch_output(
