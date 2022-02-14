@@ -318,5 +318,8 @@ class TestTileDBSparsePyTorchDataloaderAPI:
                 x_attrs=["features_" + str(attr) for attr in range(num_of_attributes)],
                 y_attrs=["features_" + str(attr) for attr in range(num_of_attributes)],
             )
-            with pytest.raises(ValueError):
+            with pytest.raises(Exception) as excinfo:
                 next(iter(dataset))
+            assert str(excinfo.value).startswith(
+                "Buffer size should be greater or equal to batch size"
+            )

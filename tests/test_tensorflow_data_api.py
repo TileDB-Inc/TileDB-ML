@@ -226,8 +226,7 @@ class TestTileDBTensorflowDataAPI:
 
         ingest_in_tiledb(
             uri=tiledb_uri_x,
-            # Add one extra row on X
-            data=np.random.rand(ROWS + 1, *input_shape[1:]),
+            data=np.random.rand(ROWS, *input_shape[1:]),
             batch_size=BATCH_SIZE,
             sparse=False,
             num_of_attributes=num_of_attributes,
@@ -241,19 +240,19 @@ class TestTileDBTensorflowDataAPI:
         )
 
         with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
-            with pytest.raises(ValueError):
-                TensorflowTileDBDataset(
-                    x_array=x,
-                    y_array=y,
-                    batch_size=BATCH_SIZE,
-                    # Set the buffer_size less than the batch_size
-                    buffer_size=BATCH_SIZE - 1,
-                    batch_shuffle=batch_shuffle,
-                    within_batch_shuffle=within_batch_shuffle,
-                    x_attrs=[
-                        "features_" + str(attr) for attr in range(num_of_attributes)
-                    ],
-                    y_attrs=[
-                        "features_" + str(attr) for attr in range(num_of_attributes)
-                    ],
-                )
+            dataset = TensorflowTileDBDataset(
+                x_array=x,
+                y_array=y,
+                batch_size=BATCH_SIZE,
+                # Set the buffer_size less than the batch_size
+                buffer_size=BATCH_SIZE - 1,
+                batch_shuffle=batch_shuffle,
+                within_batch_shuffle=within_batch_shuffle,
+                x_attrs=["features_" + str(attr) for attr in range(num_of_attributes)],
+                y_attrs=["features_" + str(attr) for attr in range(num_of_attributes)],
+            )
+            with pytest.raises(Exception) as excinfo:
+                next(iter(dataset))
+            assert str(excinfo.value).startswith(
+                "ValueError: Buffer size should be greater or equal to batch size"
+            )
