@@ -1,7 +1,5 @@
 """Tests for TileDB integration with PyTorch Data API for Dense Arrays."""
 
-import os
-
 import numpy as np
 import pytest
 import torch
@@ -18,53 +16,44 @@ ROWS = 100
 
 
 @pytest.mark.parametrize("input_shape", [(10,), (10, 3), (10, 10, 3)])
-@pytest.mark.parametrize("num_of_attributes", [1, 2, 3])
+@pytest.mark.parametrize("num_attrs", [1, 2, 3])
 @pytest.mark.parametrize("batch_shuffle", [True, False])
 @pytest.mark.parametrize("within_batch_shuffle", [True, False])
 @pytest.mark.parametrize("buffer_size", [50, None])
 class TestPytorchDenseDataloader:
-    def test_tiledb_pytorch_data_api_train_with_multiple_dim_data(
+    def test_data_api_train_with_multiple_dim_data(
         self,
         tmpdir,
         input_shape,
-        num_of_attributes,
+        num_attrs,
         batch_shuffle,
         within_batch_shuffle,
         buffer_size,
     ):
-        tiledb_uri_x = os.path.join(tmpdir, "x")
-        tiledb_uri_y = os.path.join(tmpdir, "y")
-
-        ingest_in_tiledb(
-            uri=tiledb_uri_x,
-            data=np.random.rand(ROWS, *input_shape),
+        uri_x, uri_y = ingest_in_tiledb(
+            tmpdir,
+            data_x=np.random.rand(ROWS, *input_shape),
+            data_y=np.random.randint(low=0, high=NUM_OF_CLASSES, size=ROWS),
+            sparse_x=False,
+            sparse_y=False,
             batch_size=BATCH_SIZE,
-            sparse=False,
-            num_of_attributes=num_of_attributes,
+            num_attrs=num_attrs,
         )
-        ingest_in_tiledb(
-            uri=tiledb_uri_y,
-            data=np.random.randint(low=0, high=NUM_OF_CLASSES, size=ROWS),
-            batch_size=BATCH_SIZE,
-            sparse=False,
-            num_of_attributes=num_of_attributes,
-        )
-
-        with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
-            tiledb_dataset = PyTorchTileDBDataset(
+        with tiledb.open(uri_x) as x, tiledb.open(uri_y) as y:
+            dataset = PyTorchTileDBDataset(
                 x_array=x,
                 y_array=y,
                 batch_size=BATCH_SIZE,
                 buffer_size=buffer_size,
                 batch_shuffle=batch_shuffle,
                 within_batch_shuffle=within_batch_shuffle,
-                x_attrs=["features_" + str(attr) for attr in range(num_of_attributes)],
-                y_attrs=["features_" + str(attr) for attr in range(num_of_attributes)],
+                x_attrs=[f"features_{attr}" for attr in range(num_attrs)],
+                y_attrs=[f"features_{attr}" for attr in range(num_attrs)],
             )
-            assert isinstance(tiledb_dataset, torch.utils.data.IterableDataset)
+            assert isinstance(dataset, torch.utils.data.IterableDataset)
 
             # Same test without attribute names explicitly provided by the user
-            tiledb_dataset = PyTorchTileDBDataset(
+            dataset = PyTorchTileDBDataset(
                 x_array=x,
                 y_array=y,
                 batch_size=BATCH_SIZE,
@@ -72,38 +61,28 @@ class TestPytorchDenseDataloader:
                 batch_shuffle=batch_shuffle,
                 within_batch_shuffle=within_batch_shuffle,
             )
-
-            assert isinstance(tiledb_dataset, torch.utils.data.IterableDataset)
+            assert isinstance(dataset, torch.utils.data.IterableDataset)
 
     def test_except_with_diff_number_of_x_y_rows(
         self,
         tmpdir,
         input_shape,
-        num_of_attributes,
+        num_attrs,
         batch_shuffle,
         within_batch_shuffle,
         buffer_size,
     ):
-        tiledb_uri_x = os.path.join(tmpdir, "x")
-        tiledb_uri_y = os.path.join(tmpdir, "y")
-
-        ingest_in_tiledb(
-            uri=tiledb_uri_x,
+        uri_x, uri_y = ingest_in_tiledb(
+            tmpdir,
             # Add one extra row on X
-            data=np.random.rand(ROWS + 1, *input_shape),
+            data_x=np.random.rand(ROWS + 1, *input_shape),
+            sparse_x=False,
+            data_y=np.random.rand(ROWS, NUM_OF_CLASSES),
+            sparse_y=False,
             batch_size=BATCH_SIZE,
-            sparse=False,
-            num_of_attributes=num_of_attributes,
+            num_attrs=num_attrs,
         )
-        ingest_in_tiledb(
-            uri=tiledb_uri_y,
-            data=np.random.rand(ROWS, NUM_OF_CLASSES),
-            batch_size=BATCH_SIZE,
-            sparse=False,
-            num_of_attributes=num_of_attributes,
-        )
-
-        with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
+        with tiledb.open(uri_x) as x, tiledb.open(uri_y) as y:
             with pytest.raises(ValueError):
                 PyTorchTileDBDataset(
                     x_array=x,
@@ -112,12 +91,8 @@ class TestPytorchDenseDataloader:
                     buffer_size=buffer_size,
                     batch_shuffle=batch_shuffle,
                     within_batch_shuffle=within_batch_shuffle,
-                    x_attrs=[
-                        "features_" + str(attr) for attr in range(num_of_attributes)
-                    ],
-                    y_attrs=[
-                        "features_" + str(attr) for attr in range(num_of_attributes)
-                    ],
+                    x_attrs=[f"features_{attr}" for attr in range(num_attrs)],
+                    y_attrs=[f"features_{attr}" for attr in range(num_attrs)],
                 )
 
     @pytest.mark.parametrize("workers", [1, 2, 3])
@@ -126,31 +101,22 @@ class TestPytorchDenseDataloader:
         tmpdir,
         input_shape,
         workers,
-        num_of_attributes,
+        num_attrs,
         batch_shuffle,
         within_batch_shuffle,
         buffer_size,
     ):
-        tiledb_uri_x = os.path.join(tmpdir, "x")
-        tiledb_uri_y = os.path.join(tmpdir, "y")
-
-        ingest_in_tiledb(
-            uri=tiledb_uri_x,
-            data=np.random.rand(ROWS, *input_shape[1:]),
+        uri_x, uri_y = ingest_in_tiledb(
+            tmpdir,
+            data_x=np.random.rand(ROWS, *input_shape[1:]),
+            sparse_x=False,
+            data_y=np.random.rand(ROWS, NUM_OF_CLASSES),
+            sparse_y=False,
             batch_size=BATCH_SIZE,
-            sparse=False,
-            num_of_attributes=num_of_attributes,
+            num_attrs=num_attrs,
         )
-        ingest_in_tiledb(
-            uri=tiledb_uri_y,
-            data=np.random.rand(ROWS, NUM_OF_CLASSES),
-            batch_size=BATCH_SIZE,
-            sparse=False,
-            num_of_attributes=num_of_attributes,
-        )
-
-        with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
-            tiledb_dataset = PyTorchTileDBDataset(
+        with tiledb.open(uri_x) as x, tiledb.open(uri_y) as y:
+            dataset = PyTorchTileDBDataset(
                 x_array=x,
                 y_array=y,
                 batch_size=BATCH_SIZE,
@@ -158,22 +124,21 @@ class TestPytorchDenseDataloader:
                 batch_shuffle=batch_shuffle,
                 within_batch_shuffle=within_batch_shuffle,
             )
-
-            assert isinstance(tiledb_dataset, torch.utils.data.IterableDataset)
+            assert isinstance(dataset, torch.utils.data.IterableDataset)
 
             train_loader = torch.utils.data.DataLoader(
-                tiledb_dataset, batch_size=None, num_workers=workers
+                dataset, batch_size=None, num_workers=workers
             )
 
             for batchindx, data in enumerate(train_loader):
-                assert len(data) == 2 * num_of_attributes
+                assert len(data) == 2 * num_attrs
 
-                for attr in range(num_of_attributes):
+                for attr in range(num_attrs):
                     assert data[attr].shape <= (
                         BATCH_SIZE,
                         *input_shape[1:],
                     )
-                    assert data[num_of_attributes + attr].shape <= (
+                    assert data[num_attrs + attr].shape <= (
                         BATCH_SIZE,
                         NUM_OF_CLASSES,
                     )
@@ -185,33 +150,22 @@ class TestPytorchDenseDataloader:
         input_shape,
         workers,
         mocker,
-        num_of_attributes,
+        num_attrs,
         batch_shuffle,
         within_batch_shuffle,
         buffer_size,
     ):
-
-        tiledb_uri_x = os.path.join(tmpdir, "x")
-        tiledb_uri_y = os.path.join(tmpdir, "y")
-
-        ingest_in_tiledb(
-            uri=tiledb_uri_x,
-            data=np.random.rand(ROWS, *input_shape),
+        uri_x, uri_y = ingest_in_tiledb(
+            tmpdir,
+            data_x=np.random.rand(ROWS, *input_shape),
+            sparse_x=False,
+            data_y=np.random.randint(low=0, high=NUM_OF_CLASSES, size=ROWS),
+            sparse_y=False,
             batch_size=BATCH_SIZE,
-            sparse=False,
-            num_of_attributes=num_of_attributes,
+            num_attrs=num_attrs,
         )
-        ingest_in_tiledb(
-            uri=tiledb_uri_y,
-            data=np.random.randint(low=0, high=NUM_OF_CLASSES, size=ROWS),
-            batch_size=BATCH_SIZE,
-            sparse=False,
-            num_of_attributes=num_of_attributes,
-        )
-
-        with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
-
-            tiledb_dataset = PyTorchTileDBDataset(
+        with tiledb.open(uri_x) as x, tiledb.open(uri_y) as y:
+            dataset = PyTorchTileDBDataset(
                 x_array=x,
                 y_array=y,
                 batch_size=BATCH_SIZE,
@@ -219,14 +173,13 @@ class TestPytorchDenseDataloader:
                 batch_shuffle=batch_shuffle,
                 within_batch_shuffle=within_batch_shuffle,
             )
-
-            assert isinstance(tiledb_dataset, torch.utils.data.IterableDataset)
+            assert isinstance(dataset, torch.utils.data.IterableDataset)
 
             if workers == 1:
                 mocker.patch("torch.utils.data.get_worker_info", return_value=None)
 
             train_loader = torch.utils.data.DataLoader(
-                tiledb_dataset, batch_size=None, num_workers=workers
+                dataset, batch_size=None, num_workers=workers
             )
 
             unique_inputs = []
@@ -234,21 +187,19 @@ class TestPytorchDenseDataloader:
 
             for batchindx, data in enumerate(train_loader):
                 # Keep unique X tensors
-                for attr in range(num_of_attributes):
+                for attr in range(num_attrs):
                     if not any(
                         np.array_equal(data[attr].numpy(), unique_input)
                         for unique_input in unique_inputs
                     ):
                         unique_inputs.append(data[attr].numpy())
 
-                    # Keep unique Y tensors - Y index is attr + num_of_attributes following x attrs
+                    # Keep unique Y tensors - Y index is attr + num_attrs following x attrs
                     if not any(
-                        np.array_equal(
-                            data[attr + num_of_attributes].numpy(), unique_label
-                        )
+                        np.array_equal(data[attr + num_attrs].numpy(), unique_label)
                         for unique_label in unique_labels
                     ):
-                        unique_labels.append(data[attr + num_of_attributes].numpy())
+                        unique_labels.append(data[attr + num_attrs].numpy())
 
             assert len(unique_inputs) - 1 == batchindx
             assert len(unique_labels) - 1 == batchindx

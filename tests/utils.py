@@ -1,14 +1,26 @@
+import os
+import uuid
+
 import numpy as np
 
 import tiledb
 
 
-def ingest_in_tiledb(
-    data: np.ndarray, batch_size: int, uri: str, sparse: bool, num_of_attributes: int
+def ingest_in_tiledb(tmpdir, data_x, data_y, sparse_x, sparse_y, batch_size, num_attrs):
+    array_uuid = str(uuid.uuid4())
+    uri_x = os.path.join(tmpdir, "x_" + array_uuid)
+    uri_y = os.path.join(tmpdir, "y_" + array_uuid)
+    _ingest_in_tiledb(uri_x, data_x, sparse_x, batch_size, num_attrs)
+    _ingest_in_tiledb(uri_y, data_y, sparse_y, batch_size, num_attrs)
+    return uri_x, uri_y
+
+
+def _ingest_in_tiledb(
+    uri: str, data: np.ndarray, sparse: bool, batch_size: int, num_attrs: int
 ) -> None:
     dims = [
         tiledb.Dim(
-            name="dim_" + str(dim),
+            name=f"dim_{dim}",
             domain=(0, data.shape[dim] - 1),
             tile=data.shape[dim] if dim > 0 else batch_size,
             dtype=np.int32,
@@ -21,8 +33,8 @@ def ingest_in_tiledb(
         domain=tiledb.Domain(*dims),
         sparse=sparse,
         attrs=[
-            tiledb.Attr(name="features_" + str(attr), dtype=np.float32)
-            for attr in range(num_of_attributes)
+            tiledb.Attr(name=f"features_{attr}", dtype=np.float32)
+            for attr in range(num_attrs)
         ],
     )
 
@@ -32,9 +44,7 @@ def ingest_in_tiledb(
     # Ingest
     with tiledb.open(uri, "w") as tiledb_array:
         idx = np.nonzero(data) if sparse else slice(None)
-        tiledb_array[idx] = {
-            "features_" + str(attr): data[idx] for attr in range(num_of_attributes)
-        }
+        tiledb_array[idx] = {f"features_{attr}": data[idx] for attr in range(num_attrs)}
 
 
 def create_sparse_array_one_hot_2d(rows: int, cols: int) -> np.ndarray:

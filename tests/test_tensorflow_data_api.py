@@ -1,7 +1,6 @@
 """Tests for TileDB integration with Tensorflow Data API."""
 
 import os
-import uuid
 
 import numpy as np
 import pytest
@@ -29,55 +28,44 @@ ROWS = 1000
 
 
 @pytest.mark.parametrize("input_shape", [(10,), (10, 3), (10, 10, 3)])
-@pytest.mark.parametrize("num_of_attributes", [1, 2, 3])
+@pytest.mark.parametrize("num_attrs", [1, 2, 3])
 @pytest.mark.parametrize("batch_shuffle", [True, False])
 @pytest.mark.parametrize("within_batch_shuffle", [True, False])
 @pytest.mark.parametrize("buffer_size", [50, None])
 class TestTileDBTensorflowDataAPI:
-    def test_tiledb_tf_data_api_with_multiple_dim_data(
+    def test_data_api_with_multiple_dim_data(
         self,
         tmpdir,
         input_shape,
-        num_of_attributes,
+        num_attrs,
         batch_shuffle,
         within_batch_shuffle,
         buffer_size,
     ):
-        array_uuid = str(uuid.uuid4())
-        tiledb_uri_x = os.path.join(tmpdir, "x" + array_uuid)
-        tiledb_uri_y = os.path.join(tmpdir, "y" + array_uuid)
-
-        ingest_in_tiledb(
-            uri=tiledb_uri_x,
-            data=np.random.rand(ROWS, *input_shape[1:]),
+        uri_x, uri_y = ingest_in_tiledb(
+            tmpdir,
+            data_x=np.random.rand(ROWS, *input_shape[1:]),
+            data_y=np.random.rand(ROWS, NUM_OF_CLASSES),
+            sparse_x=False,
+            sparse_y=False,
             batch_size=BATCH_SIZE,
-            sparse=False,
-            num_of_attributes=num_of_attributes,
+            num_attrs=num_attrs,
         )
-        ingest_in_tiledb(
-            uri=tiledb_uri_y,
-            data=np.random.rand(ROWS, NUM_OF_CLASSES),
-            batch_size=BATCH_SIZE,
-            sparse=False,
-            num_of_attributes=num_of_attributes,
-        )
-
-        with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
-            tiledb_dataset = TensorflowTileDBDataset(
+        with tiledb.open(uri_x) as x, tiledb.open(uri_y) as y:
+            dataset = TensorflowTileDBDataset(
                 x_array=x,
                 y_array=y,
                 batch_size=BATCH_SIZE,
                 batch_shuffle=batch_shuffle,
                 buffer_size=buffer_size,
                 within_batch_shuffle=within_batch_shuffle,
-                x_attrs=["features_" + str(attr) for attr in range(num_of_attributes)],
-                y_attrs=["features_" + str(attr) for attr in range(num_of_attributes)],
+                x_attrs=[f"features_{attr}" for attr in range(num_attrs)],
+                y_attrs=[f"features_{attr}" for attr in range(num_attrs)],
             )
-
-            assert isinstance(tiledb_dataset, tf.data.Dataset)
+            assert isinstance(dataset, tf.data.Dataset)
 
             # Same test without attribute names explicitly provided by the user
-            tiledb_dataset = TensorflowTileDBDataset(
+            dataset = TensorflowTileDBDataset(
                 x_array=x,
                 y_array=y,
                 batch_size=BATCH_SIZE,
@@ -85,39 +73,28 @@ class TestTileDBTensorflowDataAPI:
                 buffer_size=buffer_size,
                 within_batch_shuffle=within_batch_shuffle,
             )
-
-            assert isinstance(tiledb_dataset, tf.data.Dataset)
+            assert isinstance(dataset, tf.data.Dataset)
 
     def test_except_with_diff_number_of_x_y_rows(
         self,
         tmpdir,
         input_shape,
-        num_of_attributes,
+        num_attrs,
         batch_shuffle,
         within_batch_shuffle,
         buffer_size,
     ):
-        array_uuid = str(uuid.uuid4())
-        tiledb_uri_x = os.path.join(tmpdir, "x" + array_uuid)
-        tiledb_uri_y = os.path.join(tmpdir, "y" + array_uuid)
-
-        ingest_in_tiledb(
-            uri=tiledb_uri_x,
+        uri_x, uri_y = ingest_in_tiledb(
+            tmpdir,
             # Add one extra row on X
-            data=np.random.rand(ROWS + 1, *input_shape[1:]),
+            data_x=np.random.rand(ROWS + 1, *input_shape[1:]),
+            sparse_x=False,
+            data_y=np.random.rand(ROWS, NUM_OF_CLASSES),
+            sparse_y=False,
             batch_size=BATCH_SIZE,
-            sparse=False,
-            num_of_attributes=num_of_attributes,
+            num_attrs=num_attrs,
         )
-        ingest_in_tiledb(
-            uri=tiledb_uri_y,
-            data=np.random.rand(ROWS, NUM_OF_CLASSES),
-            batch_size=BATCH_SIZE,
-            sparse=False,
-            num_of_attributes=num_of_attributes,
-        )
-
-        with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
+        with tiledb.open(uri_x) as x, tiledb.open(uri_y) as y:
             with pytest.raises(Exception):
                 TensorflowTileDBDataset(
                     x_array=x,
@@ -126,16 +103,12 @@ class TestTileDBTensorflowDataAPI:
                     batch_shuffle=batch_shuffle,
                     buffer_size=buffer_size,
                     within_batch_shuffle=within_batch_shuffle,
-                    x_attrs=[
-                        "features_" + str(attr) for attr in range(num_of_attributes)
-                    ],
-                    y_attrs=[
-                        "features_" + str(attr) for attr in range(num_of_attributes)
-                    ],
+                    x_attrs=[f"features_{attr}" for attr in range(num_attrs)],
+                    y_attrs=[f"features_{attr}" for attr in range(num_attrs)],
                 )
 
         # Same test without attribute names explicitly provided by the user
-        with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
+        with tiledb.open(uri_x) as x, tiledb.open(uri_y) as y:
             with pytest.raises(Exception):
                 TensorflowTileDBDataset(
                     x_array=x,
@@ -150,32 +123,22 @@ class TestTileDBTensorflowDataAPI:
         self,
         tmpdir,
         input_shape,
-        num_of_attributes,
+        num_attrs,
         batch_shuffle,
         within_batch_shuffle,
         buffer_size,
     ):
-        array_uuid = str(uuid.uuid4())
-        tiledb_uri_x = os.path.join(tmpdir, "x" + array_uuid)
-        tiledb_uri_y = os.path.join(tmpdir, "y" + array_uuid)
-
-        ingest_in_tiledb(
-            uri=tiledb_uri_x,
-            data=np.random.rand(ROWS, *input_shape[1:]),
+        uri_x, uri_y = ingest_in_tiledb(
+            tmpdir,
+            data_x=np.random.rand(ROWS, *input_shape[1:]),
+            data_y=np.random.rand(ROWS, NUM_OF_CLASSES),
+            sparse_x=False,
+            sparse_y=False,
             batch_size=BATCH_SIZE,
-            sparse=False,
-            num_of_attributes=num_of_attributes,
+            num_attrs=num_attrs,
         )
-        ingest_in_tiledb(
-            uri=tiledb_uri_y,
-            data=np.random.rand(ROWS, NUM_OF_CLASSES),
-            batch_size=BATCH_SIZE,
-            sparse=False,
-            num_of_attributes=num_of_attributes,
-        )
-
-        with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
-            attrs = ["features_" + str(attr) for attr in range(num_of_attributes)]
+        with tiledb.open(uri_x) as x, tiledb.open(uri_y) as y:
+            attrs = [f"features_{attr}" for attr in range(num_attrs)]
             kwargs = dict(
                 x_array=x,
                 y_array=y,
@@ -195,18 +158,18 @@ class TestTileDBTensorflowDataAPI:
                 tensor_generator(
                     dense_batch_cls=TensorflowDenseBatch,
                     sparse_batch_cls=TensorflowSparseBatch,
-                    **kwargs
+                    **kwargs,
                 ),
             ]
             for generator in generators:
                 generated_data = next(generator)
-                assert len(generated_data) == 2 * num_of_attributes
-                for attr in range(num_of_attributes):
+                assert len(generated_data) == 2 * num_attrs
+                for attr in range(num_attrs):
                     assert tuple(generated_data[attr].shape) <= (
                         BATCH_SIZE,
                         *input_shape[1:],
                     )
-                    assert tuple(generated_data[num_of_attributes + attr].shape) <= (
+                    assert tuple(generated_data[num_attrs + attr].shape) <= (
                         BATCH_SIZE,
                         NUM_OF_CLASSES,
                     )
@@ -215,31 +178,21 @@ class TestTileDBTensorflowDataAPI:
         self,
         tmpdir,
         input_shape,
-        num_of_attributes,
+        num_attrs,
         batch_shuffle,
         within_batch_shuffle,
         buffer_size,
     ):
-        array_uuid = str(uuid.uuid4())
-        tiledb_uri_x = os.path.join(tmpdir, "x" + array_uuid)
-        tiledb_uri_y = os.path.join(tmpdir, "y" + array_uuid)
-
-        ingest_in_tiledb(
-            uri=tiledb_uri_x,
-            data=np.random.rand(ROWS, *input_shape[1:]),
+        uri_x, uri_y = ingest_in_tiledb(
+            tmpdir,
+            data_x=np.random.rand(ROWS, *input_shape[1:]),
+            sparse_x=False,
+            data_y=np.random.rand(ROWS, NUM_OF_CLASSES),
+            sparse_y=False,
             batch_size=BATCH_SIZE,
-            sparse=False,
-            num_of_attributes=num_of_attributes,
+            num_attrs=num_attrs,
         )
-        ingest_in_tiledb(
-            uri=tiledb_uri_y,
-            data=np.random.rand(ROWS, NUM_OF_CLASSES),
-            batch_size=BATCH_SIZE,
-            sparse=False,
-            num_of_attributes=num_of_attributes,
-        )
-
-        with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
+        with tiledb.open(uri_x) as x, tiledb.open(uri_y) as y:
             dataset = TensorflowTileDBDataset(
                 x_array=x,
                 y_array=y,
@@ -248,8 +201,8 @@ class TestTileDBTensorflowDataAPI:
                 buffer_size=BATCH_SIZE - 1,
                 batch_shuffle=batch_shuffle,
                 within_batch_shuffle=within_batch_shuffle,
-                x_attrs=["features_" + str(attr) for attr in range(num_of_attributes)],
-                y_attrs=["features_" + str(attr) for attr in range(num_of_attributes)],
+                x_attrs=[f"features_{attr}" for attr in range(num_attrs)],
+                y_attrs=[f"features_{attr}" for attr in range(num_attrs)],
             )
             with pytest.raises(Exception) as excinfo:
                 next(iter(dataset))
