@@ -178,7 +178,7 @@ class TestTileDBTensorflowSparseDataAPI:
             data_x=spoiled_data,
             data_y=create_sparse_array_one_hot_2d(ROWS, NUM_OF_CLASSES),
             sparse_x=True,
-            sparse_y=False,
+            sparse_y=True,
             batch_size=BATCH_SIZE,
             num_attrs=num_attrs,
         )
