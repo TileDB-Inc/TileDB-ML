@@ -78,12 +78,8 @@ class TestTileDBSparsePyTorchDataloaderAPI:
                 batch_size=BATCH_SIZE,
                 buffer_size=buffer_size,
                 batch_shuffle=batch_shuffle,
-                x_attribute_names=[
-                    "features_" + str(attr) for attr in range(num_of_attributes)
-                ],
-                y_attribute_names=[
-                    "features_" + str(attr) for attr in range(num_of_attributes)
-                ],
+                x_attrs=["features_" + str(attr) for attr in range(num_of_attributes)],
+                y_attrs=["features_" + str(attr) for attr in range(num_of_attributes)],
             )
 
             assert isinstance(tiledb_dataset, torch.utils.data.IterableDataset)
@@ -133,12 +129,8 @@ class TestTileDBSparsePyTorchDataloaderAPI:
                 batch_size=BATCH_SIZE,
                 buffer_size=buffer_size,
                 batch_shuffle=batch_shuffle,
-                x_attribute_names=[
-                    "features_" + str(attr) for attr in range(num_of_attributes)
-                ],
-                y_attribute_names=[
-                    "features_" + str(attr) for attr in range(num_of_attributes)
-                ],
+                x_attrs=["features_" + str(attr) for attr in range(num_of_attributes)],
+                y_attrs=["features_" + str(attr) for attr in range(num_of_attributes)],
             )
 
             assert isinstance(tiledb_dataset, torch.utils.data.IterableDataset)
@@ -190,10 +182,10 @@ class TestTileDBSparsePyTorchDataloaderAPI:
                     batch_size=BATCH_SIZE,
                     buffer_size=buffer_size,
                     batch_shuffle=batch_shuffle,
-                    x_attribute_names=[
+                    x_attrs=[
                         "features_" + str(attr) for attr in range(num_of_attributes)
                     ],
-                    y_attribute_names=[
+                    y_attrs=[
                         "features_" + str(attr) for attr in range(num_of_attributes)
                     ],
                 )
@@ -246,10 +238,10 @@ class TestTileDBSparsePyTorchDataloaderAPI:
                     batch_size=BATCH_SIZE,
                     buffer_size=buffer_size,
                     batch_shuffle=batch_shuffle,
-                    x_attribute_names=[
+                    x_attrs=[
                         "features_" + str(attr) for attr in range(num_of_attributes)
                     ],
-                    y_attribute_names=[
+                    y_attrs=[
                         "features_" + str(attr) for attr in range(num_of_attributes)
                     ],
                 )
@@ -305,12 +297,8 @@ class TestTileDBSparsePyTorchDataloaderAPI:
                 batch_size=BATCH_SIZE,
                 buffer_size=buffer_size,
                 batch_shuffle=batch_shuffle,
-                x_attribute_names=[
-                    "features_" + str(attr) for attr in range(num_of_attributes)
-                ],
-                y_attribute_names=[
-                    "features_" + str(attr) for attr in range(num_of_attributes)
-                ],
+                x_attrs=["features_" + str(attr) for attr in range(num_of_attributes)],
+                y_attrs=["features_" + str(attr) for attr in range(num_of_attributes)],
             )
             generated_data = next(tiledb_dataset.__iter__())
             for attr in range(num_of_attributes):
@@ -374,17 +362,14 @@ class TestTileDBSparsePyTorchDataloaderAPI:
 
         buffer_size = 10
         with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
+            dataset = PyTorchTileDBDataset(
+                x_array=x,
+                y_array=y,
+                batch_size=BATCH_SIZE,
+                buffer_size=buffer_size,
+                batch_shuffle=batch_shuffle,
+                x_attrs=["features_" + str(attr) for attr in range(num_of_attributes)],
+                y_attrs=["features_" + str(attr) for attr in range(num_of_attributes)],
+            )
             with pytest.raises(ValueError):
-                _ = PyTorchTileDBDataset(
-                    x_array=x,
-                    y_array=y,
-                    batch_size=BATCH_SIZE,
-                    buffer_size=buffer_size,
-                    batch_shuffle=batch_shuffle,
-                    x_attribute_names=[
-                        "features_" + str(attr) for attr in range(num_of_attributes)
-                    ],
-                    y_attribute_names=[
-                        "features_" + str(attr) for attr in range(num_of_attributes)
-                    ],
-                )
+                next(iter(dataset))
