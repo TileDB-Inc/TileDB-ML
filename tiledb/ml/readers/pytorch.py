@@ -60,9 +60,6 @@ class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Sequence[torch.Tenso
             kwargs.update(start_offset=start_offset, stop_offset=stop_offset)
         return tensor_generator(**kwargs)
 
-    def __len__(self) -> int:
-        return self._rows
-
 
 class PyTorchDenseBatch(BaseDenseBatch[torch.Tensor]):
     @staticmethod

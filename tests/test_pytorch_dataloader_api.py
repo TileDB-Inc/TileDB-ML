@@ -146,60 +146,6 @@ class TestPytorchDenseDataloader:
                     ],
                 )
 
-    def test_dataset_length(
-        self,
-        tmpdir,
-        input_shape,
-        workers,
-        num_of_attributes,
-        batch_shuffle,
-        within_batch_shuffle,
-        buffer_size,
-    ):
-        tiledb_uri_x = os.path.join(tmpdir, "x")
-        tiledb_uri_y = os.path.join(tmpdir, "y")
-
-        ingest_in_tiledb(
-            uri=tiledb_uri_x,
-            data=np.random.rand(ROWS, *input_shape),
-            batch_size=BATCH_SIZE,
-            sparse=False,
-            num_of_attributes=num_of_attributes,
-        )
-        ingest_in_tiledb(
-            uri=tiledb_uri_y,
-            data=np.random.randint(low=0, high=NUM_OF_CLASSES, size=ROWS),
-            batch_size=BATCH_SIZE,
-            sparse=False,
-            num_of_attributes=num_of_attributes,
-        )
-
-        with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
-            tiledb_dataset = PyTorchTileDBDataset(
-                x_array=x,
-                y_array=y,
-                batch_size=BATCH_SIZE,
-                buffer_size=buffer_size,
-                batch_shuffle=batch_shuffle,
-                within_batch_shuffle=within_batch_shuffle,
-                x_attrs=["features_" + str(attr) for attr in range(num_of_attributes)],
-                y_attrs=["features_" + str(attr) for attr in range(num_of_attributes)],
-            )
-
-            assert len(tiledb_dataset) == ROWS
-
-            # Same test without attribute names explicitly provided by the user
-            tiledb_dataset = PyTorchTileDBDataset(
-                x_array=x,
-                y_array=y,
-                batch_size=BATCH_SIZE,
-                buffer_size=buffer_size,
-                batch_shuffle=batch_shuffle,
-                within_batch_shuffle=within_batch_shuffle,
-            )
-
-            assert len(tiledb_dataset) == ROWS
-
     def test_dataset_generator_batch_output(
         self,
         tmpdir,
