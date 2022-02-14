@@ -28,24 +28,10 @@ BATCH_SIZE = 32
 ROWS = 1000
 
 
-@pytest.mark.parametrize(
-    "input_shape",
-    [
-        (10,),
-    ],
-)
-# We test for single and multiple attributes
-@pytest.mark.parametrize(
-    "num_of_attributes",
-    [
-        1,
-    ],
-)
-@pytest.mark.parametrize("batch_shuffle", [True, False])
-@pytest.mark.parametrize(
-    "buffer_size",
-    [50, None],
-)
+@pytest.mark.parametrize("input_shape", [(10,)])
+@pytest.mark.parametrize("num_of_attributes", [1])
+@pytest.mark.parametrize("batch_shuffle", [False, True])
+@pytest.mark.parametrize("buffer_size", [50, None])
 class TestTileDBTensorflowSparseDataAPI:
     def test_tiledb_tf_sparse_data_api_with_sparse_data_sparse_label(
         self, tmpdir, input_shape, num_of_attributes, batch_shuffle, buffer_size

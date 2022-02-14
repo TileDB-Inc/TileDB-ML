@@ -28,31 +28,11 @@ BATCH_SIZE = 32
 ROWS = 1000
 
 
-@pytest.mark.parametrize(
-    "input_shape",
-    [
-        (10,),
-        (10, 3),
-        (10, 10, 3),
-    ],
-)
-# We test for single and multiple attributes
-@pytest.mark.parametrize(
-    "num_of_attributes",
-    [1, 2, 3],
-)
-@pytest.mark.parametrize(
-    "batch_shuffle",
-    [True, False],
-)
-@pytest.mark.parametrize(
-    "within_batch_shuffle",
-    [True, False],
-)
-@pytest.mark.parametrize(
-    "buffer_size",
-    [50, None],
-)
+@pytest.mark.parametrize("input_shape", [(10,), (10, 3), (10, 10, 3)])
+@pytest.mark.parametrize("num_of_attributes", [1, 2, 3])
+@pytest.mark.parametrize("batch_shuffle", [True, False])
+@pytest.mark.parametrize("within_batch_shuffle", [True, False])
+@pytest.mark.parametrize("buffer_size", [50, None])
 class TestTileDBTensorflowDataAPI:
     def test_tiledb_tf_data_api_with_multiple_dim_data(
         self,
@@ -260,16 +240,15 @@ class TestTileDBTensorflowDataAPI:
             num_of_attributes=num_of_attributes,
         )
 
-        # Set the buffer_size less than the batch_size
-        buffer_size = 10
         with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
             with pytest.raises(ValueError):
                 TensorflowTileDBDataset(
                     x_array=x,
                     y_array=y,
                     batch_size=BATCH_SIZE,
+                    # Set the buffer_size less than the batch_size
+                    buffer_size=BATCH_SIZE - 1,
                     batch_shuffle=batch_shuffle,
-                    buffer_size=buffer_size,
                     within_batch_shuffle=within_batch_shuffle,
                     x_attrs=[
                         "features_" + str(attr) for attr in range(num_of_attributes)

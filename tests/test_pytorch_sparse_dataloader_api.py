@@ -17,40 +17,17 @@ BUFFER_SIZE = 50
 BATCH_SIZE = 20
 ROWS = 100
 
-
-@pytest.mark.parametrize(
-    "input_shape",
-    [
-        (10,),
-    ],
-)
 # TODO: Multiple workers require tiledb.SparseArray to be pickled hence serializable as well
-# We test for single and multiple workers
-@pytest.mark.parametrize(
-    "workers",
-    [0, 1, 2],
-)
-@pytest.mark.parametrize(
-    "num_of_attributes",
-    [1],
-)
-@pytest.mark.parametrize(
-    "batch_shuffle",
-    [False, True],
-)
-@pytest.mark.parametrize(
-    "buffer_size",
-    [50, None],
-)
+# @pytest.mark.parametrize("workers", [0, 1, 2])
+
+
+@pytest.mark.parametrize("input_shape", [(10,)])
+@pytest.mark.parametrize("num_of_attributes", [1])
+@pytest.mark.parametrize("batch_shuffle", [False, True])
+@pytest.mark.parametrize("buffer_size", [50, None])
 class TestTileDBSparsePyTorchDataloaderAPI:
     def test_tiledb_pytorch_sparse_data_api_with_sparse_data_sparse_label(
-        self,
-        tmpdir,
-        input_shape,
-        workers,
-        num_of_attributes,
-        batch_shuffle,
-        buffer_size,
+        self, tmpdir, input_shape, num_of_attributes, batch_shuffle, buffer_size
     ):
         tiledb_uri_x = os.path.join(tmpdir, "x")
         tiledb_uri_y = os.path.join(tmpdir, "y")
@@ -96,13 +73,7 @@ class TestTileDBSparsePyTorchDataloaderAPI:
             assert isinstance(tiledb_dataset, torch.utils.data.IterableDataset)
 
     def test_tiledb_pytorch_sparse_data_api_with_sparse_data_dense_label(
-        self,
-        tmpdir,
-        input_shape,
-        workers,
-        num_of_attributes,
-        batch_shuffle,
-        buffer_size,
+        self, tmpdir, input_shape, num_of_attributes, batch_shuffle, buffer_size
     ):
         tiledb_uri_x = os.path.join(tmpdir, "x")
         tiledb_uri_y = os.path.join(tmpdir, "y")
@@ -147,20 +118,14 @@ class TestTileDBSparsePyTorchDataloaderAPI:
             assert isinstance(tiledb_dataset, torch.utils.data.IterableDataset)
 
     def test_tiledb_pytorch_sparse_data_api_with_sparse_data_diff_number_of_x_y_rows(
-        self,
-        tmpdir,
-        input_shape,
-        workers,
-        num_of_attributes,
-        batch_shuffle,
-        buffer_size,
+        self, tmpdir, input_shape, num_of_attributes, batch_shuffle, buffer_size
     ):
         tiledb_uri_x = os.path.join(tmpdir, "x")
         tiledb_uri_y = os.path.join(tmpdir, "y")
 
         ingest_in_tiledb(
             uri=tiledb_uri_x,
-            # Add one extra row on X - Spoiled Data by adding one more row in X data
+            # Add one extra row on X
             data=create_sparse_array_one_hot_2d(ROWS + 1, input_shape[0]),
             batch_size=BATCH_SIZE,
             sparse=True,
@@ -201,13 +166,7 @@ class TestTileDBSparsePyTorchDataloaderAPI:
                 )
 
     def test_tiledb_pytorch_sparse_data_api_with_diff_number_of_batch_x_y_rows_empty_record_except(
-        self,
-        tmpdir,
-        input_shape,
-        workers,
-        num_of_attributes,
-        batch_shuffle,
-        buffer_size,
+        self, tmpdir, input_shape, num_of_attributes, batch_shuffle, buffer_size
     ):
         tiledb_uri_x = os.path.join(tmpdir, "x")
         tiledb_uri_y = os.path.join(tmpdir, "y")
@@ -264,13 +223,7 @@ class TestTileDBSparsePyTorchDataloaderAPI:
                     pass
 
     def test_tiledb_pytorch_sparse_sparse_label_data(
-        self,
-        tmpdir,
-        input_shape,
-        workers,
-        num_of_attributes,
-        batch_shuffle,
-        buffer_size,
+        self, tmpdir, input_shape, num_of_attributes, batch_shuffle, buffer_size
     ):
         tiledb_uri_x = os.path.join(tmpdir, "x")
         tiledb_uri_y = os.path.join(tmpdir, "y")
@@ -334,13 +287,7 @@ class TestTileDBSparsePyTorchDataloaderAPI:
                 )
 
     def test_buffer_size_geq_batch_size_exception(
-        self,
-        tmpdir,
-        input_shape,
-        workers,
-        num_of_attributes,
-        batch_shuffle,
-        buffer_size,
+        self, tmpdir, input_shape, num_of_attributes, batch_shuffle, buffer_size
     ):
         tiledb_uri_x = os.path.join(tmpdir, "x")
         tiledb_uri_y = os.path.join(tmpdir, "y")
@@ -360,13 +307,13 @@ class TestTileDBSparsePyTorchDataloaderAPI:
             num_of_attributes=num_of_attributes,
         )
 
-        buffer_size = 10
         with tiledb.open(tiledb_uri_x) as x, tiledb.open(tiledb_uri_y) as y:
             dataset = PyTorchTileDBDataset(
                 x_array=x,
                 y_array=y,
                 batch_size=BATCH_SIZE,
-                buffer_size=buffer_size,
+                # Set the buffer_size less than the batch_size
+                buffer_size=BATCH_SIZE - 1,
                 batch_shuffle=batch_shuffle,
                 x_attrs=["features_" + str(attr) for attr in range(num_of_attributes)],
                 y_attrs=["features_" + str(attr) for attr in range(num_of_attributes)],

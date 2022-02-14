@@ -17,41 +17,16 @@ BATCH_SIZE = 20
 ROWS = 100
 
 
-@pytest.mark.parametrize(
-    "input_shape",
-    [
-        (10,),
-        (10, 3),
-        (10, 10, 3),
-    ],
-)
-# We test for single and multiple workers
-@pytest.mark.parametrize(
-    "workers",
-    [1, 2, 3],
-)
-@pytest.mark.parametrize(
-    "num_of_attributes",
-    [1, 2, 3],
-)
-@pytest.mark.parametrize(
-    "batch_shuffle",
-    [True, False],
-)
-@pytest.mark.parametrize(
-    "within_batch_shuffle",
-    [True, False],
-)
-@pytest.mark.parametrize(
-    "buffer_size",
-    [50, None],
-)
+@pytest.mark.parametrize("input_shape", [(10,), (10, 3), (10, 10, 3)])
+@pytest.mark.parametrize("num_of_attributes", [1, 2, 3])
+@pytest.mark.parametrize("batch_shuffle", [True, False])
+@pytest.mark.parametrize("within_batch_shuffle", [True, False])
+@pytest.mark.parametrize("buffer_size", [50, None])
 class TestPytorchDenseDataloader:
     def test_tiledb_pytorch_data_api_train_with_multiple_dim_data(
         self,
         tmpdir,
         input_shape,
-        workers,
         num_of_attributes,
         batch_shuffle,
         within_batch_shuffle,
@@ -104,7 +79,6 @@ class TestPytorchDenseDataloader:
         self,
         tmpdir,
         input_shape,
-        workers,
         num_of_attributes,
         batch_shuffle,
         within_batch_shuffle,
@@ -146,12 +120,12 @@ class TestPytorchDenseDataloader:
                     ],
                 )
 
+    @pytest.mark.parametrize("workers", [1, 2, 3])
     def test_dataset_generator_batch_output(
         self,
         tmpdir,
         input_shape,
         workers,
-        mocker,
         num_of_attributes,
         batch_shuffle,
         within_batch_shuffle,
@@ -204,6 +178,7 @@ class TestPytorchDenseDataloader:
                         NUM_OF_CLASSES,
                     )
 
+    @pytest.mark.parametrize("workers", [1, 2, 3])
     def test_no_duplicates_with_multiple_workers(
         self,
         tmpdir,
