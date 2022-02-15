@@ -22,7 +22,7 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
 # Test parameters
-NUM_OF_CLASSES = 1
+NUM_OF_CLASSES = 5
 BATCH_SIZE = 32
 ROWS = 1000
 

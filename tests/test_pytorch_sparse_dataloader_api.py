@@ -11,7 +11,6 @@ from .utils import create_sparse_array_one_hot_2d, ingest_in_tiledb
 
 # Test parameters
 NUM_OF_CLASSES = 5
-BUFFER_SIZE = 50
 BATCH_SIZE = 20
 ROWS = 100
 
