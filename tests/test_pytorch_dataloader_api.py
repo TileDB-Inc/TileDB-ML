@@ -111,7 +111,7 @@ class TestPyTorchTileDBDatasetDense:
             tmpdir,
             # Add one extra row on X
             data_x=np.random.rand(ROWS + 1, *input_shape),
-            data_y=np.random.rand(ROWS, NUM_OF_CLASSES),
+            data_y=create_rand_labels(ROWS, NUM_OF_CLASSES),
             sparse_x=False,
             sparse_y=False,
             batch_size=BATCH_SIZE,

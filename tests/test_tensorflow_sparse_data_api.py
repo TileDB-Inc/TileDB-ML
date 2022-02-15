@@ -90,7 +90,7 @@ class TestTensorflowTileDBDatasetSparse:
         uri_x, uri_y = ingest_in_tiledb(
             tmpdir,
             data_x=create_rand_labels(ROWS, NUM_OF_FEATURES, one_hot=True),
-            data_y=np.random.rand(ROWS, NUM_OF_CLASSES),
+            data_y=create_rand_labels(ROWS, NUM_OF_CLASSES),
             sparse_x=True,
             sparse_y=False,
             batch_size=BATCH_SIZE,
