@@ -7,7 +7,7 @@ import torch
 import tiledb
 from tiledb.ml.readers.pytorch import PyTorchTileDBDataset
 
-from .utils import create_sparse_array_one_hot_2d, ingest_in_tiledb
+from .utils import create_rand_labels, ingest_in_tiledb
 
 # Test parameters
 NUM_OF_FEATURES = 10
@@ -28,8 +28,8 @@ class TestTileDBSparsePyTorchDataloaderAPI:
     ):
         uri_x, uri_y = ingest_in_tiledb(
             tmpdir,
-            data_x=create_sparse_array_one_hot_2d(ROWS, NUM_OF_FEATURES),
-            data_y=create_sparse_array_one_hot_2d(ROWS, NUM_OF_CLASSES),
+            data_x=create_rand_labels(ROWS, NUM_OF_FEATURES, one_hot=True),
+            data_y=create_rand_labels(ROWS, NUM_OF_CLASSES, one_hot=True),
             sparse_x=True,
             sparse_y=True,
             batch_size=BATCH_SIZE,
@@ -54,8 +54,8 @@ class TestTileDBSparsePyTorchDataloaderAPI:
     ):
         uri_x, uri_y = ingest_in_tiledb(
             tmpdir,
-            data_x=create_sparse_array_one_hot_2d(ROWS, NUM_OF_FEATURES),
-            data_y=np.random.randint(low=0, high=NUM_OF_CLASSES, size=ROWS),
+            data_x=create_rand_labels(ROWS, NUM_OF_FEATURES, one_hot=True),
+            data_y=create_rand_labels(ROWS, NUM_OF_CLASSES),
             sparse_x=True,
             sparse_y=False,
             batch_size=BATCH_SIZE,
@@ -81,8 +81,8 @@ class TestTileDBSparsePyTorchDataloaderAPI:
         uri_x, uri_y = ingest_in_tiledb(
             tmpdir,
             # Add one extra row on X
-            data_x=create_sparse_array_one_hot_2d(ROWS + 1, NUM_OF_FEATURES),
-            data_y=create_sparse_array_one_hot_2d(ROWS, NUM_OF_CLASSES),
+            data_x=create_rand_labels(ROWS + 1, NUM_OF_FEATURES, one_hot=True),
+            data_y=create_rand_labels(ROWS, NUM_OF_CLASSES, one_hot=True),
             sparse_x=True,
             sparse_y=True,
             batch_size=BATCH_SIZE,
@@ -105,12 +105,12 @@ class TestTileDBSparsePyTorchDataloaderAPI:
     def test_sparse_data_api_with_diff_number_of_batch_x_y_rows_empty_record_except(
         self, tmpdir, num_attrs, batch_shuffle, buffer_size
     ):
-        spoiled_data = create_sparse_array_one_hot_2d(ROWS, NUM_OF_FEATURES)
+        spoiled_data = create_rand_labels(ROWS, NUM_OF_FEATURES, one_hot=True)
         spoiled_data[np.nonzero(spoiled_data[0])] = 0
         uri_x, uri_y = ingest_in_tiledb(
             tmpdir,
             data_x=spoiled_data,
-            data_y=create_sparse_array_one_hot_2d(ROWS, NUM_OF_CLASSES),
+            data_y=create_rand_labels(ROWS, NUM_OF_CLASSES, one_hot=True),
             sparse_x=True,
             sparse_y=True,
             batch_size=BATCH_SIZE,
@@ -138,8 +138,8 @@ class TestTileDBSparsePyTorchDataloaderAPI:
     ):
         uri_x, uri_y = ingest_in_tiledb(
             tmpdir,
-            data_x=create_sparse_array_one_hot_2d(ROWS, NUM_OF_FEATURES),
-            data_y=create_sparse_array_one_hot_2d(ROWS, NUM_OF_CLASSES),
+            data_x=create_rand_labels(ROWS, NUM_OF_FEATURES, one_hot=True),
+            data_y=create_rand_labels(ROWS, NUM_OF_CLASSES, one_hot=True),
             sparse_x=True,
             sparse_y=True,
             batch_size=BATCH_SIZE,
@@ -172,8 +172,8 @@ class TestTileDBSparsePyTorchDataloaderAPI:
     ):
         uri_x, uri_y = ingest_in_tiledb(
             tmpdir,
-            data_x=create_sparse_array_one_hot_2d(ROWS, NUM_OF_FEATURES),
-            data_y=create_sparse_array_one_hot_2d(ROWS, NUM_OF_CLASSES),
+            data_x=create_rand_labels(ROWS, NUM_OF_FEATURES, one_hot=True),
+            data_y=create_rand_labels(ROWS, NUM_OF_CLASSES, one_hot=True),
             sparse_x=True,
             sparse_y=True,
             batch_size=BATCH_SIZE,

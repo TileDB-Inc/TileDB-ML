@@ -47,9 +47,19 @@ def _ingest_in_tiledb(
         tiledb_array[idx] = {f"features_{attr}": data[idx] for attr in range(num_attrs)}
 
 
-def create_sparse_array_one_hot_2d(rows: int, cols: int) -> np.ndarray:
-    seed = np.random.randint(low=0, high=cols, size=rows)
-    seed[-1] = cols - 1
-    b = np.zeros((seed.size, seed.max() + 1))
-    b[np.arange(seed.size), seed] = 1
-    return b
+def create_rand_labels(
+    num_rows: int, num_classes: int, one_hot: bool = False
+) -> np.ndarray:
+    """Create labels for `num_rows` observations with `num_classes` classes.
+
+    :param num_rows: Number of observations to create labels for.
+    :param num_classes: Number of possible labels.
+    :param one_hot: Whether to create one-hot labels.
+
+    :returns:
+    - If one-hot is False, 1-D numpy array of length `num_rows` with labels from 0 to
+      `num_classes`
+    - If one-hot is True, binary 2-D numpy array of shape `(num_rows, num_classes)`.
+    """
+    labels = np.random.randint(num_classes, size=num_rows)
+    return np.eye(num_classes, dtype=np.uint8)[labels] if one_hot else labels

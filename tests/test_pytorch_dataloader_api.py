@@ -7,7 +7,7 @@ import torch
 import tiledb
 from tiledb.ml.readers.pytorch import PyTorchTileDBDataset
 
-from .utils import ingest_in_tiledb
+from .utils import create_rand_labels, ingest_in_tiledb
 
 # Test parameters
 NUM_OF_CLASSES = 5
@@ -33,7 +33,7 @@ class TestPytorchDenseDataloader:
         uri_x, uri_y = ingest_in_tiledb(
             tmpdir,
             data_x=np.random.rand(ROWS, *input_shape),
-            data_y=np.random.randint(low=0, high=NUM_OF_CLASSES, size=ROWS),
+            data_y=create_rand_labels(ROWS, NUM_OF_CLASSES),
             sparse_x=False,
             sparse_y=False,
             batch_size=BATCH_SIZE,
@@ -146,7 +146,7 @@ class TestPytorchDenseDataloader:
             tmpdir,
             data_x=np.random.rand(ROWS, *input_shape),
             sparse_x=False,
-            data_y=np.random.randint(low=0, high=NUM_OF_CLASSES, size=ROWS),
+            data_y=create_rand_labels(ROWS, NUM_OF_CLASSES),
             sparse_y=False,
             batch_size=BATCH_SIZE,
             num_attrs=num_attrs,
