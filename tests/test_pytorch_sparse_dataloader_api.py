@@ -10,6 +10,7 @@ from tiledb.ml.readers.pytorch import PyTorchTileDBDataset
 from .utils import create_sparse_array_one_hot_2d, ingest_in_tiledb
 
 # Test parameters
+NUM_OF_FEATURES = 10
 NUM_OF_CLASSES = 5
 BATCH_SIZE = 20
 ROWS = 100
@@ -18,17 +19,16 @@ ROWS = 100
 # @pytest.mark.parametrize("workers", [0, 1, 2])
 
 
-@pytest.mark.parametrize("input_shape", [(10,)])
 @pytest.mark.parametrize("num_attrs", [1])
 @pytest.mark.parametrize("batch_shuffle", [False, True])
 @pytest.mark.parametrize("buffer_size", [50, None])
 class TestTileDBSparsePyTorchDataloaderAPI:
     def test_sparse_data_api_with_sparse_data_sparse_label(
-        self, tmpdir, input_shape, num_attrs, batch_shuffle, buffer_size
+        self, tmpdir, num_attrs, batch_shuffle, buffer_size
     ):
         uri_x, uri_y = ingest_in_tiledb(
             tmpdir,
-            data_x=create_sparse_array_one_hot_2d(ROWS, input_shape[0]),
+            data_x=create_sparse_array_one_hot_2d(ROWS, NUM_OF_FEATURES),
             data_y=create_sparse_array_one_hot_2d(ROWS, NUM_OF_CLASSES),
             sparse_x=True,
             sparse_y=True,
@@ -50,11 +50,11 @@ class TestTileDBSparsePyTorchDataloaderAPI:
                 assert isinstance(dataset, torch.utils.data.IterableDataset)
 
     def test_sparse_data_api_with_sparse_data_dense_label(
-        self, tmpdir, input_shape, num_attrs, batch_shuffle, buffer_size
+        self, tmpdir, num_attrs, batch_shuffle, buffer_size
     ):
         uri_x, uri_y = ingest_in_tiledb(
             tmpdir,
-            data_x=create_sparse_array_one_hot_2d(ROWS, input_shape[0]),
+            data_x=create_sparse_array_one_hot_2d(ROWS, NUM_OF_FEATURES),
             data_y=np.random.randint(low=0, high=NUM_OF_CLASSES, size=ROWS),
             sparse_x=True,
             sparse_y=False,
@@ -76,12 +76,12 @@ class TestTileDBSparsePyTorchDataloaderAPI:
                 assert isinstance(dataset, torch.utils.data.IterableDataset)
 
     def test_sparse_data_api_with_sparse_data_diff_number_of_x_y_rows(
-        self, tmpdir, input_shape, num_attrs, batch_shuffle, buffer_size
+        self, tmpdir, num_attrs, batch_shuffle, buffer_size
     ):
         uri_x, uri_y = ingest_in_tiledb(
             tmpdir,
             # Add one extra row on X
-            data_x=create_sparse_array_one_hot_2d(ROWS + 1, input_shape[0]),
+            data_x=create_sparse_array_one_hot_2d(ROWS + 1, NUM_OF_FEATURES),
             data_y=create_sparse_array_one_hot_2d(ROWS, NUM_OF_CLASSES),
             sparse_x=True,
             sparse_y=True,
@@ -103,9 +103,9 @@ class TestTileDBSparsePyTorchDataloaderAPI:
                     )
 
     def test_sparse_data_api_with_diff_number_of_batch_x_y_rows_empty_record_except(
-        self, tmpdir, input_shape, num_attrs, batch_shuffle, buffer_size
+        self, tmpdir, num_attrs, batch_shuffle, buffer_size
     ):
-        spoiled_data = create_sparse_array_one_hot_2d(ROWS, input_shape[0])
+        spoiled_data = create_sparse_array_one_hot_2d(ROWS, NUM_OF_FEATURES)
         spoiled_data[np.nonzero(spoiled_data[0])] = 0
         uri_x, uri_y = ingest_in_tiledb(
             tmpdir,
@@ -134,11 +134,11 @@ class TestTileDBSparsePyTorchDataloaderAPI:
                         pass
 
     def test_sparse_sparse_label_data(
-        self, tmpdir, input_shape, num_attrs, batch_shuffle, buffer_size
+        self, tmpdir, num_attrs, batch_shuffle, buffer_size
     ):
         uri_x, uri_y = ingest_in_tiledb(
             tmpdir,
-            data_x=create_sparse_array_one_hot_2d(ROWS, input_shape[0]),
+            data_x=create_sparse_array_one_hot_2d(ROWS, NUM_OF_FEATURES),
             data_y=create_sparse_array_one_hot_2d(ROWS, NUM_OF_CLASSES),
             sparse_x=True,
             sparse_y=True,
@@ -161,18 +161,18 @@ class TestTileDBSparsePyTorchDataloaderAPI:
                 for attr in range(num_attrs):
                     assert generated_data[attr].layout == torch.sparse_coo
                     assert generated_data[attr + num_attrs].layout == torch.sparse_coo
-                    assert generated_data[attr].size() == (BATCH_SIZE, *input_shape)
+                    assert generated_data[attr].size() == (BATCH_SIZE, NUM_OF_FEATURES)
                     assert generated_data[attr + num_attrs].size() == (
                         BATCH_SIZE,
                         NUM_OF_CLASSES,
                     )
 
     def test_buffer_size_geq_batch_size_exception(
-        self, tmpdir, input_shape, num_attrs, batch_shuffle, buffer_size
+        self, tmpdir, num_attrs, batch_shuffle, buffer_size
     ):
         uri_x, uri_y = ingest_in_tiledb(
             tmpdir,
-            data_x=create_sparse_array_one_hot_2d(ROWS, input_shape[0]),
+            data_x=create_sparse_array_one_hot_2d(ROWS, NUM_OF_FEATURES),
             data_y=create_sparse_array_one_hot_2d(ROWS, NUM_OF_CLASSES),
             sparse_x=True,
             sparse_y=True,

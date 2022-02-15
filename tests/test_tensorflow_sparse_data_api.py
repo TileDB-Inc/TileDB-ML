@@ -22,22 +22,22 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
 # Test parameters
+NUM_OF_FEATURES = 10
 NUM_OF_CLASSES = 5
 BATCH_SIZE = 32
 ROWS = 1000
 
 
-@pytest.mark.parametrize("input_shape", [(10,)])
 @pytest.mark.parametrize("num_attrs", [1])
 @pytest.mark.parametrize("batch_shuffle", [False, True])
 @pytest.mark.parametrize("buffer_size", [50, None])
 class TestTileDBTensorflowSparseDataAPI:
     def test_sparse_data_api_with_sparse_data_sparse_label(
-        self, tmpdir, input_shape, num_attrs, batch_shuffle, buffer_size
+        self, tmpdir, num_attrs, batch_shuffle, buffer_size
     ):
         uri_x, uri_y = ingest_in_tiledb(
             tmpdir,
-            data_x=create_sparse_array_one_hot_2d(ROWS, input_shape[0]),
+            data_x=create_sparse_array_one_hot_2d(ROWS, NUM_OF_FEATURES),
             data_y=create_sparse_array_one_hot_2d(ROWS, NUM_OF_CLASSES),
             sparse_x=True,
             sparse_y=True,
@@ -59,11 +59,11 @@ class TestTileDBTensorflowSparseDataAPI:
                 assert isinstance(dataset, tf.data.Dataset)
 
     def test_sparse_data_api_with_dense_data_sparse_label_except(
-        self, tmpdir, input_shape, num_attrs, batch_shuffle, buffer_size
+        self, tmpdir, num_attrs, batch_shuffle, buffer_size
     ):
         uri_x, uri_y = ingest_in_tiledb(
             tmpdir,
-            data_x=np.random.rand(ROWS, *input_shape),
+            data_x=np.random.rand(ROWS, NUM_OF_FEATURES),
             data_y=create_sparse_array_one_hot_2d(ROWS, NUM_OF_CLASSES),
             sparse_x=False,
             sparse_y=True,
@@ -85,11 +85,11 @@ class TestTileDBTensorflowSparseDataAPI:
                     )
 
     def test_sparse_data_api_with_sparse_data_dense_label(
-        self, tmpdir, input_shape, num_attrs, batch_shuffle, buffer_size
+        self, tmpdir, num_attrs, batch_shuffle, buffer_size
     ):
         uri_x, uri_y = ingest_in_tiledb(
             tmpdir,
-            data_x=create_sparse_array_one_hot_2d(ROWS, input_shape[0]),
+            data_x=create_sparse_array_one_hot_2d(ROWS, NUM_OF_FEATURES),
             data_y=np.random.rand(ROWS, NUM_OF_CLASSES),
             sparse_x=True,
             sparse_y=False,
@@ -111,10 +111,10 @@ class TestTileDBTensorflowSparseDataAPI:
                 assert isinstance(dataset, tf.data.Dataset)
 
     def test_sparse_data_api_with_sparse_data_diff_number_of_batch_x_y_rows(
-        self, tmpdir, input_shape, num_attrs, batch_shuffle, buffer_size
+        self, tmpdir, num_attrs, batch_shuffle, buffer_size
     ):
         # Empty one random row
-        spoiled_data = create_sparse_array_one_hot_2d(ROWS, input_shape[0])
+        spoiled_data = create_sparse_array_one_hot_2d(ROWS, NUM_OF_FEATURES)
         spoiled_data[np.nonzero(spoiled_data[0])] = 0
         uri_x, uri_y = ingest_in_tiledb(
             tmpdir,
@@ -142,12 +142,12 @@ class TestTileDBTensorflowSparseDataAPI:
                         pass
 
     def test_sparse_except_with_diff_number_of_x_y_rows(
-        self, tmpdir, input_shape, num_attrs, batch_shuffle, buffer_size
+        self, tmpdir, num_attrs, batch_shuffle, buffer_size
     ):
         uri_x, uri_y = ingest_in_tiledb(
             tmpdir,
             # Add one extra row on X
-            data_x=create_sparse_array_one_hot_2d(ROWS + 1, input_shape[0]),
+            data_x=create_sparse_array_one_hot_2d(ROWS + 1, NUM_OF_FEATURES),
             data_y=create_sparse_array_one_hot_2d(ROWS, NUM_OF_CLASSES),
             sparse_x=True,
             sparse_y=True,
@@ -169,9 +169,9 @@ class TestTileDBTensorflowSparseDataAPI:
                     )
 
     def test_except_with_diff_number_of_batch_x_y_rows_empty_record(
-        self, tmpdir, input_shape, num_attrs, batch_shuffle, buffer_size
+        self, tmpdir, num_attrs, batch_shuffle, buffer_size
     ):
-        spoiled_data = create_sparse_array_one_hot_2d(ROWS, input_shape[0])
+        spoiled_data = create_sparse_array_one_hot_2d(ROWS, NUM_OF_FEATURES)
         spoiled_data[np.nonzero(spoiled_data[0])] = 0
         uri_x, uri_y = ingest_in_tiledb(
             tmpdir,
@@ -199,11 +199,11 @@ class TestTileDBTensorflowSparseDataAPI:
                         pass
 
     def test_generator_sparse_x_dense_y_batch_output(
-        self, tmpdir, input_shape, num_attrs, batch_shuffle, buffer_size
+        self, tmpdir, num_attrs, batch_shuffle, buffer_size
     ):
         uri_x, uri_y = ingest_in_tiledb(
             tmpdir,
-            data_x=create_sparse_array_one_hot_2d(ROWS, input_shape[0]),
+            data_x=create_sparse_array_one_hot_2d(ROWS, NUM_OF_FEATURES),
             data_y=np.random.rand(ROWS, NUM_OF_CLASSES),
             sparse_x=True,
             sparse_y=False,
@@ -250,11 +250,11 @@ class TestTileDBTensorflowSparseDataAPI:
                         )
 
     def test_generator_sparse_x_sparse_y_batch_output(
-        self, tmpdir, input_shape, num_attrs, batch_shuffle, buffer_size
+        self, tmpdir, num_attrs, batch_shuffle, buffer_size
     ):
         uri_x, uri_y = ingest_in_tiledb(
             tmpdir,
-            data_x=create_sparse_array_one_hot_2d(ROWS, input_shape[0]),
+            data_x=create_sparse_array_one_hot_2d(ROWS, NUM_OF_FEATURES),
             data_y=create_sparse_array_one_hot_2d(ROWS, NUM_OF_CLASSES),
             sparse_x=True,
             sparse_y=True,
