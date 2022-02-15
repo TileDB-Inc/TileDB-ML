@@ -424,35 +424,35 @@ class TestTensorflowKerasModel:
         tiledb_model_obj_none = TensorflowKerasTileDBModel(uri=tiledb_uri, model=None)
         assert tiledb_model_obj_none.preview() == ""
 
-    def test_get_cloud_uri(self, tmpdir, api, loss, optimizer, metrics, mocker):
-        model = (
-            api(num_hidden=1, num_classes=2, input_dim=3)
-            if api != ConfigSubclassModel
-            else api(hidden_units=[16, 16, 10])
-        )
-
-        tiledb_uri = os.path.join(tmpdir, "model_array")
-
-        # Compiles the model if optimizer is present
-        if optimizer:
-            model.compile(loss=loss, optimizer=optimizer, metrics=[metrics])
-
-        mocker.patch("tiledb.ml.models._cloud_utils.get_s3_prefix", return_value=None)
-        # With model given as argument
-        input_shape = tuple(np.random.randint(20, size=2))
-        if not model.built:
-            # Subclass case
-            model.build(input_shape)
-        tiledb_model_obj = TensorflowKerasTileDBModel(uri=tiledb_uri, model=model)
-        with pytest.raises(ValueError):
-            tiledb_model_obj.get_cloud_uri(tiledb_uri)
-
-        mocker.patch("tiledb.ml.models._cloud_utils.get_s3_prefix", return_value="bar")
-        actual = tiledb_model_obj.get_cloud_uri(tiledb_uri)
-        expected = "tiledb://{}/{}".format(
-            tiledb_model_obj.namespace, os.path.join("bar", tiledb_uri)
-        )
-        assert actual == expected
+    # def test_get_cloud_uri(self, tmpdir, api, loss, optimizer, metrics, mocker):
+    #     model = (
+    #         api(num_hidden=1, num_classes=2, input_dim=3)
+    #         if api != ConfigSubclassModel
+    #         else api(hidden_units=[16, 16, 10])
+    #     )
+    #
+    #     tiledb_uri = os.path.join(tmpdir, "model_array")
+    #
+    #     # Compiles the model if optimizer is present
+    #     if optimizer:
+    #         model.compile(loss=loss, optimizer=optimizer, metrics=[metrics])
+    #
+    #     mocker.patch("tiledb.ml.models._cloud_utils.get_s3_prefix", return_value=None)
+    #     # With model given as argument
+    #     input_shape = tuple(np.random.randint(20, size=2))
+    #     if not model.built:
+    #         # Subclass case
+    #         model.build(input_shape)
+    #     tiledb_model_obj = TensorflowKerasTileDBModel(uri=tiledb_uri, model=model)
+    #     with pytest.raises(ValueError):
+    #         tiledb_model_obj.get_cloud_uri(tiledb_uri)
+    #
+    #     mocker.patch("tiledb.ml.models._cloud_utils.get_s3_prefix", return_value="bar")
+    #     actual = tiledb_model_obj.get_cloud_uri(tiledb_uri)
+    #     expected = "tiledb://{}/{}".format(
+    #         tiledb_model_obj.namespace, os.path.join("bar", tiledb_uri)
+    #     )
+    #     assert actual == expected
 
 
 def test_file_properties(tmpdir):
