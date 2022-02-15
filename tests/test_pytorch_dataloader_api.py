@@ -101,7 +101,7 @@ class TestPytorchDenseDataloader:
     ):
         uri_x, uri_y = ingest_in_tiledb(
             tmpdir,
-            data_x=np.random.rand(ROWS, *input_shape[1:]),
+            data_x=np.random.rand(ROWS, *input_shape),
             sparse_x=False,
             data_y=np.random.rand(ROWS, NUM_OF_CLASSES),
             sparse_y=False,
@@ -127,14 +127,8 @@ class TestPytorchDenseDataloader:
                 assert len(data) == 2 * num_attrs
 
                 for attr in range(num_attrs):
-                    assert data[attr].shape <= (
-                        BATCH_SIZE,
-                        *input_shape[1:],
-                    )
-                    assert data[num_attrs + attr].shape <= (
-                        BATCH_SIZE,
-                        NUM_OF_CLASSES,
-                    )
+                    assert data[attr].shape <= (BATCH_SIZE, *input_shape)
+                    assert data[num_attrs + attr].shape <= (BATCH_SIZE, NUM_OF_CLASSES)
 
     @pytest.mark.parametrize("workers", [1, 2, 3])
     def test_no_duplicates_with_multiple_workers(
