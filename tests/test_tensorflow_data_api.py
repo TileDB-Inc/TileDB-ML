@@ -27,8 +27,8 @@ BATCH_SIZE = 32
 ROWS = 1000
 
 
-@pytest.mark.parametrize("input_shape", [(10,), (10, 3), (10, 10, 3)])
-@pytest.mark.parametrize("num_attrs", [1, 2, 3])
+@pytest.mark.parametrize("input_shape", [(10,), (10, 3)])
+@pytest.mark.parametrize("num_attrs", [1, 2])
 @pytest.mark.parametrize("batch_shuffle", [True, False])
 @pytest.mark.parametrize("within_batch_shuffle", [True, False])
 @pytest.mark.parametrize("buffer_size", [50, None])
