@@ -14,7 +14,7 @@ from tiledb.ml.readers.tensorflow import (
     TensorflowTileDBDataset,
 )
 
-from .utils import ingest_in_tiledb
+from .utils import create_rand_labels, ingest_in_tiledb
 
 # Suppress all Tensorflow messages
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
@@ -32,75 +32,8 @@ ROWS = 1000
 @pytest.mark.parametrize("batch_shuffle", [True, False])
 @pytest.mark.parametrize("within_batch_shuffle", [True, False])
 @pytest.mark.parametrize("buffer_size", [50, None])
-class TestTileDBTensorflowDataAPI:
-    def test_data_api_with_multiple_dim_data(
-        self,
-        tmpdir,
-        input_shape,
-        num_attrs,
-        batch_shuffle,
-        within_batch_shuffle,
-        buffer_size,
-    ):
-        uri_x, uri_y = ingest_in_tiledb(
-            tmpdir,
-            data_x=np.random.rand(ROWS, *input_shape),
-            data_y=np.random.rand(ROWS, NUM_OF_CLASSES),
-            sparse_x=False,
-            sparse_y=False,
-            batch_size=BATCH_SIZE,
-            num_attrs=num_attrs,
-        )
-        attrs = [f"features_{attr}" for attr in range(num_attrs)]
-        with tiledb.open(uri_x) as x, tiledb.open(uri_y) as y:
-            for pass_attrs in True, False:
-                dataset = TensorflowTileDBDataset(
-                    x_array=x,
-                    y_array=y,
-                    batch_size=BATCH_SIZE,
-                    batch_shuffle=batch_shuffle,
-                    buffer_size=buffer_size,
-                    within_batch_shuffle=within_batch_shuffle,
-                    x_attrs=attrs if pass_attrs else [],
-                    y_attrs=attrs if pass_attrs else [],
-                )
-                assert isinstance(dataset, tf.data.Dataset)
-
-    def test_except_with_diff_number_of_x_y_rows(
-        self,
-        tmpdir,
-        input_shape,
-        num_attrs,
-        batch_shuffle,
-        within_batch_shuffle,
-        buffer_size,
-    ):
-        uri_x, uri_y = ingest_in_tiledb(
-            tmpdir,
-            # Add one extra row on X
-            data_x=np.random.rand(ROWS + 1, *input_shape),
-            sparse_x=False,
-            data_y=np.random.rand(ROWS, NUM_OF_CLASSES),
-            sparse_y=False,
-            batch_size=BATCH_SIZE,
-            num_attrs=num_attrs,
-        )
-        attrs = [f"features_{attr}" for attr in range(num_attrs)]
-        with tiledb.open(uri_x) as x, tiledb.open(uri_y) as y:
-            for pass_attrs in True, False:
-                with pytest.raises(Exception):
-                    TensorflowTileDBDataset(
-                        x_array=x,
-                        y_array=y,
-                        batch_size=BATCH_SIZE,
-                        batch_shuffle=batch_shuffle,
-                        buffer_size=buffer_size,
-                        within_batch_shuffle=within_batch_shuffle,
-                        x_attrs=attrs if pass_attrs else [],
-                        y_attrs=attrs if pass_attrs else [],
-                    )
-
-    def test_dataset_generator_batch_output(
+class TestTensorflowTileDBDatasetDense:
+    def test_dense_x_dense_y(
         self,
         tmpdir,
         input_shape,
@@ -124,19 +57,33 @@ class TestTileDBTensorflowDataAPI:
                 kwargs = dict(
                     x_array=x,
                     y_array=y,
-                    x_attrs=attrs if pass_attrs else [],
-                    y_attrs=attrs if pass_attrs else [],
-                    buffer_size=buffer_size,
                     batch_size=BATCH_SIZE,
+                    buffer_size=buffer_size,
                     batch_shuffle=batch_shuffle,
                     within_batch_shuffle=within_batch_shuffle,
+                    x_attrs=attrs if pass_attrs else [],
+                    y_attrs=attrs if pass_attrs else [],
                 )
+
+                # Test buffer_size < batch_size
+                dataset = TensorflowTileDBDataset(
+                    **dict(kwargs, buffer_size=BATCH_SIZE - 1)
+                )
+                with pytest.raises(Exception) as excinfo:
+                    next(iter(dataset))
+                assert "Buffer size should be greater or equal to batch size" in str(
+                    excinfo.value
+                )
+
+                # Test generator
+                dataset = TensorflowTileDBDataset(**kwargs)
+                assert isinstance(dataset, tf.data.Dataset)
                 # Test the generator twice: once with the public api (TensorflowTileDBDataset)
                 # and once with calling tensor_generator directly. Although the former calls
                 # the latter internally, it is not reported as covered by the coverage report
                 # due to https://github.com/tensorflow/tensorflow/issues/33759
                 generators = [
-                    iter(TensorflowTileDBDataset(**kwargs)),
+                    iter(dataset),
                     tensor_generator(
                         dense_batch_cls=TensorflowDenseBatch,
                         sparse_batch_cls=TensorflowSparseBatch,
@@ -156,7 +103,7 @@ class TestTileDBTensorflowDataAPI:
                             NUM_OF_CLASSES,
                         )
 
-    def test_buffer_size_geq_batch_size_exception(
+    def test_dense_x_sparse_y(
         self,
         tmpdir,
         input_shape,
@@ -168,8 +115,42 @@ class TestTileDBTensorflowDataAPI:
         uri_x, uri_y = ingest_in_tiledb(
             tmpdir,
             data_x=np.random.rand(ROWS, *input_shape),
+            data_y=create_rand_labels(ROWS, NUM_OF_CLASSES, one_hot=True),
             sparse_x=False,
+            sparse_y=True,
+            batch_size=BATCH_SIZE,
+            num_attrs=num_attrs,
+        )
+        attrs = [f"features_{attr}" for attr in range(num_attrs)]
+        with tiledb.open(uri_x) as x, tiledb.open(uri_y) as y:
+            for pass_attrs in True, False:
+                with pytest.raises(TypeError):
+                    TensorflowTileDBDataset(
+                        x_array=x,
+                        y_array=y,
+                        batch_size=BATCH_SIZE,
+                        buffer_size=buffer_size,
+                        batch_shuffle=batch_shuffle,
+                        within_batch_shuffle=within_batch_shuffle,
+                        x_attrs=attrs if pass_attrs else [],
+                        y_attrs=attrs if pass_attrs else [],
+                    )
+
+    def test_unequal_num_rows(
+        self,
+        tmpdir,
+        input_shape,
+        num_attrs,
+        batch_shuffle,
+        within_batch_shuffle,
+        buffer_size,
+    ):
+        uri_x, uri_y = ingest_in_tiledb(
+            tmpdir,
+            # Add one extra row on X
+            data_x=np.random.rand(ROWS + 1, *input_shape),
             data_y=np.random.rand(ROWS, NUM_OF_CLASSES),
+            sparse_x=False,
             sparse_y=False,
             batch_size=BATCH_SIZE,
             num_attrs=num_attrs,
@@ -177,19 +158,14 @@ class TestTileDBTensorflowDataAPI:
         attrs = [f"features_{attr}" for attr in range(num_attrs)]
         with tiledb.open(uri_x) as x, tiledb.open(uri_y) as y:
             for pass_attrs in True, False:
-                dataset = TensorflowTileDBDataset(
-                    x_array=x,
-                    y_array=y,
-                    batch_size=BATCH_SIZE,
-                    # Set the buffer_size less than the batch_size
-                    buffer_size=BATCH_SIZE - 1,
-                    batch_shuffle=batch_shuffle,
-                    within_batch_shuffle=within_batch_shuffle,
-                    x_attrs=attrs if pass_attrs else [],
-                    y_attrs=attrs if pass_attrs else [],
-                )
-                with pytest.raises(Exception) as excinfo:
-                    next(iter(dataset))
-                assert str(excinfo.value).startswith(
-                    "ValueError: Buffer size should be greater or equal to batch size"
-                )
+                with pytest.raises(ValueError):
+                    TensorflowTileDBDataset(
+                        x_array=x,
+                        y_array=y,
+                        batch_size=BATCH_SIZE,
+                        buffer_size=buffer_size,
+                        batch_shuffle=batch_shuffle,
+                        within_batch_shuffle=within_batch_shuffle,
+                        x_attrs=attrs if pass_attrs else [],
+                        y_attrs=attrs if pass_attrs else [],
+                    )
