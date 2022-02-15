@@ -33,7 +33,8 @@ ROWS = 1000
 @pytest.mark.parametrize("within_batch_shuffle", [True, False])
 @pytest.mark.parametrize("buffer_size", [50, None])
 class TestTensorflowTileDBDatasetDense:
-    def test_dense_x_dense_y(
+    @pytest.mark.parametrize("sparse_y", [True, False])
+    def test_dense_x(
         self,
         tmpdir,
         input_shape,
@@ -41,13 +42,17 @@ class TestTensorflowTileDBDatasetDense:
         batch_shuffle,
         within_batch_shuffle,
         buffer_size,
+        sparse_y,
     ):
+        if sparse_y and within_batch_shuffle:
+            pytest.skip("Sparse y not supported with within_batch_shuffle")
+
         uri_x, uri_y = ingest_in_tiledb(
             tmpdir,
             data_x=np.random.rand(ROWS, *input_shape),
-            data_y=create_rand_labels(ROWS, NUM_OF_CLASSES),
+            data_y=create_rand_labels(ROWS, NUM_OF_CLASSES, one_hot=sparse_y),
             sparse_x=False,
-            sparse_y=False,
+            sparse_y=sparse_y,
             batch_size=BATCH_SIZE,
             num_attrs=num_attrs,
         )
@@ -96,42 +101,9 @@ class TestTensorflowTileDBDatasetDense:
                         num_attrs,
                         BATCH_SIZE,
                         shape_x=input_shape,
-                        shape_y=(),
+                        shape_y=(NUM_OF_CLASSES,) if sparse_y else (),
                         sparse_x=False,
-                        sparse_y=False,
-                    )
-
-    def test_dense_x_sparse_y(
-        self,
-        tmpdir,
-        input_shape,
-        num_attrs,
-        batch_shuffle,
-        within_batch_shuffle,
-        buffer_size,
-    ):
-        uri_x, uri_y = ingest_in_tiledb(
-            tmpdir,
-            data_x=np.random.rand(ROWS, *input_shape),
-            data_y=create_rand_labels(ROWS, NUM_OF_CLASSES, one_hot=True),
-            sparse_x=False,
-            sparse_y=True,
-            batch_size=BATCH_SIZE,
-            num_attrs=num_attrs,
-        )
-        attrs = [f"features_{attr}" for attr in range(num_attrs)]
-        with tiledb.open(uri_x) as x, tiledb.open(uri_y) as y:
-            for pass_attrs in True, False:
-                with pytest.raises(TypeError):
-                    TensorflowTileDBDataset(
-                        x_array=x,
-                        y_array=y,
-                        batch_size=BATCH_SIZE,
-                        buffer_size=buffer_size,
-                        batch_shuffle=batch_shuffle,
-                        within_batch_shuffle=within_batch_shuffle,
-                        x_attrs=attrs if pass_attrs else [],
-                        y_attrs=attrs if pass_attrs else [],
+                        sparse_y=sparse_y,
                     )
 
     def test_unequal_num_rows(

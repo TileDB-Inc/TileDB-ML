@@ -41,10 +41,6 @@ def TensorflowTileDBDataset(
     :param batch_shuffle: True for shuffling batches.
     :param within_batch_shuffle: True for shuffling records in each batch.
     """
-    if isinstance(x_array, tiledb.DenseArray):
-        if isinstance(y_array, tiledb.SparseArray):
-            raise TypeError("Dense x_array and sparse y_array not currently supported")
-
     # Check that x_array and y_array have the same number of rows
     rows: int = x_array.shape[0]
     if rows != y_array.shape[0]:
