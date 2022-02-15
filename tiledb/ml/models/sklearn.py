@@ -89,7 +89,7 @@ class SklearnTileDBModel(TileDBModel[BaseEstimator]):
 
         schema = tiledb.ArraySchema(domain=dom, sparse=False, attrs=attrs, ctx=self.ctx)
 
-        tiledb.Array.create(self.uri, schema, ctx=self.ctx)
+        tiledb.DenseArray.create(self.uri, schema, ctx=self.ctx)
 
         # In case we are on TileDB-Cloud we have to update model array's file properties
         if self.namespace:

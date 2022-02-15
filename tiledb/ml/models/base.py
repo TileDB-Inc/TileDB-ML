@@ -1,6 +1,5 @@
 """Base Class for saving and loading machine learning models."""
 
-import os
 import platform
 import time
 from abc import ABC, abstractmethod
@@ -8,6 +7,8 @@ from enum import Enum, unique
 from typing import Any, Generic, Mapping, Optional, Tuple, TypeVar
 
 import tiledb
+
+from ._cloud_utils import get_cloud_uri
 
 Model = TypeVar("Model")
 Meta = Mapping[str, Any]
@@ -63,7 +64,9 @@ class TileDBModel(ABC, Generic[Model]):
         self.namespace = namespace
         self.ctx = ctx
         self.model = model
-        self.uri = self.get_cloud_uri(uri) if self.namespace else uri
+        self.uri = (
+            get_cloud_uri(uri=uri, namespace=namespace) if self.namespace else uri
+        )
         self._file_properties = {
             ModelFileProperties.TILEDB_ML_MODEL_ML_FRAMEWORK.value: self.Framework,
             ModelFileProperties.TILEDB_ML_MODEL_ML_FRAMEWORK_VERSION.value: self.FrameworkVersion,
@@ -112,15 +115,3 @@ class TileDBModel(ABC, Generic[Model]):
                 array.meta[key] = value
         for key, value in self._file_properties.items():
             array.meta[key] = value
-
-    def get_cloud_uri(self, uri: str) -> str:
-        from ._cloud_utils import get_s3_prefix
-
-        s3_prefix = get_s3_prefix(self.namespace)
-        if s3_prefix is None:
-            raise ValueError(
-                f"You must set the default s3 prefix path for ML models in "
-                f"{self.namespace} profile settings on TileDB-Cloud"
-            )
-
-        return "tiledb://{}/{}".format(self.namespace, os.path.join(s3_prefix, uri))
