@@ -50,10 +50,11 @@ class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Sequence[torch.Tenso
         kwargs = self._generator_kwargs.copy()
         worker_info = torch.utils.data.get_worker_info()
         if worker_info is not None:
-            if isinstance(kwargs["x_array"], tiledb.SparseArray):
-                raise NotImplementedError(
-                    "https://github.com/pytorch/pytorch/issues/20248"
-                )
+            for array_key in "x_array", "y_array":
+                if isinstance(kwargs[array_key], tiledb.SparseArray):
+                    raise NotImplementedError(
+                        "https://github.com/pytorch/pytorch/issues/20248"
+                    )
             per_worker = int(math.ceil(self._rows / worker_info.num_workers))
             start_offset = worker_info.id * per_worker
             stop_offset = min(start_offset + per_worker, self._rows)

@@ -22,7 +22,8 @@ ROWS = 100
 @pytest.mark.parametrize("buffer_size", [50, None])
 class TestPyTorchTileDBDatasetDense:
     @pytest.mark.parametrize("workers", [0, 2])
-    def test_dense_x_dense_y(
+    @pytest.mark.parametrize("sparse_y", [True, False])
+    def test_dense_x(
         self,
         tmpdir,
         input_shape,
@@ -31,13 +32,20 @@ class TestPyTorchTileDBDatasetDense:
         within_batch_shuffle,
         buffer_size,
         workers,
+        sparse_y,
     ):
+        if sparse_y:
+            if within_batch_shuffle:
+                pytest.skip("Sparse y not supported with within_batch_shuffle")
+            if workers:
+                pytest.skip("Sparse y not supported with multiple workers")
+
         uri_x, uri_y = ingest_in_tiledb(
             tmpdir,
             data_x=np.random.rand(ROWS, *input_shape),
-            data_y=create_rand_labels(ROWS, NUM_OF_CLASSES),
+            data_y=create_rand_labels(ROWS, NUM_OF_CLASSES, one_hot=sparse_y),
             sparse_x=False,
-            sparse_y=False,
+            sparse_y=sparse_y,
             batch_size=BATCH_SIZE,
             num_attrs=num_attrs,
         )
@@ -72,9 +80,9 @@ class TestPyTorchTileDBDatasetDense:
                     num_attrs,
                     BATCH_SIZE,
                     shape_x=input_shape,
-                    shape_y=(),
+                    shape_y=(NUM_OF_CLASSES,) if sparse_y else (),
                     sparse_x=False,
-                    sparse_y=False,
+                    sparse_y=sparse_y,
                 )
 
                 train_loader = torch.utils.data.DataLoader(
@@ -90,6 +98,8 @@ class TestPyTorchTileDBDatasetDense:
                             unique_x_tensors.append(x_tensor)
                         # Keep unique Y tensors
                         y_tensor = data[attr + num_attrs]
+                        if sparse_y:
+                            y_tensor = y_tensor.to_dense()
                         if not any(torch.equal(y_tensor, t) for t in unique_y_tensors):
                             unique_y_tensors.append(y_tensor)
                     assert len(unique_x_tensors) - 1 == batchindx
