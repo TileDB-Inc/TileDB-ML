@@ -7,7 +7,7 @@ import torch
 import tiledb
 from tiledb.ml.readers.pytorch import PyTorchTileDBDataset
 
-from .utils import create_rand_labels, ingest_in_tiledb
+from .utils import create_rand_labels, ingest_in_tiledb, validate_tensor_generator
 
 # Test parameters
 NUM_OF_FEATURES = 10
@@ -46,15 +46,15 @@ class TestPyTorchTileDBDatasetSparse:
                     y_attrs=attrs if pass_attrs else [],
                 )
                 assert isinstance(dataset, torch.utils.data.IterableDataset)
-                generated_data = next(iter(dataset))
-                for attr in range(num_attrs):
-                    assert generated_data[attr].layout == torch.sparse_coo
-                    assert generated_data[attr + num_attrs].layout == torch.sparse_coo
-                    assert generated_data[attr].size() == (BATCH_SIZE, NUM_OF_FEATURES)
-                    assert generated_data[attr + num_attrs].size() == (
-                        BATCH_SIZE,
-                        NUM_OF_CLASSES,
-                    )
+                validate_tensor_generator(
+                    dataset,
+                    num_attrs,
+                    BATCH_SIZE,
+                    shape_x=(NUM_OF_FEATURES,),
+                    shape_y=(NUM_OF_CLASSES,),
+                    sparse_x=True,
+                    sparse_y=True,
+                )
 
     def test_sparse_x_dense_y(self, tmpdir, num_attrs, batch_shuffle, buffer_size):
         uri_x, uri_y = ingest_in_tiledb(
@@ -79,6 +79,15 @@ class TestPyTorchTileDBDatasetSparse:
                     y_attrs=attrs if pass_attrs else [],
                 )
                 assert isinstance(dataset, torch.utils.data.IterableDataset)
+                validate_tensor_generator(
+                    dataset,
+                    num_attrs,
+                    BATCH_SIZE,
+                    shape_x=(NUM_OF_FEATURES,),
+                    shape_y=(),
+                    sparse_x=True,
+                    sparse_y=False,
+                )
 
     def test_unequal_num_rows(self, tmpdir, num_attrs, batch_shuffle, buffer_size):
         uri_x, uri_y = ingest_in_tiledb(

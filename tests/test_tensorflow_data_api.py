@@ -14,7 +14,7 @@ from tiledb.ml.readers.tensorflow import (
     TensorflowTileDBDataset,
 )
 
-from .utils import create_rand_labels, ingest_in_tiledb
+from .utils import create_rand_labels, ingest_in_tiledb, validate_tensor_generator
 
 # Suppress all Tensorflow messages
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
@@ -83,7 +83,7 @@ class TestTensorflowTileDBDatasetDense:
                 # the latter internally, it is not reported as covered by the coverage report
                 # due to https://github.com/tensorflow/tensorflow/issues/33759
                 generators = [
-                    iter(dataset),
+                    dataset,
                     tensor_generator(
                         dense_batch_cls=TensorflowDenseBatch,
                         sparse_batch_cls=TensorflowSparseBatch,
@@ -91,17 +91,15 @@ class TestTensorflowTileDBDatasetDense:
                     ),
                 ]
                 for generator in generators:
-                    generated_data = next(generator)
-                    assert len(generated_data) == 2 * num_attrs
-                    for attr in range(num_attrs):
-                        assert tuple(generated_data[attr].shape) <= (
-                            BATCH_SIZE,
-                            *input_shape,
-                        )
-                        assert tuple(generated_data[num_attrs + attr].shape) <= (
-                            BATCH_SIZE,
-                            NUM_OF_CLASSES,
-                        )
+                    validate_tensor_generator(
+                        generator,
+                        num_attrs,
+                        BATCH_SIZE,
+                        shape_x=input_shape,
+                        shape_y=(),
+                        sparse_x=False,
+                        sparse_y=False,
+                    )
 
     def test_dense_x_sparse_y(
         self,

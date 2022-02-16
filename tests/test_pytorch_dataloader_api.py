@@ -7,7 +7,7 @@ import torch
 import tiledb
 from tiledb.ml.readers.pytorch import PyTorchTileDBDataset
 
-from .utils import create_rand_labels, ingest_in_tiledb
+from .utils import create_rand_labels, ingest_in_tiledb, validate_tensor_generator
 
 # Test parameters
 NUM_OF_CLASSES = 5
@@ -67,36 +67,33 @@ class TestPyTorchTileDBDatasetDense:
 
                 dataset = PyTorchTileDBDataset(**kwargs)
                 assert isinstance(dataset, torch.utils.data.IterableDataset)
+                validate_tensor_generator(
+                    dataset,
+                    num_attrs,
+                    BATCH_SIZE,
+                    shape_x=input_shape,
+                    shape_y=(),
+                    sparse_x=False,
+                    sparse_y=False,
+                )
 
                 train_loader = torch.utils.data.DataLoader(
                     dataset, batch_size=None, num_workers=workers
                 )
-                unique_inputs = []
-                unique_labels = []
+                unique_x_tensors = []
+                unique_y_tensors = []
                 for batchindx, data in enumerate(train_loader):
-                    assert len(data) == 2 * num_attrs
-
                     for attr in range(num_attrs):
-                        assert data[attr].shape <= (BATCH_SIZE, *input_shape)
-                        assert data[num_attrs + attr].shape <= (
-                            BATCH_SIZE,
-                            NUM_OF_CLASSES,
-                        )
                         # Keep unique X tensors
-                        if not any(
-                            np.array_equal(data[attr].numpy(), unique_input)
-                            for unique_input in unique_inputs
-                        ):
-                            unique_inputs.append(data[attr].numpy())
+                        x_tensor = data[attr]
+                        if not any(torch.equal(x_tensor, t) for t in unique_x_tensors):
+                            unique_x_tensors.append(x_tensor)
                         # Keep unique Y tensors
-                        # Y index is attr + num_attrs following x attrs
-                        if not any(
-                            np.array_equal(data[attr + num_attrs].numpy(), unique_label)
-                            for unique_label in unique_labels
-                        ):
-                            unique_labels.append(data[attr + num_attrs].numpy())
-                assert len(unique_inputs) - 1 == batchindx
-                assert len(unique_labels) - 1 == batchindx
+                        y_tensor = data[attr + num_attrs]
+                        if not any(torch.equal(y_tensor, t) for t in unique_y_tensors):
+                            unique_y_tensors.append(y_tensor)
+                    assert len(unique_x_tensors) - 1 == batchindx
+                    assert len(unique_y_tensors) - 1 == batchindx
 
     def test_unequal_num_rows(
         self,

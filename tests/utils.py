@@ -2,6 +2,8 @@ import os
 import uuid
 
 import numpy as np
+import tensorflow as tf
+import torch
 
 import tiledb
 
@@ -63,3 +65,34 @@ def create_rand_labels(
     """
     labels = np.random.randint(num_classes, size=num_rows)
     return np.eye(num_classes, dtype=np.uint8)[labels] if one_hot else labels
+
+
+def validate_tensor_generator(
+    generator, num_attrs, batch_size, *, shape_x, shape_y, sparse_x, sparse_y
+):
+    for tensors in generator:
+        assert len(tensors) == 2 * num_attrs
+        # the first num_attrs tensors are the features (x)
+        for tensor in tensors[:num_attrs]:
+            _validate_tensor(tensor, batch_size, shape_x, sparse_x)
+        # the last num_attrs tensors are the labels (y)
+        for tensor in tensors[num_attrs:]:
+            _validate_tensor(tensor, batch_size, shape_y, sparse_y)
+
+
+def _validate_tensor(tensor, batch_size, shape, sparse):
+    tensor_size, *tensor_shape = tensor.shape
+    assert _is_sparse_tensor(tensor) == sparse
+    # tensor size must be equal to batch_size for sparse but may be smaller for dense
+    assert (tensor_size == batch_size) if sparse else (tensor_size <= batch_size)
+    assert tuple(tensor_shape) == shape
+
+
+def _is_sparse_tensor(tensor):
+    if isinstance(tensor, torch.Tensor):
+        return tensor.is_sparse
+    if isinstance(tensor, tf.SparseTensor):
+        return True
+    if isinstance(tensor, tf.Tensor):
+        return False
+    assert False, f"Unknown tensor type: {type(tensor)}"
