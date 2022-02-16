@@ -32,13 +32,14 @@ ROWS = 1000
 @pytest.mark.parametrize("batch_shuffle", [False, True])
 @pytest.mark.parametrize("buffer_size", [50, None])
 class TestTensorflowTileDBDatasetSparse:
-    def test_sparse_x_sparse_y(self, tmpdir, num_attrs, batch_shuffle, buffer_size):
+    @pytest.mark.parametrize("sparse_y", [True, False])
+    def test_sparse_x(self, tmpdir, num_attrs, batch_shuffle, buffer_size, sparse_y):
         uri_x, uri_y = ingest_in_tiledb(
             tmpdir,
             data_x=create_rand_labels(ROWS, NUM_OF_FEATURES, one_hot=True),
-            data_y=create_rand_labels(ROWS, NUM_OF_CLASSES, one_hot=True),
+            data_y=create_rand_labels(ROWS, NUM_OF_CLASSES, one_hot=sparse_y),
             sparse_x=True,
-            sparse_y=True,
+            sparse_y=sparse_y,
             batch_size=BATCH_SIZE,
             num_attrs=num_attrs,
         )
@@ -74,56 +75,9 @@ class TestTensorflowTileDBDatasetSparse:
                         num_attrs,
                         BATCH_SIZE,
                         shape_x=(NUM_OF_FEATURES,),
-                        shape_y=(NUM_OF_CLASSES,),
+                        shape_y=(NUM_OF_CLASSES,) if sparse_y else (),
                         sparse_x=True,
-                        sparse_y=True,
-                    )
-
-    def test_sparse_x_dense_y(self, tmpdir, num_attrs, batch_shuffle, buffer_size):
-        uri_x, uri_y = ingest_in_tiledb(
-            tmpdir,
-            data_x=create_rand_labels(ROWS, NUM_OF_FEATURES, one_hot=True),
-            data_y=create_rand_labels(ROWS, NUM_OF_CLASSES),
-            sparse_x=True,
-            sparse_y=False,
-            batch_size=BATCH_SIZE,
-            num_attrs=num_attrs,
-        )
-        attrs = [f"features_{attr}" for attr in range(num_attrs)]
-        with tiledb.open(uri_x) as x, tiledb.open(uri_y) as y:
-            for pass_attrs in True, False:
-                kwargs = dict(
-                    x_array=x,
-                    y_array=y,
-                    batch_size=BATCH_SIZE,
-                    buffer_size=buffer_size,
-                    batch_shuffle=batch_shuffle,
-                    x_attrs=attrs if pass_attrs else [],
-                    y_attrs=attrs if pass_attrs else [],
-                )
-                dataset = TensorflowTileDBDataset(**kwargs)
-                assert isinstance(dataset, tf.data.Dataset)
-                # Test the generator twice: once with the public api (TensorflowTileDBDataset)
-                # and once with calling tensor_generator directly. Although the former calls
-                # the latter internally, it is not reported as covered by the coverage report
-                # due to https://github.com/tensorflow/tensorflow/issues/33759
-                generators = [
-                    dataset,
-                    tensor_generator(
-                        dense_batch_cls=TensorflowDenseBatch,
-                        sparse_batch_cls=TensorflowSparseBatch,
-                        **kwargs,
-                    ),
-                ]
-                for generator in generators:
-                    validate_tensor_generator(
-                        generator,
-                        num_attrs,
-                        BATCH_SIZE,
-                        shape_x=(NUM_OF_FEATURES,),
-                        shape_y=(),
-                        sparse_x=True,
-                        sparse_y=False,
+                        sparse_y=sparse_y,
                     )
 
     def test_unequal_num_rows(self, tmpdir, num_attrs, batch_shuffle, buffer_size):
