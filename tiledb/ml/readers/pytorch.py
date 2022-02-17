@@ -8,7 +8,12 @@ import torch
 
 import tiledb
 
-from ._batch_utils import BaseDenseBatch, BaseSparseBatch, tensor_generator
+from ._batch_utils import (
+    BaseDenseBatch,
+    BaseSparseBatch,
+    get_buffer_size,
+    tensor_generator,
+)
 
 
 class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Sequence[torch.Tensor]]):
@@ -41,7 +46,7 @@ class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Sequence[torch.Tenso
             x_attrs=x_attrs,
             y_attrs=y_attrs,
             batch_size=batch_size,
-            buffer_size=buffer_size,
+            buffer_size=get_buffer_size(buffer_size, batch_size),
             batch_shuffle=batch_shuffle,
             within_batch_shuffle=within_batch_shuffle,
         )

@@ -12,6 +12,7 @@ from ._batch_utils import (
     BaseDenseBatch,
     BaseSparseBatch,
     get_attr_names,
+    get_buffer_size,
     tensor_generator,
 )
 
@@ -36,6 +37,8 @@ def TensorflowTileDBDataset(
     :param x_array: TileDB array of the features.
     :param y_array: TileDB array of the labels.
     :param batch_size: Size of each batch.
+    :param buffer_size: Size of the buffer used to read the data. If not given,
+        it is determined automatically.
     :param x_attrs: Attribute names of x_array.
     :param y_attrs: Attribute names of y_array.
     :param batch_shuffle: True for shuffling batches.
@@ -59,7 +62,7 @@ def TensorflowTileDBDataset(
             x_attrs=x_attrs,
             y_attrs=y_attrs,
             batch_size=batch_size,
-            buffer_size=buffer_size,
+            buffer_size=get_buffer_size(buffer_size, batch_size),
             batch_shuffle=batch_shuffle,
             within_batch_shuffle=within_batch_shuffle,
         ),

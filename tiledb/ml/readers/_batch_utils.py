@@ -162,7 +162,7 @@ def tensor_generator(
     x_array: tiledb.Array,
     y_array: tiledb.Array,
     batch_size: int,
-    buffer_size: Optional[int] = None,
+    buffer_size: int,
     batch_shuffle: bool = False,
     within_batch_shuffle: bool = False,
     x_attrs: Sequence[str] = (),
@@ -181,7 +181,7 @@ def tensor_generator(
     :param x_array: TileDB array of the features.
     :param y_array: TileDB array of the labels.
     :param batch_size: Size of each batch.
-    :param buffer_size: Size of the buffer used to read the data; defaults to batch_size.
+    :param buffer_size: Size of the buffer used to read the data.
     :param batch_shuffle: True for shuffling batches.
     :param within_batch_shuffle: True for shuffling records in each batch.
     :param x_attrs: Attribute names of x_array; defaults to all x_array attributes.
@@ -189,11 +189,6 @@ def tensor_generator(
     :param start_offset: Start row offset; defaults to 0.
     :param stop_offset: Stop row offset; defaults to number of rows.
     """
-    if buffer_size is None:
-        buffer_size = batch_size
-    elif buffer_size < batch_size:
-        raise ValueError("Buffer size should be greater or equal to batch size")
-
     if stop_offset is None:
         stop_offset = x_array.shape[0]
 
@@ -248,3 +243,11 @@ def tensor_generator(
 
 def get_attr_names(schema: tiledb.ArraySchema) -> Sequence[str]:
     return tuple(schema.attr(idx).name for idx in range(schema.nattr))
+
+
+def get_buffer_size(buffer_size: Optional[int], batch_size: int) -> int:
+    if buffer_size is None:
+        buffer_size = batch_size
+    elif buffer_size < batch_size:
+        raise ValueError("Buffer size should be greater or equal to batch size")
+    return buffer_size
