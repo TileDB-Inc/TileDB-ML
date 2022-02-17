@@ -32,9 +32,10 @@ ROWS = 1000
 @pytest.mark.parametrize("batch_shuffle", [True, False])
 @pytest.mark.parametrize("within_batch_shuffle", [True, False])
 @pytest.mark.parametrize("buffer_size", [50, None])
-class TestTensorflowTileDBDatasetDense:
-    @pytest.mark.parametrize("sparse_y", [True, False])
-    def test_dense_x(
+@pytest.mark.parametrize("sparse_x", [True, False])
+@pytest.mark.parametrize("sparse_y", [True, False])
+class TestTensorflowTileDBDataset:
+    def test_generator(
         self,
         tmpdir,
         input_shape,
@@ -42,16 +43,23 @@ class TestTensorflowTileDBDatasetDense:
         batch_shuffle,
         within_batch_shuffle,
         buffer_size,
+        sparse_x,
         sparse_y,
     ):
-        if sparse_y and within_batch_shuffle:
-            pytest.skip("Sparse y not supported with within_batch_shuffle")
+        if within_batch_shuffle and (sparse_x or sparse_y):
+            pytest.skip("within_batch_shuffle not supported with sparse arrays")
+
+        if sparse_x:
+            data_x = create_rand_labels(ROWS, input_shape[0], one_hot=True)
+        else:
+            data_x = np.random.rand(ROWS, *input_shape)
+        data_y = create_rand_labels(ROWS, NUM_OF_CLASSES, one_hot=sparse_y)
 
         uri_x, uri_y = ingest_in_tiledb(
             tmpdir,
-            data_x=np.random.rand(ROWS, *input_shape),
-            data_y=create_rand_labels(ROWS, NUM_OF_CLASSES, one_hot=sparse_y),
-            sparse_x=False,
+            data_x=data_x,
+            data_y=data_y,
+            sparse_x=sparse_x,
             sparse_y=sparse_y,
             batch_size=BATCH_SIZE,
             num_attrs=num_attrs,
@@ -80,7 +88,6 @@ class TestTensorflowTileDBDatasetDense:
                     excinfo.value
                 )
 
-                # Test generator
                 dataset = TensorflowTileDBDataset(**kwargs)
                 assert isinstance(dataset, tf.data.Dataset)
                 # Test the generator twice: once with the public api (TensorflowTileDBDataset)
@@ -100,9 +107,9 @@ class TestTensorflowTileDBDatasetDense:
                         generator,
                         num_attrs,
                         BATCH_SIZE,
-                        shape_x=input_shape,
-                        shape_y=(NUM_OF_CLASSES,) if sparse_y else (),
-                        sparse_x=False,
+                        shape_x=data_x.shape[1:],
+                        shape_y=data_y.shape[1:],
+                        sparse_x=sparse_x,
                         sparse_y=sparse_y,
                     )
 
@@ -114,14 +121,22 @@ class TestTensorflowTileDBDatasetDense:
         batch_shuffle,
         within_batch_shuffle,
         buffer_size,
+        sparse_x,
+        sparse_y,
     ):
+        # Add one extra row on X
+        if sparse_x:
+            data_x = create_rand_labels(ROWS + 1, input_shape[0], one_hot=True)
+        else:
+            data_x = np.random.rand(ROWS + 1, *input_shape)
+        data_y = create_rand_labels(ROWS, NUM_OF_CLASSES, one_hot=sparse_y)
+
         uri_x, uri_y = ingest_in_tiledb(
             tmpdir,
-            # Add one extra row on X
-            data_x=np.random.rand(ROWS + 1, *input_shape),
-            data_y=create_rand_labels(ROWS, NUM_OF_CLASSES),
-            sparse_x=False,
-            sparse_y=False,
+            data_x=data_x,
+            data_y=data_y,
+            sparse_x=sparse_x,
+            sparse_y=sparse_y,
             batch_size=BATCH_SIZE,
             num_attrs=num_attrs,
         )
@@ -139,3 +154,49 @@ class TestTensorflowTileDBDatasetDense:
                         x_attrs=attrs if pass_attrs else [],
                         y_attrs=attrs if pass_attrs else [],
                     )
+
+    def test_sparse_x_unequal_num_rows_in_batch(
+        self,
+        tmpdir,
+        input_shape,
+        num_attrs,
+        batch_shuffle,
+        within_batch_shuffle,
+        buffer_size,
+        sparse_x,
+        sparse_y,
+    ):
+        if not sparse_x:
+            pytest.skip()
+        if within_batch_shuffle:
+            pytest.skip("within_batch_shuffle not supported with sparse arrays")
+
+        data_x = create_rand_labels(ROWS, input_shape[0], one_hot=True)
+        data_x[np.nonzero(data_x[0])] = 0
+        data_y = create_rand_labels(ROWS, NUM_OF_CLASSES, one_hot=sparse_y)
+
+        uri_x, uri_y = ingest_in_tiledb(
+            tmpdir,
+            data_x=data_x,
+            data_y=data_y,
+            sparse_x=sparse_x,
+            sparse_y=sparse_y,
+            batch_size=BATCH_SIZE,
+            num_attrs=num_attrs,
+        )
+        attrs = [f"features_{attr}" for attr in range(num_attrs)]
+        with tiledb.open(uri_x) as x, tiledb.open(uri_y) as y:
+            for pass_attrs in True, False:
+                dataset = TensorflowTileDBDataset(
+                    x_array=x,
+                    y_array=y,
+                    batch_size=BATCH_SIZE,
+                    buffer_size=buffer_size,
+                    batch_shuffle=batch_shuffle,
+                    within_batch_shuffle=within_batch_shuffle,
+                    x_attrs=attrs if pass_attrs else [],
+                    y_attrs=attrs if pass_attrs else [],
+                )
+                with pytest.raises(Exception):
+                    for _ in dataset:
+                        pass
