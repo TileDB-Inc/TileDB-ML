@@ -65,12 +65,12 @@ class TestPyTorchTileDBDataset:
             assert isinstance(dataset, torch.utils.data.IterableDataset)
             validate_tensor_generator(
                 dataset,
-                num_attrs,
-                BATCH_SIZE,
-                shape_x=data_x.shape[1:],
-                shape_y=data_y.shape[1:],
                 sparse_x=sparse_x,
                 sparse_y=sparse_y,
+                shape_x=input_shape,
+                shape_y=output_shape,
+                batch_size=BATCH_SIZE,
+                num_attrs=num_attrs,
             )
             train_loader = torch.utils.data.DataLoader(
                 dataset, batch_size=None, num_workers=workers

@@ -121,24 +121,29 @@ def rand_array(num_rows: int, *row_shape: int, sparse=False) -> np.ndarray:
 
 
 def validate_tensor_generator(
-    generator, num_attrs, batch_size, *, shape_x, shape_y, sparse_x, sparse_y
+    generator, *, sparse_x, sparse_y, shape_x, shape_y, batch_size, num_attrs
 ):
     for tensors in generator:
         assert len(tensors) == 2 * num_attrs
         # the first num_attrs tensors are the features (x)
         for tensor in tensors[:num_attrs]:
-            _validate_tensor(tensor, batch_size, shape_x, sparse_x)
+            _validate_tensor(tensor, batch_size, sparse_x, shape_x)
         # the last num_attrs tensors are the labels (y)
         for tensor in tensors[num_attrs:]:
-            _validate_tensor(tensor, batch_size, shape_y, sparse_y)
+            _validate_tensor(tensor, batch_size, sparse_y, shape_y)
 
 
-def _validate_tensor(tensor, batch_size, shape, sparse):
-    tensor_size, *tensor_shape = tensor.shape
-    assert _is_sparse_tensor(tensor) == sparse
-    # tensor size must be equal to batch_size for sparse but may be smaller for dense
-    assert (tensor_size == batch_size) if sparse else (tensor_size <= batch_size)
-    assert tuple(tensor_shape) == shape
+def _validate_tensor(tensor, batch_size, expected_sparse, expected_shape):
+    num_rows, *row_shape = tensor.shape
+    assert row_shape == list(expected_shape)
+    if expected_sparse:
+        assert _is_sparse_tensor(tensor)
+        # for sparse tensors, num_rows should be equal to batch_size
+        assert num_rows == batch_size
+    else:
+        assert not _is_sparse_tensor(tensor)
+        # for dense tensors, num_rows may be less than batch_size
+        assert num_rows <= batch_size
 
 
 def _is_sparse_tensor(tensor):

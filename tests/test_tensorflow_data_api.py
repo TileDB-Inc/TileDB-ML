@@ -86,12 +86,12 @@ class TestTensorflowTileDBDataset:
             for generator in generators:
                 validate_tensor_generator(
                     generator,
-                    num_attrs,
-                    BATCH_SIZE,
-                    shape_x=data_x.shape[1:],
-                    shape_y=data_y.shape[1:],
                     sparse_x=sparse_x,
                     sparse_y=sparse_y,
+                    shape_x=input_shape,
+                    shape_y=output_shape,
+                    batch_size=BATCH_SIZE,
+                    num_attrs=num_attrs,
                 )
 
     @parametrize_for_dataset(buffer_size=[BATCH_SIZE - 1])
