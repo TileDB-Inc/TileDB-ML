@@ -30,6 +30,7 @@ class TestPyTorchTileDBDataset:
         sparse_y,
         input_shape,
         num_attrs,
+        pass_attrs,
         buffer_size,
         batch_shuffle,
         within_batch_shuffle,
@@ -55,50 +56,49 @@ class TestPyTorchTileDBDataset:
         )
         attrs = [f"features_{attr}" for attr in range(num_attrs)]
         with tiledb.open(uri_x) as x, tiledb.open(uri_y) as y:
-            for pass_attrs in True, False:
-                dataset = PyTorchTileDBDataset(
-                    x_array=x,
-                    y_array=y,
-                    batch_size=BATCH_SIZE,
-                    buffer_size=buffer_size,
-                    batch_shuffle=batch_shuffle,
-                    within_batch_shuffle=within_batch_shuffle,
-                    x_attrs=attrs if pass_attrs else [],
-                    y_attrs=attrs if pass_attrs else [],
-                )
-                assert isinstance(dataset, torch.utils.data.IterableDataset)
-                validate_tensor_generator(
-                    dataset,
-                    num_attrs,
-                    BATCH_SIZE,
-                    shape_x=data_x.shape[1:],
-                    shape_y=data_y.shape[1:],
-                    sparse_x=sparse_x,
-                    sparse_y=sparse_y,
-                )
-                train_loader = torch.utils.data.DataLoader(
-                    dataset, batch_size=None, num_workers=workers
-                )
-                unique_x_tensors = []
-                unique_y_tensors = []
-                for batchindx, data in enumerate(train_loader):
-                    for attr in range(num_attrs):
-                        # Keep unique X tensors
-                        x_tensor = data[attr]
-                        if sparse_x:
-                            x_tensor = x_tensor.to_dense()
-                        if not any(torch.equal(x_tensor, t) for t in unique_x_tensors):
-                            unique_x_tensors.append(x_tensor)
+            dataset = PyTorchTileDBDataset(
+                x_array=x,
+                y_array=y,
+                batch_size=BATCH_SIZE,
+                buffer_size=buffer_size,
+                batch_shuffle=batch_shuffle,
+                within_batch_shuffle=within_batch_shuffle,
+                x_attrs=attrs if pass_attrs else [],
+                y_attrs=attrs if pass_attrs else [],
+            )
+            assert isinstance(dataset, torch.utils.data.IterableDataset)
+            validate_tensor_generator(
+                dataset,
+                num_attrs,
+                BATCH_SIZE,
+                shape_x=data_x.shape[1:],
+                shape_y=data_y.shape[1:],
+                sparse_x=sparse_x,
+                sparse_y=sparse_y,
+            )
+            train_loader = torch.utils.data.DataLoader(
+                dataset, batch_size=None, num_workers=workers
+            )
+            unique_x_tensors = []
+            unique_y_tensors = []
+            for batchindx, data in enumerate(train_loader):
+                for attr in range(num_attrs):
+                    # Keep unique X tensors
+                    x_tensor = data[attr]
+                    if sparse_x:
+                        x_tensor = x_tensor.to_dense()
+                    if not any(torch.equal(x_tensor, t) for t in unique_x_tensors):
+                        unique_x_tensors.append(x_tensor)
 
-                        # Keep unique Y tensors
-                        y_tensor = data[attr + num_attrs]
-                        if sparse_y:
-                            y_tensor = y_tensor.to_dense()
-                        if not any(torch.equal(y_tensor, t) for t in unique_y_tensors):
-                            unique_y_tensors.append(y_tensor)
+                    # Keep unique Y tensors
+                    y_tensor = data[attr + num_attrs]
+                    if sparse_y:
+                        y_tensor = y_tensor.to_dense()
+                    if not any(torch.equal(y_tensor, t) for t in unique_y_tensors):
+                        unique_y_tensors.append(y_tensor)
 
-                    assert len(unique_x_tensors) - 1 == batchindx
-                    assert len(unique_y_tensors) - 1 == batchindx
+                assert len(unique_x_tensors) - 1 == batchindx
+                assert len(unique_y_tensors) - 1 == batchindx
 
     @parametrize_for_dataset(buffer_size=[BATCH_SIZE - 1])
     def test_buffer_size_smaller_than_batch_size(
@@ -108,6 +108,7 @@ class TestPyTorchTileDBDataset:
         sparse_y,
         input_shape,
         num_attrs,
+        pass_attrs,
         buffer_size,
         batch_shuffle,
         within_batch_shuffle,
@@ -129,18 +130,17 @@ class TestPyTorchTileDBDataset:
         )
         attrs = [f"features_{attr}" for attr in range(num_attrs)]
         with tiledb.open(uri_x) as x, tiledb.open(uri_y) as y:
-            for pass_attrs in True, False:
-                with pytest.raises(ValueError):
-                    PyTorchTileDBDataset(
-                        x_array=x,
-                        y_array=y,
-                        batch_size=BATCH_SIZE,
-                        buffer_size=buffer_size,
-                        batch_shuffle=batch_shuffle,
-                        within_batch_shuffle=within_batch_shuffle,
-                        x_attrs=attrs if pass_attrs else [],
-                        y_attrs=attrs if pass_attrs else [],
-                    )
+            with pytest.raises(ValueError):
+                PyTorchTileDBDataset(
+                    x_array=x,
+                    y_array=y,
+                    batch_size=BATCH_SIZE,
+                    buffer_size=buffer_size,
+                    batch_shuffle=batch_shuffle,
+                    within_batch_shuffle=within_batch_shuffle,
+                    x_attrs=attrs if pass_attrs else [],
+                    y_attrs=attrs if pass_attrs else [],
+                )
 
     @parametrize_for_dataset()
     def test_unequal_num_rows(
@@ -150,6 +150,7 @@ class TestPyTorchTileDBDataset:
         sparse_y,
         input_shape,
         num_attrs,
+        pass_attrs,
         buffer_size,
         batch_shuffle,
         within_batch_shuffle,
@@ -172,18 +173,17 @@ class TestPyTorchTileDBDataset:
         )
         attrs = [f"features_{attr}" for attr in range(num_attrs)]
         with tiledb.open(uri_x) as x, tiledb.open(uri_y) as y:
-            for pass_attrs in True, False:
-                with pytest.raises(ValueError):
-                    PyTorchTileDBDataset(
-                        x_array=x,
-                        y_array=y,
-                        batch_size=BATCH_SIZE,
-                        buffer_size=buffer_size,
-                        batch_shuffle=batch_shuffle,
-                        within_batch_shuffle=within_batch_shuffle,
-                        x_attrs=attrs if pass_attrs else [],
-                        y_attrs=attrs if pass_attrs else [],
-                    )
+            with pytest.raises(ValueError):
+                PyTorchTileDBDataset(
+                    x_array=x,
+                    y_array=y,
+                    batch_size=BATCH_SIZE,
+                    buffer_size=buffer_size,
+                    batch_shuffle=batch_shuffle,
+                    within_batch_shuffle=within_batch_shuffle,
+                    x_attrs=attrs if pass_attrs else [],
+                    y_attrs=attrs if pass_attrs else [],
+                )
 
     @parametrize_for_dataset(sparse_x=[True])
     def test_sparse_x_unequal_num_rows_in_batch(
@@ -193,6 +193,7 @@ class TestPyTorchTileDBDataset:
         sparse_y,
         input_shape,
         num_attrs,
+        pass_attrs,
         buffer_size,
         batch_shuffle,
         within_batch_shuffle,
@@ -212,17 +213,16 @@ class TestPyTorchTileDBDataset:
         )
         attrs = [f"features_{attr}" for attr in range(num_attrs)]
         with tiledb.open(uri_x) as x, tiledb.open(uri_y) as y:
-            for pass_attrs in True, False:
-                dataset = PyTorchTileDBDataset(
-                    x_array=x,
-                    y_array=y,
-                    batch_size=BATCH_SIZE,
-                    buffer_size=buffer_size,
-                    batch_shuffle=batch_shuffle,
-                    within_batch_shuffle=within_batch_shuffle,
-                    x_attrs=attrs if pass_attrs else [],
-                    y_attrs=attrs if pass_attrs else [],
-                )
-                with pytest.raises(Exception):
-                    for _ in dataset:
-                        pass
+            dataset = PyTorchTileDBDataset(
+                x_array=x,
+                y_array=y,
+                batch_size=BATCH_SIZE,
+                buffer_size=buffer_size,
+                batch_shuffle=batch_shuffle,
+                within_batch_shuffle=within_batch_shuffle,
+                x_attrs=attrs if pass_attrs else [],
+                y_attrs=attrs if pass_attrs else [],
+            )
+            with pytest.raises(Exception):
+                for _ in dataset:
+                    pass
