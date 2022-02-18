@@ -13,38 +13,37 @@ from .utils import (
     validate_tensor_generator,
 )
 
-# Test parameters
-BATCH_SIZE = 20
-ROWS = 100
 
-
+@pytest.mark.parametrize("num_rows", [107])
 class TestPyTorchTileDBDataset:
     @parametrize_for_dataset()
-    @pytest.mark.parametrize("workers", [0, 2])
+    @pytest.mark.parametrize("num_workers", [0, 2])
     def test_generator(
         self,
         tmpdir,
+        num_rows,
+        num_workers,
         x_sparse,
         y_sparse,
         x_shape,
         y_shape,
         num_attrs,
         pass_attrs,
+        batch_size,
         buffer_size,
         batch_shuffle,
         within_batch_shuffle,
-        workers,
     ):
-        if workers and (x_sparse or y_sparse):
+        if num_workers and (x_sparse or y_sparse):
             pytest.skip("multiple workers not supported with sparse arrays")
 
         with ingest_in_tiledb(
             tmpdir,
-            x_data=rand_array(ROWS, *x_shape, sparse=x_sparse),
-            y_data=rand_array(ROWS, *y_shape, sparse=y_sparse),
+            x_data=rand_array(num_rows, *x_shape, sparse=x_sparse),
+            y_data=rand_array(num_rows, *y_shape, sparse=y_sparse),
             x_sparse=x_sparse,
             y_sparse=y_sparse,
-            batch_size=BATCH_SIZE,
+            batch_size=batch_size,
             num_attrs=num_attrs,
             pass_attrs=pass_attrs,
             buffer_size=buffer_size,
@@ -59,11 +58,11 @@ class TestPyTorchTileDBDataset:
                 y_sparse=y_sparse,
                 x_shape=x_shape,
                 y_shape=y_shape,
-                batch_size=BATCH_SIZE,
+                batch_size=batch_size,
                 num_attrs=num_attrs,
             )
             train_loader = torch.utils.data.DataLoader(
-                dataset, batch_size=None, num_workers=workers
+                dataset, batch_size=None, num_workers=num_workers
             )
             unique_x_tensors = []
             unique_y_tensors = []
@@ -86,27 +85,29 @@ class TestPyTorchTileDBDataset:
                 assert len(unique_x_tensors) - 1 == batchindx
                 assert len(unique_y_tensors) - 1 == batchindx
 
-    @parametrize_for_dataset(buffer_size=[BATCH_SIZE - 1])
+    @parametrize_for_dataset(batch_size=[32], buffer_size=[31])
     def test_buffer_size_smaller_than_batch_size(
         self,
         tmpdir,
+        num_rows,
         x_sparse,
         y_sparse,
         x_shape,
         y_shape,
         num_attrs,
         pass_attrs,
+        batch_size,
         buffer_size,
         batch_shuffle,
         within_batch_shuffle,
     ):
         with ingest_in_tiledb(
             tmpdir,
-            x_data=rand_array(ROWS, *x_shape, sparse=x_sparse),
-            y_data=rand_array(ROWS, *y_shape, sparse=y_sparse),
+            x_data=rand_array(num_rows, *x_shape, sparse=x_sparse),
+            y_data=rand_array(num_rows, *y_shape, sparse=y_sparse),
             x_sparse=x_sparse,
             y_sparse=y_sparse,
-            batch_size=BATCH_SIZE,
+            batch_size=batch_size,
             num_attrs=num_attrs,
             pass_attrs=pass_attrs,
             buffer_size=buffer_size,
@@ -120,12 +121,14 @@ class TestPyTorchTileDBDataset:
     def test_unequal_num_rows(
         self,
         tmpdir,
+        num_rows,
         x_sparse,
         y_sparse,
         x_shape,
         y_shape,
         num_attrs,
         pass_attrs,
+        batch_size,
         buffer_size,
         batch_shuffle,
         within_batch_shuffle,
@@ -133,11 +136,11 @@ class TestPyTorchTileDBDataset:
         with ingest_in_tiledb(
             tmpdir,
             # Add one extra row on X
-            x_data=rand_array(ROWS + 1, *x_shape, sparse=x_sparse),
-            y_data=rand_array(ROWS, *y_shape, sparse=y_sparse),
+            x_data=rand_array(num_rows + 1, *x_shape, sparse=x_sparse),
+            y_data=rand_array(num_rows, *y_shape, sparse=y_sparse),
             x_sparse=x_sparse,
             y_sparse=y_sparse,
-            batch_size=BATCH_SIZE,
+            batch_size=batch_size,
             num_attrs=num_attrs,
             pass_attrs=pass_attrs,
             buffer_size=buffer_size,
@@ -151,25 +154,27 @@ class TestPyTorchTileDBDataset:
     def test_x_sparse_unequal_num_rows_in_batch(
         self,
         tmpdir,
+        num_rows,
         x_sparse,
         y_sparse,
         x_shape,
         y_shape,
         num_attrs,
         pass_attrs,
+        batch_size,
         buffer_size,
         batch_shuffle,
         within_batch_shuffle,
     ):
-        x_data = rand_array(ROWS, *x_shape, sparse=x_sparse)
+        x_data = rand_array(num_rows, *x_shape, sparse=x_sparse)
         x_data[np.nonzero(x_data[0])] = 0
         with ingest_in_tiledb(
             tmpdir,
             x_data=x_data,
-            y_data=rand_array(ROWS, *y_shape, sparse=y_sparse),
+            y_data=rand_array(num_rows, *y_shape, sparse=y_sparse),
             x_sparse=x_sparse,
             y_sparse=y_sparse,
-            batch_size=BATCH_SIZE,
+            batch_size=batch_size,
             num_attrs=num_attrs,
             pass_attrs=pass_attrs,
             buffer_size=buffer_size,
