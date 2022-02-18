@@ -251,5 +251,5 @@ def get_buffer_size(buffer_size: Optional[int], batch_size: int) -> int:
     if buffer_size is None:
         buffer_size = batch_size
     elif buffer_size < batch_size:
-        raise ValueError("Buffer size should be greater or equal to batch size")
+        raise ValueError("buffer_size must be >= batch_size")
     return buffer_size

@@ -33,10 +33,8 @@ class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Sequence[torch.Tenso
         super().__init__()
         rows: int = x_array.shape[0]
         if rows != y_array.shape[0]:
-            raise ValueError(
-                "X and Y should have the same number of rows, i.e., the 1st dimension "
-                "of TileDB arrays X, Y should be of equal domain extent."
-            )
+            raise ValueError("X and Y arrays must have the same number of rows")
+
         self._rows = rows
         self._generator_kwargs = dict(
             dense_batch_cls=PyTorchDenseBatch,

@@ -111,8 +111,9 @@ class TestTensorflowTileDBDataset:
             batch_shuffle=batch_shuffle,
             within_batch_shuffle=within_batch_shuffle,
         ) as dataset_kwargs:
-            with pytest.raises(ValueError):
+            with pytest.raises(ValueError) as ex:
                 TensorflowTileDBDataset(**dataset_kwargs)
+            assert "buffer_size must be >= batch_size" in str(ex.value)
 
     @parametrize_for_dataset()
     def test_unequal_num_rows(
@@ -144,8 +145,9 @@ class TestTensorflowTileDBDataset:
             batch_shuffle=batch_shuffle,
             within_batch_shuffle=within_batch_shuffle,
         ) as dataset_kwargs:
-            with pytest.raises(ValueError):
+            with pytest.raises(ValueError) as ex:
                 TensorflowTileDBDataset(**dataset_kwargs)
+            assert "X and Y arrays must have the same number of rows" in str(ex.value)
 
     @parametrize_for_dataset(x_sparse=[True])
     def test_x_sparse_unequal_num_rows_in_batch(

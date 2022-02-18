@@ -47,10 +47,7 @@ def TensorflowTileDBDataset(
     # Check that x_array and y_array have the same number of rows
     rows: int = x_array.shape[0]
     if rows != y_array.shape[0]:
-        raise ValueError(
-            "x_array and y_array should have the same number of rows, i.e. the "
-            "first dimension of x_array and y_array should be of equal domain extent"
-        )
+        raise ValueError("X and Y arrays must have the same number of rows")
 
     return tf.data.Dataset.from_generator(
         partial(
