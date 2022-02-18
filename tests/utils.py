@@ -12,10 +12,10 @@ import tiledb
 
 
 def parametrize_for_dataset(
-    sparse_x=(True, False),
-    sparse_y=(True, False),
-    input_shape=((10,), (10, 3)),
-    output_shape=((5,), (5, 2)),
+    x_sparse=(True, False),
+    y_sparse=(True, False),
+    x_shape=((10,), (10, 3)),
+    y_shape=((5,), (5, 2)),
     num_attrs=(1, 2),
     pass_attrs=(True, False),
     buffer_size=(50, None),
@@ -23,20 +23,20 @@ def parametrize_for_dataset(
     within_batch_shuffle=(True, False),
 ):
     def is_valid_combination(t):
-        sparse_x_, sparse_y_, input_shape_, output_shape_, *_, within_batch_shuffle_ = t
+        x_sparse_, y_sparse_, x_shape_, y_shape_, *_, within_batch_shuffle_ = t
         # within_batch_shuffle not supported with sparse arrays
-        if within_batch_shuffle_ and (sparse_x_ or sparse_y_):
+        if within_batch_shuffle_ and (x_sparse_ or y_sparse_):
             return False
         # sparse not supported with multi-dimensional arrays
-        if sparse_x_ and len(input_shape_) > 1 or sparse_y_ and len(output_shape_) > 1:
+        if x_sparse_ and len(x_shape_) > 1 or y_sparse_ and len(y_shape_) > 1:
             return False
         return True
 
     argnames = [
-        "sparse_x",
-        "sparse_y",
-        "input_shape",
-        "output_shape",
+        "x_sparse",
+        "y_sparse",
+        "x_shape",
+        "y_shape",
         "num_attrs",
         "pass_attrs",
         "buffer_size",
@@ -46,10 +46,10 @@ def parametrize_for_dataset(
     argvalues = filter(
         is_valid_combination,
         it.product(
-            sparse_x,
-            sparse_y,
-            input_shape,
-            output_shape,
+            x_sparse,
+            y_sparse,
+            x_shape,
+            y_shape,
             num_attrs,
             pass_attrs,
             buffer_size,
@@ -63,10 +63,10 @@ def parametrize_for_dataset(
 @contextmanager
 def ingest_in_tiledb(
     tmpdir,
-    data_x,
-    data_y,
-    sparse_x,
-    sparse_y,
+    x_data,
+    y_data,
+    x_sparse,
+    y_sparse,
     batch_size,
     num_attrs,
     pass_attrs,
@@ -79,15 +79,15 @@ def ingest_in_tiledb(
     Yield the keyword arguments for instantiating a TiledbDataset.
     """
     array_uuid = str(uuid.uuid4())
-    uri_x = os.path.join(tmpdir, "x_" + array_uuid)
-    uri_y = os.path.join(tmpdir, "y_" + array_uuid)
-    _ingest_in_tiledb(uri_x, data_x, sparse_x, batch_size, num_attrs)
-    _ingest_in_tiledb(uri_y, data_y, sparse_y, batch_size, num_attrs)
+    x_uri = os.path.join(tmpdir, "x_" + array_uuid)
+    y_uri = os.path.join(tmpdir, "y_" + array_uuid)
+    _ingest_in_tiledb(x_uri, x_data, x_sparse, batch_size, num_attrs)
+    _ingest_in_tiledb(y_uri, y_data, y_sparse, batch_size, num_attrs)
     attrs = [f"features_{attr}" for attr in range(num_attrs)] if pass_attrs else []
-    with tiledb.open(uri_x) as x, tiledb.open(uri_y) as y:
+    with tiledb.open(x_uri) as x_array, tiledb.open(y_uri) as y_array:
         yield dict(
-            x_array=x,
-            y_array=y,
+            x_array=x_array,
+            y_array=y_array,
             batch_size=batch_size,
             buffer_size=buffer_size,
             batch_shuffle=batch_shuffle,
@@ -150,16 +150,16 @@ def rand_array(num_rows: int, *row_shape: int, sparse=False) -> np.ndarray:
 
 
 def validate_tensor_generator(
-    generator, *, sparse_x, sparse_y, shape_x, shape_y, batch_size, num_attrs
+    generator, *, x_sparse, y_sparse, x_shape, y_shape, batch_size, num_attrs
 ):
     for tensors in generator:
         assert len(tensors) == 2 * num_attrs
         # the first num_attrs tensors are the features (x)
         for tensor in tensors[:num_attrs]:
-            _validate_tensor(tensor, batch_size, sparse_x, shape_x)
+            _validate_tensor(tensor, batch_size, x_sparse, x_shape)
         # the last num_attrs tensors are the labels (y)
         for tensor in tensors[num_attrs:]:
-            _validate_tensor(tensor, batch_size, sparse_y, shape_y)
+            _validate_tensor(tensor, batch_size, y_sparse, y_shape)
 
 
 def _validate_tensor(tensor, batch_size, expected_sparse, expected_shape):

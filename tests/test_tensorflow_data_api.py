@@ -35,10 +35,10 @@ class TestTensorflowTileDBDataset:
     def test_generator(
         self,
         tmpdir,
-        sparse_x,
-        sparse_y,
-        input_shape,
-        output_shape,
+        x_sparse,
+        y_sparse,
+        x_shape,
+        y_shape,
         num_attrs,
         pass_attrs,
         buffer_size,
@@ -47,10 +47,10 @@ class TestTensorflowTileDBDataset:
     ):
         with ingest_in_tiledb(
             tmpdir,
-            data_x=rand_array(ROWS, *input_shape, sparse=sparse_x),
-            data_y=rand_array(ROWS, *output_shape, sparse=sparse_y),
-            sparse_x=sparse_x,
-            sparse_y=sparse_y,
+            x_data=rand_array(ROWS, *x_shape, sparse=x_sparse),
+            y_data=rand_array(ROWS, *y_shape, sparse=y_sparse),
+            x_sparse=x_sparse,
+            y_sparse=y_sparse,
             batch_size=BATCH_SIZE,
             num_attrs=num_attrs,
             pass_attrs=pass_attrs,
@@ -75,10 +75,10 @@ class TestTensorflowTileDBDataset:
             for generator in generators:
                 validate_tensor_generator(
                     generator,
-                    sparse_x=sparse_x,
-                    sparse_y=sparse_y,
-                    shape_x=input_shape,
-                    shape_y=output_shape,
+                    x_sparse=x_sparse,
+                    y_sparse=y_sparse,
+                    x_shape=x_shape,
+                    y_shape=y_shape,
                     batch_size=BATCH_SIZE,
                     num_attrs=num_attrs,
                 )
@@ -87,10 +87,10 @@ class TestTensorflowTileDBDataset:
     def test_buffer_size_smaller_than_batch_size(
         self,
         tmpdir,
-        sparse_x,
-        sparse_y,
-        input_shape,
-        output_shape,
+        x_sparse,
+        y_sparse,
+        x_shape,
+        y_shape,
         num_attrs,
         pass_attrs,
         buffer_size,
@@ -99,10 +99,10 @@ class TestTensorflowTileDBDataset:
     ):
         with ingest_in_tiledb(
             tmpdir,
-            data_x=rand_array(ROWS, *input_shape, sparse=sparse_x),
-            data_y=rand_array(ROWS, *output_shape, sparse=sparse_y),
-            sparse_x=sparse_x,
-            sparse_y=sparse_y,
+            x_data=rand_array(ROWS, *x_shape, sparse=x_sparse),
+            y_data=rand_array(ROWS, *y_shape, sparse=y_sparse),
+            x_sparse=x_sparse,
+            y_sparse=y_sparse,
             batch_size=BATCH_SIZE,
             num_attrs=num_attrs,
             pass_attrs=pass_attrs,
@@ -117,10 +117,10 @@ class TestTensorflowTileDBDataset:
     def test_unequal_num_rows(
         self,
         tmpdir,
-        sparse_x,
-        sparse_y,
-        input_shape,
-        output_shape,
+        x_sparse,
+        y_sparse,
+        x_shape,
+        y_shape,
         num_attrs,
         pass_attrs,
         buffer_size,
@@ -130,10 +130,10 @@ class TestTensorflowTileDBDataset:
         with ingest_in_tiledb(
             tmpdir,
             # Add one extra row on X
-            data_x=rand_array(ROWS + 1, *input_shape, sparse=sparse_x),
-            data_y=rand_array(ROWS, *output_shape, sparse=sparse_y),
-            sparse_x=sparse_x,
-            sparse_y=sparse_y,
+            x_data=rand_array(ROWS + 1, *x_shape, sparse=x_sparse),
+            y_data=rand_array(ROWS, *y_shape, sparse=y_sparse),
+            x_sparse=x_sparse,
+            y_sparse=y_sparse,
             batch_size=BATCH_SIZE,
             num_attrs=num_attrs,
             pass_attrs=pass_attrs,
@@ -144,28 +144,28 @@ class TestTensorflowTileDBDataset:
             with pytest.raises(ValueError):
                 TensorflowTileDBDataset(**dataset_kwargs)
 
-    @parametrize_for_dataset(sparse_x=[True])
-    def test_sparse_x_unequal_num_rows_in_batch(
+    @parametrize_for_dataset(x_sparse=[True])
+    def test_x_sparse_unequal_num_rows_in_batch(
         self,
         tmpdir,
-        sparse_x,
-        sparse_y,
-        input_shape,
-        output_shape,
+        x_sparse,
+        y_sparse,
+        x_shape,
+        y_shape,
         num_attrs,
         pass_attrs,
         buffer_size,
         batch_shuffle,
         within_batch_shuffle,
     ):
-        data_x = rand_array(ROWS, *input_shape, sparse=sparse_x)
-        data_x[np.nonzero(data_x[0])] = 0
+        x_data = rand_array(ROWS, *x_shape, sparse=x_sparse)
+        x_data[np.nonzero(x_data[0])] = 0
         with ingest_in_tiledb(
             tmpdir,
-            data_x=data_x,
-            data_y=rand_array(ROWS, *output_shape, sparse=sparse_y),
-            sparse_x=sparse_x,
-            sparse_y=sparse_y,
+            x_data=x_data,
+            y_data=rand_array(ROWS, *y_shape, sparse=y_sparse),
+            x_sparse=x_sparse,
+            y_sparse=y_sparse,
             batch_size=BATCH_SIZE,
             num_attrs=num_attrs,
             pass_attrs=pass_attrs,
