@@ -6,7 +6,6 @@ import numpy as np
 import pytest
 import tensorflow as tf
 
-import tiledb
 from tiledb.ml.readers._batch_utils import tensor_generator
 from tiledb.ml.readers.tensorflow import (
     TensorflowDenseBatch,
@@ -46,30 +45,20 @@ class TestTensorflowTileDBDataset:
         batch_shuffle,
         within_batch_shuffle,
     ):
-        data_x = rand_array(ROWS, *input_shape, sparse=sparse_x)
-        data_y = rand_array(ROWS, *output_shape, sparse=sparse_y)
-        uri_x, uri_y = ingest_in_tiledb(
+        with ingest_in_tiledb(
             tmpdir,
-            data_x=data_x,
-            data_y=data_y,
+            data_x=rand_array(ROWS, *input_shape, sparse=sparse_x),
+            data_y=rand_array(ROWS, *output_shape, sparse=sparse_y),
             sparse_x=sparse_x,
             sparse_y=sparse_y,
             batch_size=BATCH_SIZE,
             num_attrs=num_attrs,
-        )
-        attrs = [f"features_{attr}" for attr in range(num_attrs)]
-        with tiledb.open(uri_x) as x, tiledb.open(uri_y) as y:
-            kwargs = dict(
-                x_array=x,
-                y_array=y,
-                batch_size=BATCH_SIZE,
-                buffer_size=buffer_size,
-                batch_shuffle=batch_shuffle,
-                within_batch_shuffle=within_batch_shuffle,
-                x_attrs=attrs if pass_attrs else [],
-                y_attrs=attrs if pass_attrs else [],
-            )
-            dataset = TensorflowTileDBDataset(**kwargs)
+            pass_attrs=pass_attrs,
+            buffer_size=buffer_size,
+            batch_shuffle=batch_shuffle,
+            within_batch_shuffle=within_batch_shuffle,
+        ) as dataset_kwargs:
+            dataset = TensorflowTileDBDataset(**dataset_kwargs)
             assert isinstance(dataset, tf.data.Dataset)
             # Test the generator twice: once with the public api (TensorflowTileDBDataset)
             # and once with calling tensor_generator directly. Although the former calls
@@ -80,7 +69,7 @@ class TestTensorflowTileDBDataset:
                 tensor_generator(
                     dense_batch_cls=TensorflowDenseBatch,
                     sparse_batch_cls=TensorflowSparseBatch,
-                    **dict(kwargs, buffer_size=buffer_size or BATCH_SIZE),
+                    **dict(dataset_kwargs, buffer_size=buffer_size or BATCH_SIZE),
                 ),
             ]
             for generator in generators:
@@ -108,30 +97,21 @@ class TestTensorflowTileDBDataset:
         batch_shuffle,
         within_batch_shuffle,
     ):
-        data_x = rand_array(ROWS, *input_shape, sparse=sparse_x)
-        data_y = rand_array(ROWS, *output_shape, sparse=sparse_y)
-        uri_x, uri_y = ingest_in_tiledb(
+        with ingest_in_tiledb(
             tmpdir,
-            data_x=data_x,
-            data_y=data_y,
+            data_x=rand_array(ROWS, *input_shape, sparse=sparse_x),
+            data_y=rand_array(ROWS, *output_shape, sparse=sparse_y),
             sparse_x=sparse_x,
             sparse_y=sparse_y,
             batch_size=BATCH_SIZE,
             num_attrs=num_attrs,
-        )
-        attrs = [f"features_{attr}" for attr in range(num_attrs)]
-        with tiledb.open(uri_x) as x, tiledb.open(uri_y) as y:
+            pass_attrs=pass_attrs,
+            buffer_size=buffer_size,
+            batch_shuffle=batch_shuffle,
+            within_batch_shuffle=within_batch_shuffle,
+        ) as dataset_kwargs:
             with pytest.raises(ValueError):
-                TensorflowTileDBDataset(
-                    x_array=x,
-                    y_array=y,
-                    batch_size=BATCH_SIZE,
-                    buffer_size=buffer_size,
-                    batch_shuffle=batch_shuffle,
-                    within_batch_shuffle=within_batch_shuffle,
-                    x_attrs=attrs if pass_attrs else [],
-                    y_attrs=attrs if pass_attrs else [],
-                )
+                TensorflowTileDBDataset(**dataset_kwargs)
 
     @parametrize_for_dataset()
     def test_unequal_num_rows(
@@ -147,31 +127,22 @@ class TestTensorflowTileDBDataset:
         batch_shuffle,
         within_batch_shuffle,
     ):
-        # Add one extra row on X
-        data_x = rand_array(ROWS + 1, *input_shape, sparse=sparse_x)
-        data_y = rand_array(ROWS, *output_shape, sparse=sparse_y)
-        uri_x, uri_y = ingest_in_tiledb(
+        with ingest_in_tiledb(
             tmpdir,
-            data_x=data_x,
-            data_y=data_y,
+            # Add one extra row on X
+            data_x=rand_array(ROWS + 1, *input_shape, sparse=sparse_x),
+            data_y=rand_array(ROWS, *output_shape, sparse=sparse_y),
             sparse_x=sparse_x,
             sparse_y=sparse_y,
             batch_size=BATCH_SIZE,
             num_attrs=num_attrs,
-        )
-        attrs = [f"features_{attr}" for attr in range(num_attrs)]
-        with tiledb.open(uri_x) as x, tiledb.open(uri_y) as y:
+            pass_attrs=pass_attrs,
+            buffer_size=buffer_size,
+            batch_shuffle=batch_shuffle,
+            within_batch_shuffle=within_batch_shuffle,
+        ) as dataset_kwargs:
             with pytest.raises(ValueError):
-                TensorflowTileDBDataset(
-                    x_array=x,
-                    y_array=y,
-                    batch_size=BATCH_SIZE,
-                    buffer_size=buffer_size,
-                    batch_shuffle=batch_shuffle,
-                    within_batch_shuffle=within_batch_shuffle,
-                    x_attrs=attrs if pass_attrs else [],
-                    y_attrs=attrs if pass_attrs else [],
-                )
+                TensorflowTileDBDataset(**dataset_kwargs)
 
     @parametrize_for_dataset(sparse_x=[True])
     def test_sparse_x_unequal_num_rows_in_batch(
@@ -189,28 +160,20 @@ class TestTensorflowTileDBDataset:
     ):
         data_x = rand_array(ROWS, *input_shape, sparse=sparse_x)
         data_x[np.nonzero(data_x[0])] = 0
-        data_y = rand_array(ROWS, *output_shape, sparse=sparse_y)
-        uri_x, uri_y = ingest_in_tiledb(
+        with ingest_in_tiledb(
             tmpdir,
             data_x=data_x,
-            data_y=data_y,
+            data_y=rand_array(ROWS, *output_shape, sparse=sparse_y),
             sparse_x=sparse_x,
             sparse_y=sparse_y,
             batch_size=BATCH_SIZE,
             num_attrs=num_attrs,
-        )
-        attrs = [f"features_{attr}" for attr in range(num_attrs)]
-        with tiledb.open(uri_x) as x, tiledb.open(uri_y) as y:
-            dataset = TensorflowTileDBDataset(
-                x_array=x,
-                y_array=y,
-                batch_size=BATCH_SIZE,
-                buffer_size=buffer_size,
-                batch_shuffle=batch_shuffle,
-                within_batch_shuffle=within_batch_shuffle,
-                x_attrs=attrs if pass_attrs else [],
-                y_attrs=attrs if pass_attrs else [],
-            )
+            pass_attrs=pass_attrs,
+            buffer_size=buffer_size,
+            batch_shuffle=batch_shuffle,
+            within_batch_shuffle=within_batch_shuffle,
+        ) as dataset_kwargs:
+            dataset = TensorflowTileDBDataset(**dataset_kwargs)
             with pytest.raises(Exception):
                 for _ in dataset:
                     pass

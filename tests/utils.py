@@ -1,6 +1,7 @@
 import itertools as it
 import os
 import uuid
+from contextlib import contextmanager
 
 import numpy as np
 import pytest
@@ -59,13 +60,41 @@ def parametrize_for_dataset(
     return pytest.mark.parametrize(argnames, argvalues)
 
 
-def ingest_in_tiledb(tmpdir, data_x, data_y, sparse_x, sparse_y, batch_size, num_attrs):
+@contextmanager
+def ingest_in_tiledb(
+    tmpdir,
+    data_x,
+    data_y,
+    sparse_x,
+    sparse_y,
+    batch_size,
+    num_attrs,
+    pass_attrs,
+    buffer_size,
+    batch_shuffle,
+    within_batch_shuffle,
+):
+    """Context manager for ingest data into TileDB.
+
+    Yield the keyword arguments for instantiating a TiledbDataset.
+    """
     array_uuid = str(uuid.uuid4())
     uri_x = os.path.join(tmpdir, "x_" + array_uuid)
     uri_y = os.path.join(tmpdir, "y_" + array_uuid)
     _ingest_in_tiledb(uri_x, data_x, sparse_x, batch_size, num_attrs)
     _ingest_in_tiledb(uri_y, data_y, sparse_y, batch_size, num_attrs)
-    return uri_x, uri_y
+    attrs = [f"features_{attr}" for attr in range(num_attrs)] if pass_attrs else []
+    with tiledb.open(uri_x) as x, tiledb.open(uri_y) as y:
+        yield dict(
+            x_array=x,
+            y_array=y,
+            batch_size=batch_size,
+            buffer_size=buffer_size,
+            batch_shuffle=batch_shuffle,
+            within_batch_shuffle=within_batch_shuffle,
+            x_attrs=attrs,
+            y_attrs=attrs,
+        )
 
 
 def _ingest_in_tiledb(

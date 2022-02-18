@@ -4,7 +4,6 @@ import numpy as np
 import pytest
 import torch
 
-import tiledb
 from tiledb.ml.readers.pytorch import PyTorchTileDBDataset
 
 from .utils import (
@@ -39,29 +38,20 @@ class TestPyTorchTileDBDataset:
         if workers and (sparse_x or sparse_y):
             pytest.skip("multiple workers not supported with sparse arrays")
 
-        data_x = rand_array(ROWS, *input_shape, sparse=sparse_x)
-        data_y = rand_array(ROWS, *output_shape, sparse=sparse_y)
-        uri_x, uri_y = ingest_in_tiledb(
+        with ingest_in_tiledb(
             tmpdir,
-            data_x=data_x,
-            data_y=data_y,
+            data_x=rand_array(ROWS, *input_shape, sparse=sparse_x),
+            data_y=rand_array(ROWS, *output_shape, sparse=sparse_y),
             sparse_x=sparse_x,
             sparse_y=sparse_y,
             batch_size=BATCH_SIZE,
             num_attrs=num_attrs,
-        )
-        attrs = [f"features_{attr}" for attr in range(num_attrs)]
-        with tiledb.open(uri_x) as x, tiledb.open(uri_y) as y:
-            dataset = PyTorchTileDBDataset(
-                x_array=x,
-                y_array=y,
-                batch_size=BATCH_SIZE,
-                buffer_size=buffer_size,
-                batch_shuffle=batch_shuffle,
-                within_batch_shuffle=within_batch_shuffle,
-                x_attrs=attrs if pass_attrs else [],
-                y_attrs=attrs if pass_attrs else [],
-            )
+            pass_attrs=pass_attrs,
+            buffer_size=buffer_size,
+            batch_shuffle=batch_shuffle,
+            within_batch_shuffle=within_batch_shuffle,
+        ) as dataset_kwargs:
+            dataset = PyTorchTileDBDataset(**dataset_kwargs)
             assert isinstance(dataset, torch.utils.data.IterableDataset)
             validate_tensor_generator(
                 dataset,
@@ -110,30 +100,21 @@ class TestPyTorchTileDBDataset:
         batch_shuffle,
         within_batch_shuffle,
     ):
-        data_x = rand_array(ROWS, *input_shape, sparse=sparse_x)
-        data_y = rand_array(ROWS, *output_shape, sparse=sparse_y)
-        uri_x, uri_y = ingest_in_tiledb(
+        with ingest_in_tiledb(
             tmpdir,
-            data_x=data_x,
-            data_y=data_y,
+            data_x=rand_array(ROWS, *input_shape, sparse=sparse_x),
+            data_y=rand_array(ROWS, *output_shape, sparse=sparse_y),
             sparse_x=sparse_x,
             sparse_y=sparse_y,
             batch_size=BATCH_SIZE,
             num_attrs=num_attrs,
-        )
-        attrs = [f"features_{attr}" for attr in range(num_attrs)]
-        with tiledb.open(uri_x) as x, tiledb.open(uri_y) as y:
+            pass_attrs=pass_attrs,
+            buffer_size=buffer_size,
+            batch_shuffle=batch_shuffle,
+            within_batch_shuffle=within_batch_shuffle,
+        ) as dataset_kwargs:
             with pytest.raises(ValueError):
-                PyTorchTileDBDataset(
-                    x_array=x,
-                    y_array=y,
-                    batch_size=BATCH_SIZE,
-                    buffer_size=buffer_size,
-                    batch_shuffle=batch_shuffle,
-                    within_batch_shuffle=within_batch_shuffle,
-                    x_attrs=attrs if pass_attrs else [],
-                    y_attrs=attrs if pass_attrs else [],
-                )
+                PyTorchTileDBDataset(**dataset_kwargs)
 
     @parametrize_for_dataset()
     def test_unequal_num_rows(
@@ -149,31 +130,22 @@ class TestPyTorchTileDBDataset:
         batch_shuffle,
         within_batch_shuffle,
     ):
-        # Add one extra row on X
-        data_x = rand_array(ROWS + 1, *input_shape, sparse=sparse_x)
-        data_y = rand_array(ROWS, *output_shape, sparse=sparse_y)
-        uri_x, uri_y = ingest_in_tiledb(
+        with ingest_in_tiledb(
             tmpdir,
-            data_x=data_x,
-            data_y=data_y,
+            # Add one extra row on X
+            data_x=rand_array(ROWS + 1, *input_shape, sparse=sparse_x),
+            data_y=rand_array(ROWS, *output_shape, sparse=sparse_y),
             sparse_x=sparse_x,
             sparse_y=sparse_y,
             batch_size=BATCH_SIZE,
             num_attrs=num_attrs,
-        )
-        attrs = [f"features_{attr}" for attr in range(num_attrs)]
-        with tiledb.open(uri_x) as x, tiledb.open(uri_y) as y:
+            pass_attrs=pass_attrs,
+            buffer_size=buffer_size,
+            batch_shuffle=batch_shuffle,
+            within_batch_shuffle=within_batch_shuffle,
+        ) as dataset_kwargs:
             with pytest.raises(ValueError):
-                PyTorchTileDBDataset(
-                    x_array=x,
-                    y_array=y,
-                    batch_size=BATCH_SIZE,
-                    buffer_size=buffer_size,
-                    batch_shuffle=batch_shuffle,
-                    within_batch_shuffle=within_batch_shuffle,
-                    x_attrs=attrs if pass_attrs else [],
-                    y_attrs=attrs if pass_attrs else [],
-                )
+                PyTorchTileDBDataset(**dataset_kwargs)
 
     @parametrize_for_dataset(sparse_x=[True])
     def test_sparse_x_unequal_num_rows_in_batch(
@@ -191,28 +163,20 @@ class TestPyTorchTileDBDataset:
     ):
         data_x = rand_array(ROWS, *input_shape, sparse=sparse_x)
         data_x[np.nonzero(data_x[0])] = 0
-        data_y = rand_array(ROWS, *output_shape, sparse=sparse_y)
-        uri_x, uri_y = ingest_in_tiledb(
+        with ingest_in_tiledb(
             tmpdir,
             data_x=data_x,
-            data_y=data_y,
+            data_y=rand_array(ROWS, *output_shape, sparse=sparse_y),
             sparse_x=sparse_x,
             sparse_y=sparse_y,
             batch_size=BATCH_SIZE,
             num_attrs=num_attrs,
-        )
-        attrs = [f"features_{attr}" for attr in range(num_attrs)]
-        with tiledb.open(uri_x) as x, tiledb.open(uri_y) as y:
-            dataset = PyTorchTileDBDataset(
-                x_array=x,
-                y_array=y,
-                batch_size=BATCH_SIZE,
-                buffer_size=buffer_size,
-                batch_shuffle=batch_shuffle,
-                within_batch_shuffle=within_batch_shuffle,
-                x_attrs=attrs if pass_attrs else [],
-                y_attrs=attrs if pass_attrs else [],
-            )
+            pass_attrs=pass_attrs,
+            buffer_size=buffer_size,
+            batch_shuffle=batch_shuffle,
+            within_batch_shuffle=within_batch_shuffle,
+        ) as dataset_kwargs:
+            dataset = PyTorchTileDBDataset(**dataset_kwargs)
             with pytest.raises(Exception):
                 for _ in dataset:
                     pass
