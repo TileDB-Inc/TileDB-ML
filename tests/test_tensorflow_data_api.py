@@ -14,7 +14,12 @@ from tiledb.ml.readers.tensorflow import (
     TensorflowTileDBDataset,
 )
 
-from .utils import create_rand_labels, ingest_in_tiledb, validate_tensor_generator
+from .utils import (
+    create_rand_labels,
+    ingest_in_tiledb,
+    parametrize_for_dataset,
+    validate_tensor_generator,
+)
 
 # Suppress all Tensorflow messages
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
@@ -27,28 +32,19 @@ BATCH_SIZE = 32
 ROWS = 1000
 
 
-@pytest.mark.parametrize("input_shape", [(10,), (10, 3)])
-@pytest.mark.parametrize("num_attrs", [1, 2])
-@pytest.mark.parametrize("batch_shuffle", [True, False])
-@pytest.mark.parametrize("within_batch_shuffle", [True, False])
-@pytest.mark.parametrize("buffer_size", [50, None])
-@pytest.mark.parametrize("sparse_x", [True, False])
-@pytest.mark.parametrize("sparse_y", [True, False])
 class TestTensorflowTileDBDataset:
+    @parametrize_for_dataset()
     def test_generator(
         self,
         tmpdir,
-        input_shape,
-        num_attrs,
-        batch_shuffle,
-        within_batch_shuffle,
-        buffer_size,
         sparse_x,
         sparse_y,
+        input_shape,
+        num_attrs,
+        buffer_size,
+        batch_shuffle,
+        within_batch_shuffle,
     ):
-        if within_batch_shuffle and (sparse_x or sparse_y):
-            pytest.skip("within_batch_shuffle not supported with sparse arrays")
-
         if sparse_x:
             data_x = create_rand_labels(ROWS, input_shape[0], one_hot=True)
         else:
@@ -102,16 +98,17 @@ class TestTensorflowTileDBDataset:
                         sparse_y=sparse_y,
                     )
 
+    @parametrize_for_dataset(buffer_size=[BATCH_SIZE - 1])
     def test_buffer_size_smaller_than_batch_size(
         self,
         tmpdir,
-        input_shape,
-        num_attrs,
-        batch_shuffle,
-        within_batch_shuffle,
-        buffer_size,
         sparse_x,
         sparse_y,
+        input_shape,
+        num_attrs,
+        buffer_size,
+        batch_shuffle,
+        within_batch_shuffle,
     ):
         if sparse_x:
             data_x = create_rand_labels(ROWS, input_shape[0], one_hot=True)
@@ -136,23 +133,24 @@ class TestTensorflowTileDBDataset:
                         x_array=x,
                         y_array=y,
                         batch_size=BATCH_SIZE,
-                        buffer_size=BATCH_SIZE - 1,
+                        buffer_size=buffer_size,
                         batch_shuffle=batch_shuffle,
                         within_batch_shuffle=within_batch_shuffle,
                         x_attrs=attrs if pass_attrs else [],
                         y_attrs=attrs if pass_attrs else [],
                     )
 
+    @parametrize_for_dataset()
     def test_unequal_num_rows(
         self,
         tmpdir,
-        input_shape,
-        num_attrs,
-        batch_shuffle,
-        within_batch_shuffle,
-        buffer_size,
         sparse_x,
         sparse_y,
+        input_shape,
+        num_attrs,
+        buffer_size,
+        batch_shuffle,
+        within_batch_shuffle,
     ):
         # Add one extra row on X
         if sparse_x:
@@ -185,22 +183,18 @@ class TestTensorflowTileDBDataset:
                         y_attrs=attrs if pass_attrs else [],
                     )
 
+    @parametrize_for_dataset(sparse_x=[True])
     def test_sparse_x_unequal_num_rows_in_batch(
         self,
         tmpdir,
-        input_shape,
-        num_attrs,
-        batch_shuffle,
-        within_batch_shuffle,
-        buffer_size,
         sparse_x,
         sparse_y,
+        input_shape,
+        num_attrs,
+        buffer_size,
+        batch_shuffle,
+        within_batch_shuffle,
     ):
-        if not sparse_x:
-            pytest.skip()
-        if within_batch_shuffle:
-            pytest.skip("within_batch_shuffle not supported with sparse arrays")
-
         data_x = create_rand_labels(ROWS, input_shape[0], one_hot=True)
         data_x[np.nonzero(data_x[0])] = 0
         data_y = create_rand_labels(ROWS, NUM_OF_CLASSES, one_hot=sparse_y)

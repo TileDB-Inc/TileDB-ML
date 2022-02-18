@@ -7,7 +7,12 @@ import torch
 import tiledb
 from tiledb.ml.readers.pytorch import PyTorchTileDBDataset
 
-from .utils import create_rand_labels, ingest_in_tiledb, validate_tensor_generator
+from .utils import (
+    create_rand_labels,
+    ingest_in_tiledb,
+    parametrize_for_dataset,
+    validate_tensor_generator,
+)
 
 # Test parameters
 NUM_OF_CLASSES = 5
@@ -15,32 +20,23 @@ BATCH_SIZE = 20
 ROWS = 100
 
 
-@pytest.mark.parametrize("input_shape", [(10,), (10, 3)])
-@pytest.mark.parametrize("num_attrs", [1, 2])
-@pytest.mark.parametrize("batch_shuffle", [True, False])
-@pytest.mark.parametrize("within_batch_shuffle", [True, False])
-@pytest.mark.parametrize("buffer_size", [50, None])
-@pytest.mark.parametrize("sparse_x", [True, False])
-@pytest.mark.parametrize("sparse_y", [True, False])
 class TestPyTorchTileDBDataset:
+    @parametrize_for_dataset()
     @pytest.mark.parametrize("workers", [0, 2])
     def test_generator(
         self,
         tmpdir,
-        input_shape,
-        num_attrs,
-        batch_shuffle,
-        within_batch_shuffle,
-        buffer_size,
         sparse_x,
         sparse_y,
+        input_shape,
+        num_attrs,
+        buffer_size,
+        batch_shuffle,
+        within_batch_shuffle,
         workers,
     ):
-        if sparse_x or sparse_y:
-            if within_batch_shuffle:
-                pytest.skip("within_batch_shuffle not supported with sparse arrays")
-            if workers:
-                pytest.skip("multiple workers not supported with sparse arrays")
+        if workers and (sparse_x or sparse_y):
+            pytest.skip("multiple workers not supported with sparse arrays")
 
         if sparse_x:
             data_x = create_rand_labels(ROWS, input_shape[0], one_hot=True)
@@ -104,16 +100,17 @@ class TestPyTorchTileDBDataset:
                     assert len(unique_x_tensors) - 1 == batchindx
                     assert len(unique_y_tensors) - 1 == batchindx
 
+    @parametrize_for_dataset(buffer_size=[BATCH_SIZE - 1])
     def test_buffer_size_smaller_than_batch_size(
         self,
         tmpdir,
-        input_shape,
-        num_attrs,
-        batch_shuffle,
-        within_batch_shuffle,
-        buffer_size,
         sparse_x,
         sparse_y,
+        input_shape,
+        num_attrs,
+        buffer_size,
+        batch_shuffle,
+        within_batch_shuffle,
     ):
         if sparse_x:
             data_x = create_rand_labels(ROWS, input_shape[0], one_hot=True)
@@ -138,23 +135,24 @@ class TestPyTorchTileDBDataset:
                         x_array=x,
                         y_array=y,
                         batch_size=BATCH_SIZE,
-                        buffer_size=BATCH_SIZE - 1,
+                        buffer_size=buffer_size,
                         batch_shuffle=batch_shuffle,
                         within_batch_shuffle=within_batch_shuffle,
                         x_attrs=attrs if pass_attrs else [],
                         y_attrs=attrs if pass_attrs else [],
                     )
 
+    @parametrize_for_dataset()
     def test_unequal_num_rows(
         self,
         tmpdir,
-        input_shape,
-        num_attrs,
-        batch_shuffle,
-        within_batch_shuffle,
-        buffer_size,
         sparse_x,
         sparse_y,
+        input_shape,
+        num_attrs,
+        buffer_size,
+        batch_shuffle,
+        within_batch_shuffle,
     ):
         # Add one extra row on X
         if sparse_x:
@@ -187,22 +185,18 @@ class TestPyTorchTileDBDataset:
                         y_attrs=attrs if pass_attrs else [],
                     )
 
+    @parametrize_for_dataset(sparse_x=[True])
     def test_sparse_x_unequal_num_rows_in_batch(
         self,
         tmpdir,
-        input_shape,
-        num_attrs,
-        batch_shuffle,
-        within_batch_shuffle,
-        buffer_size,
         sparse_x,
         sparse_y,
+        input_shape,
+        num_attrs,
+        buffer_size,
+        batch_shuffle,
+        within_batch_shuffle,
     ):
-        if not sparse_x:
-            pytest.skip()
-        if within_batch_shuffle:
-            pytest.skip("within_batch_shuffle not supported with sparse arrays")
-
         data_x = create_rand_labels(ROWS, input_shape[0], one_hot=True)
         data_x[np.nonzero(data_x[0])] = 0
         data_y = create_rand_labels(ROWS, NUM_OF_CLASSES, one_hot=sparse_y)

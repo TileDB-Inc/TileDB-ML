@@ -1,11 +1,56 @@
+import itertools as it
 import os
 import uuid
 
 import numpy as np
+import pytest
 import tensorflow as tf
 import torch
 
 import tiledb
+
+
+def parametrize_for_dataset(
+    sparse_x=(True, False),
+    sparse_y=(True, False),
+    input_shape=((10,), (10, 3)),
+    num_attrs=(1, 2),
+    buffer_size=(50, None),
+    batch_shuffle=(True, False),
+    within_batch_shuffle=(True, False),
+):
+    def is_valid_combination(t):
+        sparse_x_, sparse_y_, input_shape_, *_, within_batch_shuffle_ = t
+        # within_batch_shuffle not supported with sparse arrays
+        if within_batch_shuffle_ and (sparse_x_ or sparse_y_):
+            return False
+        # sparse_x not supported with multi-dimensional arrays
+        if sparse_x_ and len(input_shape_) > 1:
+            return False
+        return True
+
+    argnames = [
+        "sparse_x",
+        "sparse_y",
+        "input_shape",
+        "num_attrs",
+        "buffer_size",
+        "batch_shuffle",
+        "within_batch_shuffle",
+    ]
+    argvalues = filter(
+        is_valid_combination,
+        it.product(
+            sparse_x,
+            sparse_y,
+            input_shape,
+            num_attrs,
+            buffer_size,
+            batch_shuffle,
+            within_batch_shuffle,
+        ),
+    )
+    return pytest.mark.parametrize(argnames, argvalues)
 
 
 def ingest_in_tiledb(tmpdir, data_x, data_y, sparse_x, sparse_y, batch_size, num_attrs):
