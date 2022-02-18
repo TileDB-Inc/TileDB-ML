@@ -15,9 +15,9 @@ from tiledb.ml.readers.tensorflow import (
 )
 
 from .utils import (
-    create_rand_labels,
     ingest_in_tiledb,
     parametrize_for_dataset,
+    rand_array,
     validate_tensor_generator,
 )
 
@@ -27,7 +27,6 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
 # Test parameters
-NUM_OF_CLASSES = 5
 BATCH_SIZE = 32
 ROWS = 1000
 
@@ -40,18 +39,15 @@ class TestTensorflowTileDBDataset:
         sparse_x,
         sparse_y,
         input_shape,
+        output_shape,
         num_attrs,
         pass_attrs,
         buffer_size,
         batch_shuffle,
         within_batch_shuffle,
     ):
-        if sparse_x:
-            data_x = create_rand_labels(ROWS, input_shape[0], one_hot=True)
-        else:
-            data_x = np.random.rand(ROWS, *input_shape)
-        data_y = create_rand_labels(ROWS, NUM_OF_CLASSES, one_hot=sparse_y)
-
+        data_x = rand_array(ROWS, *input_shape, sparse=sparse_x)
+        data_y = rand_array(ROWS, *output_shape, sparse=sparse_y)
         uri_x, uri_y = ingest_in_tiledb(
             tmpdir,
             data_x=data_x,
@@ -105,18 +101,15 @@ class TestTensorflowTileDBDataset:
         sparse_x,
         sparse_y,
         input_shape,
+        output_shape,
         num_attrs,
         pass_attrs,
         buffer_size,
         batch_shuffle,
         within_batch_shuffle,
     ):
-        if sparse_x:
-            data_x = create_rand_labels(ROWS, input_shape[0], one_hot=True)
-        else:
-            data_x = np.random.rand(ROWS, *input_shape)
-        data_y = create_rand_labels(ROWS, NUM_OF_CLASSES, one_hot=sparse_y)
-
+        data_x = rand_array(ROWS, *input_shape, sparse=sparse_x)
+        data_y = rand_array(ROWS, *output_shape, sparse=sparse_y)
         uri_x, uri_y = ingest_in_tiledb(
             tmpdir,
             data_x=data_x,
@@ -147,6 +140,7 @@ class TestTensorflowTileDBDataset:
         sparse_x,
         sparse_y,
         input_shape,
+        output_shape,
         num_attrs,
         pass_attrs,
         buffer_size,
@@ -154,12 +148,8 @@ class TestTensorflowTileDBDataset:
         within_batch_shuffle,
     ):
         # Add one extra row on X
-        if sparse_x:
-            data_x = create_rand_labels(ROWS + 1, input_shape[0], one_hot=True)
-        else:
-            data_x = np.random.rand(ROWS + 1, *input_shape)
-        data_y = create_rand_labels(ROWS, NUM_OF_CLASSES, one_hot=sparse_y)
-
+        data_x = rand_array(ROWS + 1, *input_shape, sparse=sparse_x)
+        data_y = rand_array(ROWS, *output_shape, sparse=sparse_y)
         uri_x, uri_y = ingest_in_tiledb(
             tmpdir,
             data_x=data_x,
@@ -190,16 +180,16 @@ class TestTensorflowTileDBDataset:
         sparse_x,
         sparse_y,
         input_shape,
+        output_shape,
         num_attrs,
         pass_attrs,
         buffer_size,
         batch_shuffle,
         within_batch_shuffle,
     ):
-        data_x = create_rand_labels(ROWS, input_shape[0], one_hot=True)
+        data_x = rand_array(ROWS, *input_shape, sparse=sparse_x)
         data_x[np.nonzero(data_x[0])] = 0
-        data_y = create_rand_labels(ROWS, NUM_OF_CLASSES, one_hot=sparse_y)
-
+        data_y = rand_array(ROWS, *output_shape, sparse=sparse_y)
         uri_x, uri_y = ingest_in_tiledb(
             tmpdir,
             data_x=data_x,

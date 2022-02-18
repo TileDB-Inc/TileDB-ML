@@ -14,6 +14,7 @@ def parametrize_for_dataset(
     sparse_x=(True, False),
     sparse_y=(True, False),
     input_shape=((10,), (10, 3)),
+    output_shape=((5,), (5, 2)),
     num_attrs=(1, 2),
     pass_attrs=(True, False),
     buffer_size=(50, None),
@@ -21,12 +22,12 @@ def parametrize_for_dataset(
     within_batch_shuffle=(True, False),
 ):
     def is_valid_combination(t):
-        sparse_x_, sparse_y_, input_shape_, *_, within_batch_shuffle_ = t
+        sparse_x_, sparse_y_, input_shape_, output_shape_, *_, within_batch_shuffle_ = t
         # within_batch_shuffle not supported with sparse arrays
         if within_batch_shuffle_ and (sparse_x_ or sparse_y_):
             return False
-        # sparse_x not supported with multi-dimensional arrays
-        if sparse_x_ and len(input_shape_) > 1:
+        # sparse not supported with multi-dimensional arrays
+        if sparse_x_ and len(input_shape_) > 1 or sparse_y_ and len(output_shape_) > 1:
             return False
         return True
 
@@ -34,6 +35,7 @@ def parametrize_for_dataset(
         "sparse_x",
         "sparse_y",
         "input_shape",
+        "output_shape",
         "num_attrs",
         "pass_attrs",
         "buffer_size",
@@ -46,6 +48,7 @@ def parametrize_for_dataset(
             sparse_x,
             sparse_y,
             input_shape,
+            output_shape,
             num_attrs,
             pass_attrs,
             buffer_size,
@@ -97,22 +100,24 @@ def _ingest_in_tiledb(
         tiledb_array[idx] = {f"features_{attr}": data[idx] for attr in range(num_attrs)}
 
 
-def create_rand_labels(
-    num_rows: int, num_classes: int, one_hot: bool = False
-) -> np.ndarray:
-    """Create labels for `num_rows` observations with `num_classes` classes.
+def rand_array(num_rows: int, *row_shape: int, sparse=False) -> np.ndarray:
+    """Create a random array of shape (num_rows, *row_shape).
 
-    :param num_rows: Number of observations to create labels for.
-    :param num_classes: Number of possible labels.
-    :param one_hot: Whether to create one-hot labels.
-
-    :returns:
-    - If one-hot is False, 1-D numpy array of length `num_rows` with labels from 0 to
-      `num_classes`
-    - If one-hot is True, binary 2-D numpy array of shape `(num_rows, num_classes)`.
+    :param num_rows: Number of rows of the array (i.e. first dimension size).
+    :param row_shape: Shape of each row (i.e. remaining dimension sizes).
+    :param sparse: If True, the array will be sparse: exactly one element per row
+        will be non-zero.
     """
-    labels = np.random.randint(num_classes, size=num_rows)
-    return np.eye(num_classes, dtype=np.uint8)[labels] if one_hot else labels
+    shape = (num_rows, *row_shape)
+    if sparse:
+        a = np.zeros((num_rows, np.asarray(row_shape).prod()))
+        non_zero_coords = np.random.randint(a.shape[1], size=num_rows)
+        a[np.arange(num_rows), non_zero_coords] = np.random.rand(num_rows)
+        a = a.reshape(shape)
+    else:
+        a = np.random.random(shape)
+    assert a.shape == shape
+    return a
 
 
 def validate_tensor_generator(

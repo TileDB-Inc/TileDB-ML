@@ -95,6 +95,8 @@ class BaseSparseBatch(BaseBatch[Tensor]):
     def __init__(
         self, schema: tiledb.ArraySchema, attrs: Sequence[str], batch_size: int
     ):
+        if schema.ndim != 2:
+            raise NotImplementedError("Sparse batches only supported for 2D arrays")
         super().__init__(schema, attrs, batch_size)
         self._row_dim = schema.domain.dim(0).name
         self._col_dim = schema.domain.dim(1).name
