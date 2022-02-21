@@ -169,7 +169,7 @@ class TestPyTorchTileDBDataset:
         within_batch_shuffle,
     ):
         x_data = rand_array(num_rows, *x_shape, sparse=x_sparse)
-        x_data[np.nonzero(x_data[0])] = 0
+        x_data[np.random.randint(len(x_data))] = 0
         with ingest_in_tiledb(
             tmpdir,
             x_data=x_data,
@@ -184,6 +184,7 @@ class TestPyTorchTileDBDataset:
             within_batch_shuffle=within_batch_shuffle,
         ) as dataset_kwargs:
             dataset = PyTorchTileDBDataset(**dataset_kwargs)
-            with pytest.raises(Exception):
+            with pytest.raises(ValueError) as ex:
                 for _ in dataset:
                     pass
+            assert "x and y batches should have the same length" in str(ex.value)

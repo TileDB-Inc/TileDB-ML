@@ -110,12 +110,7 @@ class BaseSparseBatch(BaseBatch[Tensor]):
         # Normalize indices: We want the coords indices to be in the [0, batch_size]
         # range. If we do not normalize the sparse tensor is being created but with a
         # dimension [0, max(coord_index)], which is overkill
-        row_size_norm = row.max() - row.min() + 1
-        col_size_norm = col.max() + 1
-        self._buffer_csr = sp.csr_matrix(
-            (buffer[self._attrs[0]], (row - offset, col)),
-            shape=(row_size_norm, col_size_norm),
-        )
+        self._buffer_csr = sp.csr_matrix((buffer[self._attrs[0]], (row - offset, col)))
 
     def set_batch_slice(self, batch_slice: slice) -> None:
         assert hasattr(self, "_buffer_csr"), "set_buffer_offset() not called"
@@ -227,9 +222,8 @@ def tensor_generator(
                 y_batch.set_batch_slice(batch_slice)
                 if len(x_batch) != len(y_batch):
                     raise ValueError(
-                        "x_array and y_array should have the same number of rows, "
-                        "i.e. the first dimension of x_array and y_array should be "
-                        "of equal domain extent inside the batch"
+                        "x and y batches should have the same length: "
+                        f"len(x_batch)={len(x_batch)}, len(y_batch)={len(y_batch)}"
                     )
                 if x_batch:
                     if within_batch_shuffle:
