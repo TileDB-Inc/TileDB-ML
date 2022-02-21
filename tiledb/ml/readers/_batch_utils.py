@@ -110,33 +110,41 @@ class BaseSparseBatch(BaseBatch[Tensor]):
         # Normalize indices: We want the coords indices to be in the [0, batch_size]
         # range. If we do not normalize the sparse tensor is being created but with a
         # dimension [0, max(coord_index)], which is overkill
-        self._buffer_csr = sp.csr_matrix((buffer[self._attrs[0]], (row - offset, col)))
+        self._buffer_csrs = [
+            sp.csr_matrix((buffer[attr], (row - offset, col))) for attr in self._attrs
+        ]
 
     def set_batch_slice(self, batch_slice: slice) -> None:
-        assert hasattr(self, "_buffer_csr"), "set_buffer_offset() not called"
-        self._batch_csr = self._buffer_csr[batch_slice]
+        assert hasattr(self, "_buffer_csrs"), "set_buffer_offset() not called"
+        self._batch_csrs = [buffer_csr[batch_slice] for buffer_csr in self._buffer_csrs]
 
     def iter_tensors(self, perm_idxs: Optional[np.ndarray] = None) -> Iterator[Tensor]:
-        assert hasattr(self, "_batch_csr"), "set_batch_slice() not called"
+        assert hasattr(self, "_batch_csrs"), "set_batch_slice() not called"
         if perm_idxs is not None:
             raise NotImplementedError(
                 "within_batch_shuffle not implemented for sparse arrays"
             )
-        batch_coo = self._batch_csr.tocoo()
-        data = batch_coo.data
-        coords = np.stack((batch_coo.row, batch_coo.col), axis=-1)
-        for dtype in self._attr_dtypes:
+        for batch_csr, dtype in zip(self._batch_csrs, self._attr_dtypes):
+            batch_coo = batch_csr.tocoo()
+            data = batch_coo.data
+            coords = np.stack((batch_coo.row, batch_coo.col), axis=-1)
             yield self._tensor_from_coo(data, coords, self._dense_shape, dtype)
 
     def __len__(self) -> int:
-        assert hasattr(self, "_batch_csr"), "set_batch_slice() not called"
+        assert hasattr(self, "_batch_csrs"), "set_batch_slice() not called"
         # return number of non-zero rows
-        return int((self._batch_csr.getnnz(axis=1) > 0).sum())
+        lengths = {
+            int((batch_csr.getnnz(axis=1) > 0).sum()) for batch_csr in self._batch_csrs
+        }
+        assert len(lengths) == 1, f"Multiple different batch lengths: {lengths}"
+        return lengths.pop()
 
     def __bool__(self) -> bool:
-        assert hasattr(self, "_batch_csr"), "set_batch_slice() not called"
+        assert hasattr(self, "_batch_csrs"), "set_batch_slice() not called"
         # faster version of __len__() > 0
-        return len(self._batch_csr.data) > 0
+        lengths = {len(batch_csr.data) for batch_csr in self._batch_csrs}
+        assert len(lengths) == 1, f"Multiple different batch lengths: {lengths}"
+        return lengths.pop() > 0
 
     @staticmethod
     @abstractmethod
