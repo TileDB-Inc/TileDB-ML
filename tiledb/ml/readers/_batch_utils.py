@@ -67,7 +67,9 @@ class BaseDenseBatch(BaseBatch[Tensor]):
 
     def set_batch_slice(self, batch_slice: slice) -> None:
         assert hasattr(self, "_buffer"), "read_buffer() not called"
-        self._attr_batches = [self._buffer[attr][batch_slice] for attr in self._attrs]
+        self._attr_batches = tuple(
+            self._buffer[attr][batch_slice] for attr in self._attrs
+        )
 
     def iter_tensors(self, perm_idxs: Optional[np.ndarray] = None) -> Iterator[Tensor]:
         assert hasattr(self, "_attr_batches"), "set_batch_slice() not called"
@@ -112,13 +114,15 @@ class BaseSparseBatch(BaseBatch[Tensor]):
         # range. If we do not normalize the sparse tensor is being created but with a
         # dimension [0, max(coord_index)], which is overkill
         offset = buffer_slice.start
-        self._buffer_csrs = [
+        self._buffer_csrs = tuple(
             sp.csr_matrix((buffer[attr], (row - offset, col))) for attr in self._attrs
-        ]
+        )
 
     def set_batch_slice(self, batch_slice: slice) -> None:
         assert hasattr(self, "_buffer_csrs"), "read_buffer() not called"
-        self._batch_csrs = [buffer_csr[batch_slice] for buffer_csr in self._buffer_csrs]
+        self._batch_csrs = tuple(
+            buffer_csr[batch_slice] for buffer_csr in self._buffer_csrs
+        )
 
     def iter_tensors(self, perm_idxs: Optional[np.ndarray] = None) -> Iterator[Tensor]:
         assert hasattr(self, "_batch_csrs"), "set_batch_slice() not called"
