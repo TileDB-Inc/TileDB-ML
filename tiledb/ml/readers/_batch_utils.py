@@ -63,7 +63,7 @@ class BaseBatch(ABC, Generic[Tensor]):
 
 class BaseDenseBatch(BaseBatch[Tensor]):
     def read_buffer(self, array: tiledb.Array, buffer_slice: slice) -> None:
-        self._buffer = array[buffer_slice]
+        self._buffer = array.query(dims=(), attrs=self._attrs)[buffer_slice]
 
     def set_batch_slice(self, batch_slice: slice) -> None:
         assert hasattr(self, "_buffer"), "read_buffer() not called"
@@ -104,7 +104,7 @@ class BaseSparseBatch(BaseBatch[Tensor]):
         self._attr_dtypes = tuple(schema.attr(attr).dtype for attr in self._attrs)
 
     def read_buffer(self, array: tiledb.Array, buffer_slice: slice) -> None:
-        buffer = array[buffer_slice]
+        buffer = array.query(attrs=self._attrs)[buffer_slice]
         # COO to CSR transformation for batching and row slicing
         row = buffer[self._row_dim]
         col = buffer[self._col_dim]
