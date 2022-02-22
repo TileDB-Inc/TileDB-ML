@@ -10,6 +10,7 @@ from sklearn.base import BaseEstimator
 
 import tiledb
 
+from ._cloud_utils import update_file_properties
 from .base import Meta, TileDBModel, Timestamp, current_milli_time
 
 
@@ -93,8 +94,6 @@ class SklearnTileDBModel(TileDBModel[BaseEstimator]):
 
         # In case we are on TileDB-Cloud we have to update model array's file properties
         if self.namespace:
-            from ._cloud_utils import update_file_properties
-
             update_file_properties(self.uri, self._file_properties)
 
     def _write_array(self, serialized_model: bytes, meta: Optional[Meta]) -> None:
