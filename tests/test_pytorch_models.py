@@ -145,53 +145,10 @@ class TestPyTorchModel:
         tiledb_obj_none = PyTorchTileDBModel(uri=tiledb_array, model=None)
         assert tiledb_obj_none.preview() == ""
 
-    # def test_get_cloud_uri(self, tmpdir, net, optimizer, mocker):
-    #     saved_net = net()
-    #     tiledb_array = os.path.join(tmpdir, "model_array")
-    #     tiledb_obj = PyTorchTileDBModel(uri=tiledb_array, model=saved_net)
-    #
-    #     mocker.patch("tiledb.ml.models._cloud_utils.get_s3_prefix", return_value=None)
-    #     with pytest.raises(ValueError):
-    #         tiledb_obj.get_cloud_uri(tiledb_array)
-    #
-    #     mocker.patch("tiledb.ml.models._cloud_utils.get_s3_prefix", return_value="bar")
-    #     actual = tiledb_obj.get_cloud_uri(tiledb_array)
-    #     expected = "tiledb://{}/{}".format(
-    #         tiledb_obj.namespace, os.path.join("bar", tiledb_array)
-    #     )
-    #     assert actual == expected
-
     def test_file_properties(self, tmpdir, net, optimizer):
         saved_net = net()
         tiledb_array = os.path.join(tmpdir, "model_array")
         tiledb_obj = PyTorchTileDBModel(uri=tiledb_array, model=saved_net)
-        tiledb_obj.save()
-
-        assert tiledb_obj._file_properties["TILEDB_ML_MODEL_ML_FRAMEWORK"] == "PYTORCH"
-        assert tiledb_obj._file_properties["TILEDB_ML_MODEL_STAGE"] == "STAGING"
-        assert (
-            tiledb_obj._file_properties["TILEDB_ML_MODEL_PYTHON_VERSION"]
-            == platform.python_version()
-        )
-        assert (
-            tiledb_obj._file_properties["TILEDB_ML_MODEL_ML_FRAMEWORK_VERSION"]
-            == torch.__version__
-        )
-        assert tiledb_obj._file_properties["TILEDB_ML_MODEL_PREVIEW"] == str(saved_net)
-
-    def test_file_properties_in_tiledb_cloud_case(self, tmpdir, net, optimizer, mocker):
-        saved_net = net()
-        tiledb_array = os.path.join(tmpdir, "model_array")
-
-        mocker.patch(
-            "tiledb.ml.models.base.TileDBModel.get_cloud_uri", return_value=tiledb_array
-        )
-        mocker.patch("tiledb.ml.models._cloud_utils.update_file_properties")
-
-        tiledb_obj = PyTorchTileDBModel(
-            uri=tiledb_array, namespace="test_namespace", model=saved_net
-        )
-        tiledb_obj.save()
 
         assert tiledb_obj._file_properties["TILEDB_ML_MODEL_ML_FRAMEWORK"] == "PYTORCH"
         assert tiledb_obj._file_properties["TILEDB_ML_MODEL_STAGE"] == "STAGING"
@@ -213,3 +170,54 @@ class TestPyTorchModel:
             tiledb_obj.save(
                 meta={"TILEDB_ML_MODEL_ML_FRAMEWORK": "TILEDB_ML_MODEL_ML_FRAMEWORK"},
             )
+
+
+class TestPyTorchModelCloud:
+    def test_get_cloud_uri_call_for_models_on_tiledb_cloud(self, tmpdir, mocker):
+        saved_net = Net()
+        uri = os.path.join(tmpdir, "model_array")
+
+        mock_get_cloud_uri = mocker.patch(
+            "tiledb.ml.models.base.get_cloud_uri", return_value=uri
+        )
+
+        _ = PyTorchTileDBModel(uri=uri, namespace="test_namespace", model=saved_net)
+
+        mock_get_cloud_uri.assert_called_once_with(uri=uri, namespace="test_namespace")
+
+    def test_get_s3_prefix_call_for_models_on_tiledb_cloud(self, tmpdir, mocker):
+        saved_net = Net()
+        uri = os.path.join(tmpdir, "model_array")
+
+        mock_get_s3_prefix = mocker.patch(
+            "tiledb.ml.models._cloud_utils.get_s3_prefix", return_value="s3 prefix"
+        )
+
+        _ = PyTorchTileDBModel(uri=uri, namespace="test_namespace", model=saved_net)
+
+        mock_get_s3_prefix.assert_called_once_with(namespace="test_namespace")
+
+    def test_update_file_properties_call(self, tmpdir, mocker):
+        net = Net()
+        uri = os.path.join(tmpdir, "model_array")
+
+        mocker.patch("tiledb.ml.models.base.get_cloud_uri", return_value=uri)
+
+        tiledb_obj = PyTorchTileDBModel(uri=uri, namespace="test_namespace", model=net)
+
+        mock_update_file_properties = mocker.patch(
+            "tiledb.ml.models.pytorch.update_file_properties", return_value=None
+        )
+        mocker.patch("tiledb.ml.models.pytorch.PyTorchTileDBModel._write_array")
+
+        tiledb_obj.save()
+
+        file_properties_dict = {
+            "TILEDB_ML_MODEL_ML_FRAMEWORK": "PYTORCH",
+            "TILEDB_ML_MODEL_ML_FRAMEWORK_VERSION": torch.__version__,
+            "TILEDB_ML_MODEL_STAGE": "STAGING",
+            "TILEDB_ML_MODEL_PYTHON_VERSION": platform.python_version(),
+            "TILEDB_ML_MODEL_PREVIEW": str(net),
+        }
+
+        mock_update_file_properties.assert_called_once_with(uri, file_properties_dict)

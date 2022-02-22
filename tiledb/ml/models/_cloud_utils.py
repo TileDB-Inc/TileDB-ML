@@ -32,7 +32,7 @@ def update_file_properties(uri: str, file_properties: Dict[str, str]) -> None:
 
 
 def get_cloud_uri(uri: str, namespace: Optional[str]) -> str:
-    s3_prefix = get_s3_prefix(namespace)
+    s3_prefix = get_s3_prefix(namespace=namespace)
     if s3_prefix is None:
         raise ValueError(
             f"You must set the default s3 prefix path for ML models in "
