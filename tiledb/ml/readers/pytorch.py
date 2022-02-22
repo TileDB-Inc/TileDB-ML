@@ -8,7 +8,12 @@ import torch
 
 import tiledb
 
-from ._batch_utils import BaseDenseBatch, BaseSparseBatch, tensor_generator
+from ._batch_utils import (
+    BaseDenseBatch,
+    BaseSparseBatch,
+    get_buffer_size,
+    tensor_generator,
+)
 
 
 class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Sequence[torch.Tensor]]):
@@ -28,10 +33,8 @@ class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Sequence[torch.Tenso
         super().__init__()
         rows: int = x_array.shape[0]
         if rows != y_array.shape[0]:
-            raise ValueError(
-                "X and Y should have the same number of rows, i.e., the 1st dimension "
-                "of TileDB arrays X, Y should be of equal domain extent."
-            )
+            raise ValueError("X and Y arrays must have the same number of rows")
+
         self._rows = rows
         self._generator_kwargs = dict(
             dense_batch_cls=PyTorchDenseBatch,
@@ -41,7 +44,7 @@ class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Sequence[torch.Tenso
             x_attrs=x_attrs,
             y_attrs=y_attrs,
             batch_size=batch_size,
-            buffer_size=buffer_size,
+            buffer_size=get_buffer_size(buffer_size, batch_size),
             batch_shuffle=batch_shuffle,
             within_batch_shuffle=within_batch_shuffle,
         )
@@ -50,10 +53,11 @@ class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Sequence[torch.Tenso
         kwargs = self._generator_kwargs.copy()
         worker_info = torch.utils.data.get_worker_info()
         if worker_info is not None:
-            if isinstance(kwargs["x_array"], tiledb.SparseArray):
-                raise NotImplementedError(
-                    "https://github.com/pytorch/pytorch/issues/20248"
-                )
+            for array_key in "x_array", "y_array":
+                if isinstance(kwargs[array_key], tiledb.SparseArray):
+                    raise NotImplementedError(
+                        "https://github.com/pytorch/pytorch/issues/20248"
+                    )
             per_worker = int(math.ceil(self._rows / worker_info.num_workers))
             start_offset = worker_info.id * per_worker
             stop_offset = min(start_offset + per_worker, self._rows)

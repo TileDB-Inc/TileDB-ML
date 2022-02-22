@@ -12,6 +12,7 @@ from ._batch_utils import (
     BaseDenseBatch,
     BaseSparseBatch,
     get_attr_names,
+    get_buffer_size,
     tensor_generator,
 )
 
@@ -36,22 +37,17 @@ def TensorflowTileDBDataset(
     :param x_array: TileDB array of the features.
     :param y_array: TileDB array of the labels.
     :param batch_size: Size of each batch.
+    :param buffer_size: Size of the buffer used to read the data. If not given,
+        it is determined automatically.
     :param x_attrs: Attribute names of x_array.
     :param y_attrs: Attribute names of y_array.
     :param batch_shuffle: True for shuffling batches.
     :param within_batch_shuffle: True for shuffling records in each batch.
     """
-    if isinstance(x_array, tiledb.DenseArray):
-        if isinstance(y_array, tiledb.SparseArray):
-            raise TypeError("Dense x_array and sparse y_array not currently supported")
-
     # Check that x_array and y_array have the same number of rows
     rows: int = x_array.shape[0]
     if rows != y_array.shape[0]:
-        raise ValueError(
-            "x_array and y_array should have the same number of rows, i.e. the "
-            "first dimension of x_array and y_array should be of equal domain extent"
-        )
+        raise ValueError("X and Y arrays must have the same number of rows")
 
     return tf.data.Dataset.from_generator(
         partial(
@@ -63,7 +59,7 @@ def TensorflowTileDBDataset(
             x_attrs=x_attrs,
             y_attrs=y_attrs,
             batch_size=batch_size,
-            buffer_size=buffer_size,
+            buffer_size=get_buffer_size(buffer_size, batch_size),
             batch_shuffle=batch_shuffle,
             within_batch_shuffle=within_batch_shuffle,
         ),

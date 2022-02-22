@@ -95,6 +95,8 @@ class BaseSparseBatch(BaseBatch[Tensor]):
     def __init__(
         self, schema: tiledb.ArraySchema, attrs: Sequence[str], batch_size: int
     ):
+        if schema.ndim != 2:
+            raise NotImplementedError("Sparse batches only supported for 2D arrays")
         super().__init__(schema, attrs, batch_size)
         self._row_dim = schema.domain.dim(0).name
         self._col_dim = schema.domain.dim(1).name
@@ -108,12 +110,7 @@ class BaseSparseBatch(BaseBatch[Tensor]):
         # Normalize indices: We want the coords indices to be in the [0, batch_size]
         # range. If we do not normalize the sparse tensor is being created but with a
         # dimension [0, max(coord_index)], which is overkill
-        row_size_norm = row.max() - row.min() + 1
-        col_size_norm = col.max() + 1
-        self._buffer_csr = sp.csr_matrix(
-            (buffer[self._attrs[0]], (row - offset, col)),
-            shape=(row_size_norm, col_size_norm),
-        )
+        self._buffer_csr = sp.csr_matrix((buffer[self._attrs[0]], (row - offset, col)))
 
     def set_batch_slice(self, batch_slice: slice) -> None:
         assert hasattr(self, "_buffer_csr"), "set_buffer_offset() not called"
@@ -162,7 +159,7 @@ def tensor_generator(
     x_array: tiledb.Array,
     y_array: tiledb.Array,
     batch_size: int,
-    buffer_size: Optional[int] = None,
+    buffer_size: int,
     batch_shuffle: bool = False,
     within_batch_shuffle: bool = False,
     x_attrs: Sequence[str] = (),
@@ -181,7 +178,7 @@ def tensor_generator(
     :param x_array: TileDB array of the features.
     :param y_array: TileDB array of the labels.
     :param batch_size: Size of each batch.
-    :param buffer_size: Size of the buffer used to read the data; defaults to batch_size.
+    :param buffer_size: Size of the buffer used to read the data.
     :param batch_shuffle: True for shuffling batches.
     :param within_batch_shuffle: True for shuffling records in each batch.
     :param x_attrs: Attribute names of x_array; defaults to all x_array attributes.
@@ -189,11 +186,6 @@ def tensor_generator(
     :param start_offset: Start row offset; defaults to 0.
     :param stop_offset: Stop row offset; defaults to number of rows.
     """
-    if buffer_size is None:
-        buffer_size = batch_size
-    elif buffer_size < batch_size:
-        raise ValueError("Buffer size should be greater or equal to batch size")
-
     if stop_offset is None:
         stop_offset = x_array.shape[0]
 
@@ -230,9 +222,8 @@ def tensor_generator(
                 y_batch.set_batch_slice(batch_slice)
                 if len(x_batch) != len(y_batch):
                     raise ValueError(
-                        "x_array and y_array should have the same number of rows, "
-                        "i.e. the first dimension of x_array and y_array should be "
-                        "of equal domain extent inside the batch"
+                        "x and y batches should have the same length: "
+                        f"len(x_batch)={len(x_batch)}, len(y_batch)={len(y_batch)}"
                     )
                 if x_batch:
                     if within_batch_shuffle:
@@ -248,3 +239,11 @@ def tensor_generator(
 
 def get_attr_names(schema: tiledb.ArraySchema) -> Sequence[str]:
     return tuple(schema.attr(idx).name for idx in range(schema.nattr))
+
+
+def get_buffer_size(buffer_size: Optional[int], batch_size: int) -> int:
+    if buffer_size is None:
+        buffer_size = batch_size
+    elif buffer_size < batch_size:
+        raise ValueError("buffer_size must be >= batch_size")
+    return buffer_size
