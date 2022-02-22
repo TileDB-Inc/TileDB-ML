@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from concurrent.futures import ThreadPoolExecutor
-from typing import Generic, Iterator, Mapping, Optional, Sequence, Type, TypeVar, Union
+from concurrent import futures
+from typing import Generic, Iterator, Optional, Sequence, Type, TypeVar, Union
 
 import numpy as np
 import scipy.sparse as sp
@@ -25,18 +25,18 @@ class BaseBatch(ABC, Generic[Tensor]):
         self._batch_size = batch_size
 
     @abstractmethod
-    def set_buffer_offset(self, buffer: Mapping[str, np.ndarray], offset: int) -> None:
-        """Set the current buffer from which subsequent batches are to be read.
+    def read_buffer(self, array: tiledb.Array, buffer_slice: slice) -> None:
+        """Read a slice from a TileDB array into a buffer.
 
-        :param buffer: Mapping of attribute names to numpy arrays.
-        :param offset: Start offset of the buffer in the TileDB array.
+        :param array: TileDB array to read from.
+        :param buffer_slice: Slice of the array to read.
         """
 
     @abstractmethod
     def set_batch_slice(self, batch_slice: slice) -> None:
-        """Set the current batch as a slice of the set buffer.
+        """Set the current batch as a slice of the read buffer.
 
-        Must be called after `set_buffer_offset`.
+        Must be called after `read_buffer`.
 
         :param batch_slice: Slice of the buffer to be used as the current batch.
         """
@@ -62,12 +62,14 @@ class BaseBatch(ABC, Generic[Tensor]):
 
 
 class BaseDenseBatch(BaseBatch[Tensor]):
-    def set_buffer_offset(self, buffer: Mapping[str, np.ndarray], offset: int) -> None:
-        self._buffer = buffer
+    def read_buffer(self, array: tiledb.Array, buffer_slice: slice) -> None:
+        self._buffer = array.query(dims=(), attrs=self._attrs)[buffer_slice]
 
     def set_batch_slice(self, batch_slice: slice) -> None:
-        assert hasattr(self, "_buffer"), "set_buffer_offset() not called"
-        self._attr_batches = [self._buffer[attr][batch_slice] for attr in self._attrs]
+        assert hasattr(self, "_buffer"), "read_buffer() not called"
+        self._attr_batches = tuple(
+            self._buffer[attr][batch_slice] for attr in self._attrs
+        )
 
     def iter_tensors(self, perm_idxs: Optional[np.ndarray] = None) -> Iterator[Tensor]:
         assert hasattr(self, "_attr_batches"), "set_batch_slice() not called"
@@ -103,20 +105,24 @@ class BaseSparseBatch(BaseBatch[Tensor]):
         self._dense_shape = (batch_size, schema.shape[1])
         self._attr_dtypes = tuple(schema.attr(attr).dtype for attr in self._attrs)
 
-    def set_buffer_offset(self, buffer: Mapping[str, np.ndarray], offset: int) -> None:
+    def read_buffer(self, array: tiledb.Array, buffer_slice: slice) -> None:
+        buffer = array.query(attrs=self._attrs)[buffer_slice]
         # COO to CSR transformation for batching and row slicing
         row = buffer[self._row_dim]
         col = buffer[self._col_dim]
         # Normalize indices: We want the coords indices to be in the [0, batch_size]
         # range. If we do not normalize the sparse tensor is being created but with a
         # dimension [0, max(coord_index)], which is overkill
-        self._buffer_csrs = [
+        offset = buffer_slice.start
+        self._buffer_csrs = tuple(
             sp.csr_matrix((buffer[attr], (row - offset, col))) for attr in self._attrs
-        ]
+        )
 
     def set_batch_slice(self, batch_slice: slice) -> None:
-        assert hasattr(self, "_buffer_csrs"), "set_buffer_offset() not called"
-        self._batch_csrs = [buffer_csr[batch_slice] for buffer_csr in self._buffer_csrs]
+        assert hasattr(self, "_buffer_csrs"), "read_buffer() not called"
+        self._batch_csrs = tuple(
+            buffer_csr[batch_slice] for buffer_csr in self._buffer_csrs
+        )
 
     def iter_tensors(self, perm_idxs: Optional[np.ndarray] = None) -> Iterator[Tensor]:
         assert hasattr(self, "_batch_csrs"), "set_batch_slice() not called"
@@ -208,15 +214,15 @@ def tensor_generator(
 
     x_batch = batch_factory(x_array.schema, x_attrs)
     y_batch = batch_factory(y_array.schema, y_attrs)
-    with ThreadPoolExecutor(max_workers=2) as executor:
+    with futures.ThreadPoolExecutor(max_workers=2) as executor:
         for offset in range(start_offset, stop_offset, buffer_size):
-            x_buffer, y_buffer = executor.map(
-                lambda array: array[offset : offset + buffer_size],  # type: ignore
-                (x_array, y_array),
+            buffer_slice = slice(offset, offset + buffer_size)
+            futures.wait(
+                (
+                    executor.submit(x_batch.read_buffer, x_array, buffer_slice),
+                    executor.submit(y_batch.read_buffer, y_array, buffer_slice),
+                )
             )
-            x_batch.set_buffer_offset(x_buffer, offset)
-            y_batch.set_buffer_offset(y_buffer, offset)
-
             # Split the buffer_size into batch_size chunks
             batch_offsets = np.arange(
                 0, min(buffer_size, stop_offset - offset), batch_size
