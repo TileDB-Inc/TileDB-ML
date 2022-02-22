@@ -20,6 +20,7 @@ from tensorflow.python.keras.utils import generic_utils
 
 import tiledb
 
+from ._cloud_utils import update_file_properties
 from .base import Meta, TileDBModel, Timestamp, current_milli_time
 
 
@@ -246,8 +247,6 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
 
         # In case we are on TileDB-Cloud we have to update model array's file properties
         if self.namespace:
-            from ._cloud_utils import update_file_properties
-
             update_file_properties(self.uri, self._file_properties)
 
     def _write_array(
