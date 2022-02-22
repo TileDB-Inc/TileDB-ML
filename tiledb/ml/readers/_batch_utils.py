@@ -17,18 +17,16 @@ class BaseBatch(ABC, Generic[Tensor]):
     Base class used for getting tensors from batches of buffers read from a TileDB array.
     """
 
-    def __init__(
-        self, schema: tiledb.ArraySchema, attrs: Sequence[str], batch_size: int
-    ):
-        self._schema = schema
-        self._attrs = attrs
-        self._batch_size = batch_size
+    @abstractmethod
+    def __init__(self, array: tiledb.Array):
+        """
+        :param array: TileDB array to read from.
+        """
 
     @abstractmethod
-    def read_buffer(self, array: tiledb.Array, buffer_slice: slice) -> None:
-        """Read a slice from a TileDB array into a buffer.
+    def read_buffer(self, buffer_slice: slice) -> None:
+        """Read a slice from the TileDB array into a buffer.
 
-        :param array: TileDB array to read from.
         :param buffer_slice: Slice of the array to read.
         """
 
@@ -62,14 +60,15 @@ class BaseBatch(ABC, Generic[Tensor]):
 
 
 class BaseDenseBatch(BaseBatch[Tensor]):
-    def read_buffer(self, array: tiledb.Array, buffer_slice: slice) -> None:
-        self._buffer = array.query(dims=(), attrs=self._attrs)[buffer_slice]
+    def __init__(self, array: tiledb.Array, attrs: Sequence[str]):
+        self._query = array.query(dims=(), attrs=attrs or None)
+
+    def read_buffer(self, buffer_slice: slice) -> None:
+        self._buffer = self._query[buffer_slice]
 
     def set_batch_slice(self, batch_slice: slice) -> None:
         assert hasattr(self, "_buffer"), "read_buffer() not called"
-        self._attr_batches = tuple(
-            self._buffer[attr][batch_slice] for attr in self._attrs
-        )
+        self._attr_batches = tuple(data[batch_slice] for data in self._buffer.values())
 
     def iter_tensors(self, perm_idxs: Optional[np.ndarray] = None) -> Iterator[Tensor]:
         assert hasattr(self, "_attr_batches"), "set_batch_slice() not called"
@@ -94,28 +93,29 @@ class BaseDenseBatch(BaseBatch[Tensor]):
 
 
 class BaseSparseBatch(BaseBatch[Tensor]):
-    def __init__(
-        self, schema: tiledb.ArraySchema, attrs: Sequence[str], batch_size: int
-    ):
+    def __init__(self, array: tiledb.Array, attrs: Sequence[str], batch_size: int):
+        schema = array.schema
         if schema.ndim != 2:
             raise NotImplementedError("Sparse batches only supported for 2D arrays")
-        super().__init__(schema, attrs, batch_size)
+        if not attrs:
+            attrs = get_attr_names(schema)
+        self._query = array.query(attrs=attrs)
         self._row_dim = schema.domain.dim(0).name
         self._col_dim = schema.domain.dim(1).name
         self._dense_shape = (batch_size, schema.shape[1])
-        self._attr_dtypes = tuple(schema.attr(attr).dtype for attr in self._attrs)
+        self._attr_dtypes = tuple(schema.attr(attr).dtype for attr in attrs)
 
-    def read_buffer(self, array: tiledb.Array, buffer_slice: slice) -> None:
-        buffer = array.query(attrs=self._attrs)[buffer_slice]
+    def read_buffer(self, buffer_slice: slice) -> None:
+        buffer = self._query[buffer_slice]
         # COO to CSR transformation for batching and row slicing
-        row = buffer[self._row_dim]
-        col = buffer[self._col_dim]
+        row = buffer.pop(self._row_dim)
+        col = buffer.pop(self._col_dim)
         # Normalize indices: We want the coords indices to be in the [0, batch_size]
         # range. If we do not normalize the sparse tensor is being created but with a
         # dimension [0, max(coord_index)], which is overkill
         offset = buffer_slice.start
         self._buffer_csrs = tuple(
-            sp.csr_matrix((buffer[attr], (row - offset, col))) for attr in self._attrs
+            sp.csr_matrix((data, (row - offset, col))) for data in buffer.values()
         )
 
     def set_batch_slice(self, batch_slice: slice) -> None:
@@ -204,23 +204,21 @@ def tensor_generator(
         stop_offset = x_array.shape[0]
 
     def batch_factory(
-        schema: tiledb.ArraySchema, attrs: Sequence[str]
+        array: tiledb.Array, attrs: Sequence[str]
     ) -> Union[BaseDenseBatch[DenseTensor], BaseSparseBatch[SparseTensor]]:
-        if not attrs:
-            attrs = get_attr_names(schema)
-        if schema.sparse:
-            return sparse_batch_cls(schema, attrs, batch_size)
-        return dense_batch_cls(schema, attrs, batch_size)
+        if array.schema.sparse:
+            return sparse_batch_cls(array, attrs, batch_size)
+        return dense_batch_cls(array, attrs)
 
-    x_batch = batch_factory(x_array.schema, x_attrs)
-    y_batch = batch_factory(y_array.schema, y_attrs)
+    x_batch = batch_factory(x_array, x_attrs)
+    y_batch = batch_factory(y_array, y_attrs)
     with futures.ThreadPoolExecutor(max_workers=2) as executor:
         for offset in range(start_offset, stop_offset, buffer_size):
             buffer_slice = slice(offset, offset + buffer_size)
             futures.wait(
                 (
-                    executor.submit(x_batch.read_buffer, x_array, buffer_slice),
-                    executor.submit(y_batch.read_buffer, y_array, buffer_slice),
+                    executor.submit(x_batch.read_buffer, buffer_slice),
+                    executor.submit(y_batch.read_buffer, buffer_slice),
                 )
             )
             # Split the buffer_size into batch_size chunks
