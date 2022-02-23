@@ -107,7 +107,7 @@ def _ingest_in_tiledb(
         tiledb.Dim(
             name=f"dim_{dim}",
             domain=(0, data.shape[dim] - 1),
-            tile=data.shape[dim] if dim > 0 else batch_size,
+            tile=np.random.randint(1, data.shape[dim] if dim > 0 else batch_size),
             dtype=np.int32,
         )
         for dim in range(data.ndim)
