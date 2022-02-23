@@ -93,7 +93,7 @@ class BaseDenseBatch(BaseBatch[Tensor]):
 
 
 class BaseSparseBatch(BaseBatch[Tensor]):
-    def __init__(self, array: tiledb.Array, attrs: Sequence[str], batch_size: int):
+    def __init__(self, array: tiledb.Array, attrs: Sequence[str]):
         schema = array.schema
         if schema.ndim != 2:
             raise NotImplementedError("Sparse batches only supported for 2D arrays")
@@ -102,7 +102,7 @@ class BaseSparseBatch(BaseBatch[Tensor]):
         self._query = array.query(attrs=attrs)
         self._row_dim = schema.domain.dim(0).name
         self._col_dim = schema.domain.dim(1).name
-        self._dense_shape = (batch_size, schema.shape[1])
+        self._row_shape = schema.shape[1:]
         self._attr_dtypes = tuple(schema.attr(attr).dtype for attr in attrs)
 
     def read_buffer(self, buffer_slice: slice) -> None:
@@ -134,7 +134,8 @@ class BaseSparseBatch(BaseBatch[Tensor]):
             batch_coo = batch_csr.tocoo()
             data = batch_coo.data
             coords = np.stack((batch_coo.row, batch_coo.col), axis=-1)
-            yield self._tensor_from_coo(data, coords, self._dense_shape, dtype)
+            dense_shape = (batch_csr.shape[0], *self._row_shape)
+            yield self._tensor_from_coo(data, coords, dense_shape, dtype)
 
     def __len__(self) -> int:
         assert hasattr(self, "_batch_csrs"), "set_batch_slice() not called"
@@ -207,8 +208,9 @@ def tensor_generator(
         array: tiledb.Array, attrs: Sequence[str]
     ) -> Union[BaseDenseBatch[DenseTensor], BaseSparseBatch[SparseTensor]]:
         if array.schema.sparse:
-            return sparse_batch_cls(array, attrs, batch_size)
-        return dense_batch_cls(array, attrs)
+            return sparse_batch_cls(array, attrs)
+        else:
+            return dense_batch_cls(array, attrs)
 
     x_batch = batch_factory(x_array, x_attrs)
     y_batch = batch_factory(y_array, y_attrs)

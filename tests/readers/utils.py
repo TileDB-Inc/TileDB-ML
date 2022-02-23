@@ -168,14 +168,9 @@ def validate_tensor_generator(
 def _validate_tensor(tensor, batch_size, expected_sparse, expected_shape):
     num_rows, *row_shape = tensor.shape
     assert row_shape == list(expected_shape)
-    if expected_sparse:
-        assert _is_sparse_tensor(tensor)
-        # for sparse tensors, num_rows should be equal to batch_size
-        assert num_rows == batch_size
-    else:
-        assert not _is_sparse_tensor(tensor)
-        # for dense tensors, num_rows may be less than batch_size
-        assert num_rows <= batch_size
+    assert _is_sparse_tensor(tensor) == expected_sparse
+    # num_rows may be less than batch_size
+    assert num_rows <= batch_size
 
 
 def _is_sparse_tensor(tensor):
