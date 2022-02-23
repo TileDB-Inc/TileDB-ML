@@ -181,3 +181,12 @@ def _is_sparse_tensor(tensor):
     if isinstance(tensor, tf.Tensor):
         return False
     assert False, f"Unknown tensor type: {type(tensor)}"
+
+
+def tensor_values(tensor):
+    if isinstance(tensor, tf.SparseTensor):
+        return [value.numpy().tolist() for value in tensor.values]
+    if isinstance(tensor, torch.Tensor):
+        return [value.numpy().tolist() for value in tensor._values()]
+
+    assert False, f"Unknown tensor type: {type(tensor)}"

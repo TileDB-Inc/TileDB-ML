@@ -10,6 +10,7 @@ from .utils import (
     ingest_in_tiledb,
     parametrize_for_dataset,
     rand_array,
+    tensor_values,
     validate_tensor_generator,
 )
 
@@ -188,3 +189,41 @@ class TestPyTorchTileDBDataset:
                 for _ in dataset:
                     pass
             assert "x and y batches should have the same length" in str(ex.value)
+
+    @parametrize_for_dataset(x_sparse=(True,), batch_shuffle=(False,))
+    def test_sparse_read_order(
+        self,
+        tmpdir,
+        num_rows,
+        x_sparse,
+        y_sparse,
+        x_shape,
+        y_shape,
+        num_attrs,
+        pass_attrs,
+        batch_size,
+        buffer_size,
+        batch_shuffle,
+        within_batch_shuffle,
+    ):
+        x_array = rand_array(num_rows, *x_shape, sparse=x_sparse)
+        with ingest_in_tiledb(
+            tmpdir,
+            # Add one extra row on X
+            x_data=x_array,
+            y_data=rand_array(num_rows, *y_shape, sparse=y_sparse),
+            x_sparse=x_sparse,
+            y_sparse=y_sparse,
+            batch_size=batch_size,
+            num_attrs=num_attrs,
+            pass_attrs=pass_attrs,
+            buffer_size=buffer_size,
+            batch_shuffle=batch_shuffle,
+            within_batch_shuffle=within_batch_shuffle,
+        ) as dataset_kwargs:
+            dataset = PyTorchTileDBDataset(**dataset_kwargs)
+            dataset_val = [
+                value for batch in dataset for value in tensor_values(batch[0])
+            ]
+            # default tolerance is ± 2.3e-06
+            assert x_array[np.nonzero(x_array)].tolist() == pytest.approx(dataset_val)
