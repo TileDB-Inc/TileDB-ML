@@ -3,8 +3,7 @@ from typing import Dict, Optional
 
 try:
     import tiledb.cloud
-except ImportError as ex:
-    print(ex.msg)
+except ImportError:
     pass
 
 CLOUD_MODELS = "ml_models"
