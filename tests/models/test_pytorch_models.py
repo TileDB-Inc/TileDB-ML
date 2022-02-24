@@ -163,39 +163,39 @@ class TestPyTorchModel:
         assert tiledb_obj._file_properties["TILEDB_ML_MODEL_PREVIEW"] == str(model)
 
 
-pytest.model = Net()
-
-
 class TestPyTorchModelCloud:
     def test_get_cloud_uri_call_for_models_on_tiledb_cloud(self, tmpdir, mocker):
+        model = Net()
         uri = os.path.join(tmpdir, "model_array")
 
         mock_get_cloud_uri = mocker.patch(
             "tiledb.ml.models.base.get_cloud_uri", return_value=uri
         )
 
-        _ = PyTorchTileDBModel(uri=uri, namespace="test_namespace", model=pytest.model)
+        _ = PyTorchTileDBModel(uri=uri, namespace="test_namespace", model=model)
 
         mock_get_cloud_uri.assert_called_once_with(uri, "test_namespace")
 
     def test_get_s3_prefix_call_for_models_on_tiledb_cloud(self, tmpdir, mocker):
+        model = Net()
         uri = os.path.join(tmpdir, "model_array")
 
         mock_get_s3_prefix = mocker.patch(
             "tiledb.ml.models._cloud_utils.get_s3_prefix", return_value="s3 prefix"
         )
 
-        _ = PyTorchTileDBModel(uri=uri, namespace="test_namespace", model=pytest.model)
+        _ = PyTorchTileDBModel(uri=uri, namespace="test_namespace", model=model)
 
         mock_get_s3_prefix.assert_called_once_with("test_namespace")
 
     def test_update_file_properties_call(self, tmpdir, mocker):
+        model = Net()
         uri = os.path.join(tmpdir, "model_array")
 
         mocker.patch("tiledb.ml.models.base.get_cloud_uri", return_value=uri)
 
         tiledb_obj = PyTorchTileDBModel(
-            uri=uri, namespace="test_namespace", model=pytest.model
+            uri=uri, namespace="test_namespace", model=model
         )
 
         mock_update_file_properties = mocker.patch(
@@ -210,14 +210,15 @@ class TestPyTorchModelCloud:
             "TILEDB_ML_MODEL_ML_FRAMEWORK_VERSION": torch.__version__,
             "TILEDB_ML_MODEL_STAGE": "STAGING",
             "TILEDB_ML_MODEL_PYTHON_VERSION": platform.python_version(),
-            "TILEDB_ML_MODEL_PREVIEW": str(pytest.model),
+            "TILEDB_ML_MODEL_PREVIEW": str(model),
         }
 
         mock_update_file_properties.assert_called_once_with(uri, file_properties_dict)
 
     def test_exception_raise_file_property_in_meta_error(self, tmpdir):
+        model = Net()
         tiledb_array = os.path.join(tmpdir, "model_array")
-        tiledb_obj = PyTorchTileDBModel(uri=tiledb_array, model=pytest.model)
+        tiledb_obj = PyTorchTileDBModel(uri=tiledb_array, model=model)
         with pytest.raises(ValueError) as ex:
             tiledb_obj.save(
                 meta={"TILEDB_ML_MODEL_ML_FRAMEWORK": "TILEDB_ML_MODEL_ML_FRAMEWORK"},

@@ -425,19 +425,18 @@ class TestTensorflowKerasModel:
         assert tiledb_model_obj_none.preview() == ""
 
 
-pytest.model = keras.models.Sequential()
-pytest.model.add(keras.layers.Flatten(input_shape=(10, 10)))
-
-
 class TestTensorflowKerasModelCloud:
     def test_file_properties(self, tmpdir):
+        model = keras.models.Sequential()
+        model.add(keras.layers.Flatten(input_shape=(10, 10)))
+
         # Get model summary in a string
         s = io.StringIO()
-        pytest.model.summary(print_fn=lambda x: s.write(x + "\n"))
+        model.summary(print_fn=lambda x: s.write(x + "\n"))
         model_summary = s.getvalue()
 
         uri = os.path.join(tmpdir, "model_array")
-        tiledb_obj = TensorflowKerasTileDBModel(uri=uri, model=pytest.model)
+        tiledb_obj = TensorflowKerasTileDBModel(uri=uri, model=model)
 
         assert (
             tiledb_obj._file_properties["TILEDB_ML_MODEL_ML_FRAMEWORK"]
@@ -455,35 +454,38 @@ class TestTensorflowKerasModelCloud:
         assert tiledb_obj._file_properties["TILEDB_ML_MODEL_PREVIEW"] == model_summary
 
     def test_get_cloud_uri_call_for_models_on_tiledb_cloud(self, tmpdir, mocker):
+        model = keras.models.Sequential()
+        model.add(keras.layers.Flatten(input_shape=(10, 10)))
         uri = os.path.join(tmpdir, "model_array")
 
         mock_get_cloud_uri = mocker.patch(
             "tiledb.ml.models.base.get_cloud_uri", return_value=uri
         )
 
-        _ = TensorflowKerasTileDBModel(
-            uri=uri, namespace="test_namespace", model=pytest.model
-        )
+        _ = TensorflowKerasTileDBModel(uri=uri, namespace="test_namespace", model=model)
 
         mock_get_cloud_uri.assert_called_once_with(uri, "test_namespace")
 
     def test_get_s3_prefix_call_for_models_on_tiledb_cloud(self, tmpdir, mocker):
+        model = keras.models.Sequential()
+        model.add(keras.layers.Flatten(input_shape=(10, 10)))
         uri = os.path.join(tmpdir, "model_array")
 
         mock_get_s3_prefix = mocker.patch(
             "tiledb.ml.models._cloud_utils.get_s3_prefix", return_value="s3 prefix"
         )
 
-        _ = TensorflowKerasTileDBModel(
-            uri=uri, namespace="test_namespace", model=pytest.model
-        )
+        _ = TensorflowKerasTileDBModel(uri=uri, namespace="test_namespace", model=model)
 
         mock_get_s3_prefix.assert_called_once_with("test_namespace")
 
     def test_update_file_properties_call(self, tmpdir, mocker):
+        model = keras.models.Sequential()
+        model.add(keras.layers.Flatten(input_shape=(10, 10)))
+
         # Get model summary in a string
         s = io.StringIO()
-        pytest.model.summary(print_fn=lambda x: s.write(x + "\n"))
+        model.summary(print_fn=lambda x: s.write(x + "\n"))
         model_summary = s.getvalue()
 
         uri = os.path.join(tmpdir, "model_array")
@@ -491,7 +493,7 @@ class TestTensorflowKerasModelCloud:
         mocker.patch("tiledb.ml.models.base.get_cloud_uri", return_value=uri)
 
         tiledb_obj = TensorflowKerasTileDBModel(
-            uri=uri, namespace="test_namespace", model=pytest.model
+            uri=uri, namespace="test_namespace", model=model
         )
 
         mock_update_file_properties = mocker.patch(
@@ -515,8 +517,10 @@ class TestTensorflowKerasModelCloud:
         mock_update_file_properties.assert_called_once_with(uri, file_properties_dict)
 
     def test_exception_raise_file_property_in_meta_error(self, tmpdir):
+        model = keras.models.Sequential()
+        model.add(keras.layers.Flatten(input_shape=(10, 10)))
         tiledb_array = os.path.join(tmpdir, "model_array")
-        tiledb_obj = TensorflowKerasTileDBModel(uri=tiledb_array, model=pytest.model)
+        tiledb_obj = TensorflowKerasTileDBModel(uri=tiledb_array, model=model)
         with pytest.raises(ValueError) as ex:
             tiledb_obj.save(
                 meta={"TILEDB_ML_MODEL_ML_FRAMEWORK": "TILEDB_ML_MODEL_ML_FRAMEWORK"},
