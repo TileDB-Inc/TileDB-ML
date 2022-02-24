@@ -1,7 +1,11 @@
 import os
 from typing import Dict, Optional
 
-import tiledb.cloud
+try:
+    import tiledb.cloud
+except ImportError as ex:
+    print(ex.msg)
+    pass
 
 CLOUD_MODELS = "ml_models"
 FILETYPE_ML_MODEL = "ml_model"
@@ -32,11 +36,11 @@ def update_file_properties(uri: str, file_properties: Dict[str, str]) -> None:
 
 
 def get_cloud_uri(uri: str, namespace: Optional[str]) -> str:
-    s3_prefix = get_s3_prefix(namespace=namespace)
+    s3_prefix = get_s3_prefix(namespace)
     if s3_prefix is None:
         raise ValueError(
             f"You must set the default s3 prefix path for ML models in "
             f"{namespace} profile settings on TileDB-Cloud"
         )
 
-    return "tiledb://{}/{}".format(namespace, os.path.join(s3_prefix, uri))
+    return f"tiledb://{namespace}/{os.path.join(s3_prefix, uri)}"

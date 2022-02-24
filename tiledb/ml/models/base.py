@@ -64,9 +64,7 @@ class TileDBModel(ABC, Generic[Model]):
         self.namespace = namespace
         self.ctx = ctx
         self.model = model
-        self.uri = (
-            get_cloud_uri(uri=uri, namespace=namespace) if self.namespace else uri
-        )
+        self.uri = get_cloud_uri(uri, namespace) if namespace else uri
         self._file_properties = {
             ModelFileProperties.TILEDB_ML_MODEL_ML_FRAMEWORK.value: self.Framework,
             ModelFileProperties.TILEDB_ML_MODEL_ML_FRAMEWORK_VERSION.value: self.FrameworkVersion,
