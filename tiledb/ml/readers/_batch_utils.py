@@ -303,6 +303,72 @@ def get_attr_names(schema: tiledb.ArraySchema) -> Sequence[str]:
     return tuple(schema.attr(idx).name for idx in range(schema.nattr))
 
 
+def get_dim_names(schema: tiledb.ArraySchema) -> Sequence[str]:
+    return tuple(schema.domain.dim(idx).name for idx in range(schema.ndim))
+
+
+def estimate_row_bytes(
+    array: tiledb.Array,
+    attrs: Sequence[str] = (),
+    start_offset: int = 0,
+    stop_offset: int = 0,
+) -> int:
+    """
+    Estimate the size in bytes of a TileDB array row.
+
+    A "row" is a slice with the first dimension fixed.
+    - For dense arrays, each row consists of a fixed number of cells. The size of each
+      cell depends on the given attributes (or all array attributes by default).
+    - For sparse arrays, each row consists of a variable number of non-empty cells. The
+      size of each non-empty cell depends on all dimension coordinates as well as the
+      given attributes (or all array attributes by default).
+    """
+    schema = array.schema
+    if not attrs:
+        attrs = get_attr_names(schema)
+
+    if not schema.sparse:
+        # for dense arrays the size of each row is fixed and can be computed exactly
+        row_cells = np.prod(schema.shape[1:])
+        cell_bytes = sum(schema.attr(attr).dtype.itemsize for attr in attrs)
+        est_row_bytes = row_cells * cell_bytes
+    else:
+        # for sparse arrays the size of each row is variable and can only be estimated
+        if not stop_offset:
+            stop_offset = schema.shape[0]
+        query = array.query(return_incomplete=True)
+        # .multi_index[] is inclusive, so we need to subtract 1 to stop_offset
+        indexer = query.multi_index[start_offset : stop_offset - 1]
+        est_rs = indexer.estimated_result_sizes()
+        dims = get_dim_names(schema)
+        est_total_bytes = sum(est_rs[key].data_bytes for key in (*dims, *attrs))
+        est_row_bytes = est_total_bytes / (stop_offset - start_offset)
+    return int(est_row_bytes)
+
+
+def get_num_batches(
+    batch_size: int,
+    buffer_bytes: int,
+    array: tiledb.Array,
+    attrs: Sequence[str] = (),
+    start_offset: int = 0,
+    stop_offset: int = 0,
+) -> int:
+    """
+    Determine the number of batches to read from the given array.
+
+    The number of buffer rows is determined by dividing buffer_bytes with the (estimated)
+    row size. This number is then divided with batch_size to give the number of batches.
+    """
+    if not stop_offset:
+        stop_offset = array.shape[0]
+    est_row_bytes = estimate_row_bytes(array, attrs, start_offset, stop_offset)
+    num_batches = max(1, buffer_bytes / est_row_bytes / batch_size)
+    # upper num_batches bound is ceil(num_rows / batch_size)
+    num_batches = min(num_batches, np.ceil((stop_offset - start_offset) / batch_size))
+    return int(num_batches)
+
+
 def get_buffer_size(buffer_size: Optional[int], batch_size: int) -> int:
     if buffer_size is None:
         buffer_size = batch_size
