@@ -18,9 +18,10 @@ def parametrize_for_dataset(
     y_shape=((5,), (5, 2)),
     num_attrs=(1, 2),
     pass_attrs=(True, False),
-    batch_size=(32,),
-    buffer_size=(50, None),
-    batch_shuffle=(True, False),
+    batch_size=(8,),
+    buffer_size=(24, None),
+    # batch_shuffle=(True, False),
+    batch_shuffle=(False,),
     within_batch_shuffle=(True, False),
 ):
     def is_valid_combination(t):
