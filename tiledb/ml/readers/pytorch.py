@@ -24,12 +24,27 @@ class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Sequence[torch.Tenso
         x_array: tiledb.Array,
         y_array: tiledb.Array,
         batch_size: int,
-        buffer_size: Optional[int] = None,
+        x_buffer_size: Optional[int] = None,
+        y_buffer_size: Optional[int] = None,
         batch_shuffle: bool = False,
         within_batch_shuffle: bool = False,
         x_attrs: Sequence[str] = (),
         y_attrs: Sequence[str] = (),
     ):
+        """Return an IterableDataset for loading data from TileDB arrays.
+
+        :param x_array: TileDB array of the features.
+        :param y_array: TileDB array of the labels.
+        :param batch_size: Size of each batch.
+        :param x_buffer_size: Size of the buffer used to read from x_array.
+            If not given, it is determined automatically.
+        :param y_buffer_size: Size of the buffer used to read from y_array.
+            If not given, it is determined automatically.
+        :param batch_shuffle: True for shuffling batches.
+        :param within_batch_shuffle: True for shuffling records in each batch.
+        :param x_attrs: Attribute names of x_array.
+        :param y_attrs: Attribute names of y_array.
+        """
         super().__init__()
         rows: int = x_array.shape[0]
         if rows != y_array.shape[0]:
@@ -41,12 +56,13 @@ class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Sequence[torch.Tenso
             sparse_batch_cls=PyTorchSparseBatch,
             x_array=x_array,
             y_array=y_array,
-            x_attrs=x_attrs,
-            y_attrs=y_attrs,
             batch_size=batch_size,
-            buffer_size=get_buffer_size(buffer_size, batch_size),
+            x_buffer_size=get_buffer_size(x_buffer_size, batch_size),
+            y_buffer_size=get_buffer_size(y_buffer_size, batch_size),
             batch_shuffle=batch_shuffle,
             within_batch_shuffle=within_batch_shuffle,
+            x_attrs=x_attrs,
+            y_attrs=y_attrs,
         )
 
     def __iter__(self) -> Iterator[Sequence[torch.Tensor]]:
