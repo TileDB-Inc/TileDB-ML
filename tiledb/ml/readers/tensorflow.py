@@ -26,7 +26,8 @@ def TensorflowTileDBDataset(
     x_array: tiledb.Array,
     y_array: tiledb.Array,
     batch_size: int,
-    buffer_size: Optional[int] = None,
+    x_buffer_size: Optional[int] = None,
+    y_buffer_size: Optional[int] = None,
     batch_shuffle: bool = False,
     within_batch_shuffle: bool = False,
     x_attrs: Sequence[str] = (),
@@ -37,12 +38,14 @@ def TensorflowTileDBDataset(
     :param x_array: TileDB array of the features.
     :param y_array: TileDB array of the labels.
     :param batch_size: Size of each batch.
-    :param buffer_size: Size of the buffer used to read the data. If not given,
-        it is determined automatically.
-    :param x_attrs: Attribute names of x_array.
-    :param y_attrs: Attribute names of y_array.
+    :param x_buffer_size: Size of the buffer used to read from x_array.
+        If not given, it is determined automatically.
+    :param y_buffer_size: Size of the buffer used to read from y_array.
+        If not given, it is determined automatically.
     :param batch_shuffle: True for shuffling batches.
     :param within_batch_shuffle: True for shuffling records in each batch.
+    :param x_attrs: Attribute names of x_array.
+    :param y_attrs: Attribute names of y_array.
     """
     # Check that x_array and y_array have the same number of rows
     rows: int = x_array.shape[0]
@@ -56,12 +59,13 @@ def TensorflowTileDBDataset(
             sparse_batch_cls=TensorflowSparseBatch,
             x_array=x_array,
             y_array=y_array,
-            x_attrs=x_attrs,
-            y_attrs=y_attrs,
             batch_size=batch_size,
-            buffer_size=get_buffer_size(buffer_size, batch_size),
+            x_buffer_size=get_buffer_size(x_buffer_size, batch_size),
+            y_buffer_size=get_buffer_size(y_buffer_size, batch_size),
             batch_shuffle=batch_shuffle,
             within_batch_shuffle=within_batch_shuffle,
+            x_attrs=x_attrs,
+            y_attrs=y_attrs,
         ),
         output_signature=(
             *_iter_tensor_specs(x_array.schema, x_attrs),
