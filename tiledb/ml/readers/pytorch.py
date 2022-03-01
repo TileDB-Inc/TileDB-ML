@@ -8,12 +8,7 @@ import torch
 
 import tiledb
 
-from ._batch_utils import (
-    BaseDenseBatch,
-    BaseSparseBatch,
-    get_buffer_size,
-    tensor_generator,
-)
+from ._batch_utils import BaseDenseBatch, BaseSparseBatch, tensor_generator
 
 
 class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Sequence[torch.Tensor]]):
@@ -24,8 +19,7 @@ class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Sequence[torch.Tenso
         x_array: tiledb.Array,
         y_array: tiledb.Array,
         batch_size: int,
-        x_buffer_size: Optional[int] = None,
-        y_buffer_size: Optional[int] = None,
+        buffer_bytes: Optional[int] = None,
         batch_shuffle: bool = False,
         within_batch_shuffle: bool = False,
         x_attrs: Sequence[str] = (),
@@ -36,9 +30,7 @@ class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Sequence[torch.Tenso
         :param x_array: TileDB array of the features.
         :param y_array: TileDB array of the labels.
         :param batch_size: Size of each batch.
-        :param x_buffer_size: Size of the buffer used to read from x_array.
-            If not given, it is determined automatically.
-        :param y_buffer_size: Size of the buffer used to read from y_array.
+        :param buffer_bytes: Size (in bytes) of the buffer used to read from each array.
             If not given, it is determined automatically.
         :param batch_shuffle: True for shuffling batches.
         :param within_batch_shuffle: True for shuffling records in each batch.
@@ -57,8 +49,7 @@ class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Sequence[torch.Tenso
             x_array=x_array,
             y_array=y_array,
             batch_size=batch_size,
-            x_buffer_size=get_buffer_size(x_buffer_size, batch_size),
-            y_buffer_size=get_buffer_size(y_buffer_size, batch_size),
+            buffer_bytes=buffer_bytes,
             batch_shuffle=batch_shuffle,
             within_batch_shuffle=within_batch_shuffle,
             x_attrs=x_attrs,

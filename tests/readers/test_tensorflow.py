@@ -40,8 +40,7 @@ class TestTensorflowTileDBDataset:
         num_attrs,
         pass_attrs,
         batch_size,
-        x_buffer_size,
-        y_buffer_size,
+        buffer_bytes,
         batch_shuffle,
         within_batch_shuffle,
     ):
@@ -54,8 +53,7 @@ class TestTensorflowTileDBDataset:
             batch_size=batch_size,
             num_attrs=num_attrs,
             pass_attrs=pass_attrs,
-            x_buffer_size=x_buffer_size,
-            y_buffer_size=y_buffer_size,
+            buffer_bytes=buffer_bytes,
             batch_shuffle=batch_shuffle,
             within_batch_shuffle=within_batch_shuffle,
         ) as dataset_kwargs:
@@ -70,11 +68,7 @@ class TestTensorflowTileDBDataset:
                 tensor_generator(
                     dense_batch_cls=TensorflowDenseBatch,
                     sparse_batch_cls=TensorflowSparseBatch,
-                    **dict(
-                        dataset_kwargs,
-                        x_buffer_size=x_buffer_size or batch_size,
-                        y_buffer_size=y_buffer_size or batch_size,
-                    ),
+                    **dataset_kwargs,
                 ),
             ]
             for generator in generators:
@@ -88,43 +82,6 @@ class TestTensorflowTileDBDataset:
                     num_attrs=num_attrs,
                 )
 
-    @parametrize_for_dataset(
-        batch_size=[32], x_buffer_size=[31, 63, 65], y_buffer_size=[31, 63, 65]
-    )
-    def test_buffer_size_not_multiple_of_batch_size(
-        self,
-        tmpdir,
-        num_rows,
-        x_sparse,
-        y_sparse,
-        x_shape,
-        y_shape,
-        num_attrs,
-        pass_attrs,
-        batch_size,
-        x_buffer_size,
-        y_buffer_size,
-        batch_shuffle,
-        within_batch_shuffle,
-    ):
-        with ingest_in_tiledb(
-            tmpdir,
-            x_data=rand_array(num_rows, *x_shape, sparse=x_sparse),
-            y_data=rand_array(num_rows, *y_shape, sparse=y_sparse),
-            x_sparse=x_sparse,
-            y_sparse=y_sparse,
-            batch_size=batch_size,
-            num_attrs=num_attrs,
-            pass_attrs=pass_attrs,
-            x_buffer_size=x_buffer_size,
-            y_buffer_size=y_buffer_size,
-            batch_shuffle=batch_shuffle,
-            within_batch_shuffle=within_batch_shuffle,
-        ) as dataset_kwargs:
-            with pytest.raises(ValueError) as ex:
-                TensorflowTileDBDataset(**dataset_kwargs)
-            assert "buffer_size must be a multiple of batch_size" in str(ex.value)
-
     @parametrize_for_dataset()
     def test_unequal_num_rows(
         self,
@@ -137,8 +94,7 @@ class TestTensorflowTileDBDataset:
         num_attrs,
         pass_attrs,
         batch_size,
-        x_buffer_size,
-        y_buffer_size,
+        buffer_bytes,
         batch_shuffle,
         within_batch_shuffle,
     ):
@@ -152,8 +108,7 @@ class TestTensorflowTileDBDataset:
             batch_size=batch_size,
             num_attrs=num_attrs,
             pass_attrs=pass_attrs,
-            x_buffer_size=x_buffer_size,
-            y_buffer_size=y_buffer_size,
+            buffer_bytes=buffer_bytes,
             batch_shuffle=batch_shuffle,
             within_batch_shuffle=within_batch_shuffle,
         ) as dataset_kwargs:
@@ -173,8 +128,7 @@ class TestTensorflowTileDBDataset:
         num_attrs,
         pass_attrs,
         batch_size,
-        x_buffer_size,
-        y_buffer_size,
+        buffer_bytes,
         batch_shuffle,
         within_batch_shuffle,
     ):
@@ -189,8 +143,7 @@ class TestTensorflowTileDBDataset:
             batch_size=batch_size,
             num_attrs=num_attrs,
             pass_attrs=pass_attrs,
-            x_buffer_size=x_buffer_size,
-            y_buffer_size=y_buffer_size,
+            buffer_bytes=buffer_bytes,
             batch_shuffle=batch_shuffle,
             within_batch_shuffle=within_batch_shuffle,
         ) as dataset_kwargs:
@@ -212,8 +165,7 @@ class TestTensorflowTileDBDataset:
         num_attrs,
         pass_attrs,
         batch_size,
-        x_buffer_size,
-        y_buffer_size,
+        buffer_bytes,
         batch_shuffle,
         within_batch_shuffle,
     ):
@@ -227,8 +179,7 @@ class TestTensorflowTileDBDataset:
             batch_size=batch_size,
             num_attrs=num_attrs,
             pass_attrs=pass_attrs,
-            x_buffer_size=x_buffer_size,
-            y_buffer_size=y_buffer_size,
+            buffer_bytes=buffer_bytes,
             batch_shuffle=batch_shuffle,
             within_batch_shuffle=within_batch_shuffle,
         ) as dataset_kwargs:

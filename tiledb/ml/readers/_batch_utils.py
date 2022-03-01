@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from concurrent import futures
 from typing import (
@@ -218,8 +219,7 @@ def tensor_generator(
     x_array: tiledb.Array,
     y_array: tiledb.Array,
     batch_size: int,
-    x_buffer_size: int,
-    y_buffer_size: int,
+    buffer_bytes: Optional[int] = None,
     batch_shuffle: bool = False,
     within_batch_shuffle: bool = False,
     x_attrs: Sequence[str] = (),
@@ -238,8 +238,8 @@ def tensor_generator(
     :param x_array: TileDB array of the features.
     :param y_array: TileDB array of the labels.
     :param batch_size: Size of each batch.
-    :param x_buffer_size: Size of the buffer used to read from x_array.
-    :param y_buffer_size: Size of the buffer used to read from y_array.
+    :param buffer_bytes: Size (in bytes) of the buffer used to read from each array.
+        If not given, it is determined automatically.
     :param batch_shuffle: True for shuffling batches.
     :param within_batch_shuffle: True for shuffling records in each batch.
     :param x_attrs: Attribute names of x_array; defaults to all x_array attributes.
@@ -247,9 +247,6 @@ def tensor_generator(
     :param start_offset: Start row offset; defaults to 0.
     :param stop_offset: Stop row offset; defaults to number of rows.
     """
-    for buffer_size in (x_buffer_size, y_buffer_size):
-        assert buffer_size % batch_size == 0, (buffer_size, batch_size)
-
     if batch_shuffle:
         # TODO(?): Try to reintroduce batch_shuffle
         raise NotImplementedError("batch_shuffle not implemented")
@@ -258,16 +255,24 @@ def tensor_generator(
         stop_offset = x_array.shape[0]
 
     def batch_factory(
-        array: tiledb.Array, attrs: Sequence[str], buffer_size: int
+        label: str, array: tiledb.Array, attrs: Sequence[str]
     ) -> Union[BaseDenseBatch[DenseTensor], BaseSparseBatch[SparseTensor]]:
+        if buffer_bytes is None:
+            num_batches = 1
+        else:
+            num_batches = get_num_batches(
+                batch_size, buffer_bytes, array, attrs, start_offset, stop_offset
+            )
+        buffer_size = batch_size * num_batches
+        logging.info(f"{label} buffer: {num_batches} batches ({buffer_size} rows)")
         buffer_slices = iter_slices(start_offset, stop_offset, buffer_size)
         if array.schema.sparse:
             return sparse_batch_cls(buffer_slices, array, attrs)
         else:
             return dense_batch_cls(buffer_slices, array, attrs)
 
-    x_batch = batch_factory(x_array, x_attrs, x_buffer_size)
-    y_batch = batch_factory(y_array, y_attrs, y_buffer_size)
+    x_batch = batch_factory("x", x_array, x_attrs)
+    y_batch = batch_factory("y", y_array, y_attrs)
     with futures.ThreadPoolExecutor(max_workers=2) as executor:
         for batch_slice in iter_slices(start_offset, stop_offset, batch_size):
             futures.wait(
@@ -367,11 +372,3 @@ def get_num_batches(
     # upper num_batches bound is ceil(num_rows / batch_size)
     num_batches = min(num_batches, np.ceil((stop_offset - start_offset) / batch_size))
     return int(num_batches)
-
-
-def get_buffer_size(buffer_size: Optional[int], batch_size: int) -> int:
-    if buffer_size is None:
-        buffer_size = batch_size
-    elif buffer_size % batch_size != 0:
-        raise ValueError("buffer_size must be a multiple of batch_size")
-    return buffer_size
