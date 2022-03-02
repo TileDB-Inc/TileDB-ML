@@ -44,10 +44,30 @@ class BaseBatch(ABC, Generic[Tensor]):
         self._last_buf_slice = slice(0, 0)
 
     @abstractmethod
+    def ensure_buffer(self, batch_slice: slice) -> int:
+        """
+        Ensure that the current buffer contains the given batch_slice, otherwise read
+        the next buffer from buffer_slices.
+
+        :param batch_slice: Requested batch slice in absolute row coordinates.
+        :return: Number of rows of the buffer just read, or 0 if no buffer was read.
+        """
+
+    @abstractmethod
+    def shuffle_buffer(self, row_idxs: np.ndarray) -> None:
+        """
+        Shuffle the current buffer.
+
+        Must be called after `ensure_buffer`.
+
+        :param row_idxs: Array of row indices to shuffle.
+        """
+
+    @abstractmethod
     def set_batch_slice(self, batch_slice: slice) -> None:
         """Set the current batch as a slice of the read buffer.
 
-        Must be called after `read_buffer`.
+        Must be called after `ensure_buffer`.
 
         :param batch_slice: Slice of the buffer to be used as the current batch.
         """
@@ -71,40 +91,50 @@ class BaseBatch(ABC, Generic[Tensor]):
         Must be called after `set_batch_slice`.
         """
 
-    def _read_next_buffer_if_needed(
+    def _read_next_buffer(
         self, batch_slice: slice
-    ) -> Tuple[Optional[Dict[str, np.ndarray]], slice]:
+    ) -> Tuple[Optional[Dict[str, np.ndarray]], int]:
         """
         Read the next buffer if needed in order to access the given batch_slice.
 
         :param batch_slice: Requested batch slice in absolute row coordinates.
-        :return: (buffer, buf_slice) tuple, where `buffer` is the buffer if read
-            or None otherwise, and `buf_slice` is `batch_slice` translated to buffer
-            coordinates.
+        :return: (buffer, size) tuple if the buffer is read or (None, 0) otherwise.
         """
-        # read the next buffer if necessary
-        if not slice_subsumes(self._last_buf_slice, batch_slice):
-            self._last_buf_slice = next(self._buf_slices)
-            assert slice_subsumes(self._last_buf_slice, batch_slice)
-            buffer = self._query[self._last_buf_slice]
-        else:
-            buffer = None
-        # shift batch_slice to buffer coordinates
+        if slice_subsumes(self._last_buf_slice, batch_slice):
+            return None, 0
+
+        self._last_buf_slice = next(self._buf_slices)
+        assert slice_subsumes(self._last_buf_slice, batch_slice)
+        buffer = self._query[self._last_buf_slice]
+        return buffer, self._last_buf_slice.stop - self._last_buf_slice.start
+
+    def _translate_slice(self, batch_slice: slice) -> slice:
+        """Translate batch_slice to buffer coordinates.
+
+        :param batch_slice: Requested batch slice in absolute row coordinates.
+        """
         buf_start = self._last_buf_slice.start
-        buf_slice = slice(
+        return slice(
             batch_slice.start - buf_start,
             batch_slice.stop - buf_start,
             batch_slice.step,
         )
-        return buffer, buf_slice
 
 
 class BaseDenseBatch(BaseBatch[Tensor]):
-    def set_batch_slice(self, batch_slice: slice) -> None:
-        buffer, buf_slice = self._read_next_buffer_if_needed(batch_slice)
+    def ensure_buffer(self, batch_slice: slice) -> int:
+        buffer, buffer_size = self._read_next_buffer(batch_slice)
         if buffer is not None:
-            self._buffer = buffer
-        self._attr_batches = tuple(data[buf_slice] for data in self._buffer.values())
+            self._attr_bufs = tuple(buffer.values())
+        return buffer_size
+
+    def shuffle_buffer(self, row_idxs: np.ndarray) -> None:
+        for attr_buf in self._attr_bufs:
+            attr_buf[: len(row_idxs)] = attr_buf[row_idxs]
+
+    def set_batch_slice(self, batch_slice: slice) -> None:
+        buf_slice = self._translate_slice(batch_slice)
+        self._attr_batches = tuple(data[buf_slice] for data in self._attr_bufs)
 
     def iter_tensors(self, perm_idxs: Optional[np.ndarray] = None) -> Iterator[Tensor]:
         assert hasattr(self, "_attr_batches"), "set_batch_slice() not called"
@@ -146,8 +176,8 @@ class BaseSparseBatch(BaseBatch[Tensor]):
         self._attr_dtypes = tuple(schema.attr(attr).dtype for attr in attrs)
         super().__init__(buffer_slices, array, attrs)
 
-    def set_batch_slice(self, batch_slice: slice) -> None:
-        buffer, buf_slice = self._read_next_buffer_if_needed(batch_slice)
+    def ensure_buffer(self, batch_slice: slice) -> int:
+        buffer, buffer_size = self._read_next_buffer(batch_slice)
         if buffer is not None:
             # COO to CSR transformation for batching and row slicing
             row = buffer.pop(self._row_dim)
@@ -159,6 +189,15 @@ class BaseSparseBatch(BaseBatch[Tensor]):
             self._buf_csrs = tuple(
                 sp.csr_matrix((data, (row - offset, col))) for data in buffer.values()
             )
+        return buffer_size
+
+    def shuffle_buffer(self, row_idxs: np.ndarray) -> None:
+        for buf_csr in self._buf_csrs:
+            buf_csr[: len(row_idxs)] = buf_csr[row_idxs]
+
+    def set_batch_slice(self, batch_slice: slice) -> None:
+        assert hasattr(self, "_buf_csrs"), "ensure_buffer() not called"
+        buf_slice = self._translate_slice(batch_slice)
         self._batch_csrs = tuple(buf_csr[buf_slice] for buf_csr in self._buf_csrs)
 
     def iter_tensors(self, perm_idxs: Optional[np.ndarray] = None) -> Iterator[Tensor]:
@@ -239,10 +278,6 @@ def tensor_generator(
     :param start_offset: Start row offset; defaults to 0.
     :param stop_offset: Stop row offset; defaults to number of rows.
     """
-    if batch_shuffle:
-        # TODO(?): Try to reintroduce batch_shuffle
-        raise NotImplementedError("batch_shuffle not implemented")
-
     if not stop_offset:
         stop_offset = x_array.shape[0]
 
@@ -267,12 +302,21 @@ def tensor_generator(
     y_batch = batch_factory("y", y_array, y_attrs)
     with futures.ThreadPoolExecutor(max_workers=2) as executor:
         for batch_slice in iter_slices(start_offset, stop_offset, batch_size):
-            futures.wait(
+            done_futures, _ = futures.wait(
                 (
-                    executor.submit(x_batch.set_batch_slice, batch_slice),
-                    executor.submit(y_batch.set_batch_slice, batch_slice),
+                    executor.submit(x_batch.ensure_buffer, batch_slice),
+                    executor.submit(y_batch.ensure_buffer, batch_slice),
                 )
             )
+            min_read_buffer_size = min(f.result() for f in done_futures)
+            if batch_shuffle and min_read_buffer_size > 0:
+                row_idxs = np.arange(min_read_buffer_size)
+                np.random.shuffle(row_idxs)
+                x_batch.shuffle_buffer(row_idxs)
+                y_batch.shuffle_buffer(row_idxs)
+
+            x_batch.set_batch_slice(batch_slice)
+            y_batch.set_batch_slice(batch_slice)
             if len(x_batch) != len(y_batch):
                 raise ValueError(
                     "x and y batches should have the same length: "

@@ -20,8 +20,7 @@ def parametrize_for_dataset(
     pass_attrs=(True, False),
     batch_size=(8,),
     buffer_bytes=(1024, None),
-    # batch_shuffle=(True, False),
-    batch_shuffle=(False,),
+    batch_shuffle=(True, False),
     within_batch_shuffle=(True, False),
 ):
     def is_valid_combination(t):
