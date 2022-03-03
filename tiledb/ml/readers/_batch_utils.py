@@ -64,24 +64,11 @@ class BaseBatch(ABC, Generic[Tensor]):
         """
 
     @abstractmethod
-    def set_batch_slice(self, batch_slice: slice) -> None:
-        """Set the current batch as a slice of the read buffer.
+    def iter_tensors(self, batch_slice: slice) -> Iterator[Tensor]:
+        """
+        Return an iterator of tensors for the given batch_slice, one tensor per attribute
 
         Must be called after `ensure_buffer`.
-
-        :param batch_slice: Slice of the buffer to be used as the current batch.
-        """
-
-    @abstractmethod
-    def iter_tensors(self, perm_idxs: Optional[np.ndarray] = None) -> Iterator[Tensor]:
-        """
-        Return an iterator of tensors for the current batch, one tensor per attribute
-        given in the constructor.
-
-        Must be called after `set_batch_slice`.
-
-        :param perm_idxs: Optional permutation indices for the current batch.
-            If given, it must be an array equal to `np.arange(len(self))` after sorting.
         """
 
     def _read_next_buffer(
@@ -118,28 +105,17 @@ class BaseDenseBatch(BaseBatch[Tensor]):
     def ensure_buffer(self, batch_slice: slice) -> int:
         buffer, buffer_size = self._read_next_buffer(batch_slice)
         if buffer is not None:
-            self._attr_bufs = tuple(buffer.values())
+            self._buf_arrays = tuple(buffer.values())
         return buffer_size
 
     def shuffle_buffer(self, row_idxs: np.ndarray) -> None:
-        for attr_buf in self._attr_bufs:
-            attr_buf[: len(row_idxs)] = attr_buf[row_idxs]
+        for buf_array in self._buf_arrays:
+            buf_array[: len(row_idxs)] = buf_array[row_idxs]
 
-    def set_batch_slice(self, batch_slice: slice) -> None:
+    def iter_tensors(self, batch_slice: slice) -> Iterator[Tensor]:
         buf_slice = self._translate_slice(batch_slice)
-        self._attr_batches = tuple(data[buf_slice] for data in self._attr_bufs)
-
-    def iter_tensors(self, perm_idxs: Optional[np.ndarray] = None) -> Iterator[Tensor]:
-        assert hasattr(self, "_attr_batches"), "set_batch_slice() not called"
-        if perm_idxs is None:
-            attr_batches = iter(self._attr_batches)
-        else:
-            n = len(self)
-            assert (
-                len(perm_idxs) == n and (np.sort(perm_idxs) == np.arange(n)).all()
-            ), f"Invalid permutation of size {n}: {perm_idxs}"
-            attr_batches = (attr_batch[perm_idxs] for attr_batch in self._attr_batches)
-        return map(self._tensor_from_numpy, attr_batches)
+        for buf_array in self._buf_arrays:
+            yield self._tensor_from_numpy(buf_array[buf_slice])
 
     @staticmethod
     @abstractmethod
@@ -186,18 +162,10 @@ class BaseSparseBatch(BaseBatch[Tensor]):
         for buf_csr in self._buf_csrs:
             buf_csr[: len(row_idxs)] = buf_csr[row_idxs]
 
-    def set_batch_slice(self, batch_slice: slice) -> None:
-        assert hasattr(self, "_buf_csrs"), "ensure_buffer() not called"
+    def iter_tensors(self, batch_slice: slice) -> Iterator[Tensor]:
         buf_slice = self._translate_slice(batch_slice)
-        self._batch_csrs = tuple(buf_csr[buf_slice] for buf_csr in self._buf_csrs)
-
-    def iter_tensors(self, perm_idxs: Optional[np.ndarray] = None) -> Iterator[Tensor]:
-        assert hasattr(self, "_batch_csrs"), "set_batch_slice() not called"
-        if perm_idxs is not None:
-            raise NotImplementedError(
-                "within_batch_shuffle not implemented for sparse arrays"
-            )
-        for batch_csr, dtype in zip(self._batch_csrs, self._attr_dtypes):
+        for buf_csr, dtype in zip(self._buf_csrs, self._attr_dtypes):
+            batch_csr = buf_csr[buf_slice]
             batch_coo = batch_csr.tocoo()
             data = batch_coo.data
             coords = np.stack((batch_coo.row, batch_coo.col), axis=-1)
@@ -290,9 +258,9 @@ def tensor_generator(
                 x_batch.shuffle_buffer(row_idxs)
                 y_batch.shuffle_buffer(row_idxs)
 
-            x_batch.set_batch_slice(batch_slice)
-            y_batch.set_batch_slice(batch_slice)
-            yield (*x_batch.iter_tensors(), *y_batch.iter_tensors())
+            x_tensors = x_batch.iter_tensors(batch_slice)
+            y_tensors = y_batch.iter_tensors(batch_slice)
+            yield (*x_tensors, *y_tensors)
 
 
 def iter_slices(start: int, stop: int, step: int) -> Iterator[slice]:
