@@ -116,43 +116,6 @@ class TestTensorflowTileDBDataset:
                 TensorflowTileDBDataset(**dataset_kwargs)
             assert "X and Y arrays must have the same number of rows" in str(ex.value)
 
-    @parametrize_for_dataset(x_sparse=[True])
-    def test_x_sparse_unequal_num_rows_in_batch(
-        self,
-        tmpdir,
-        num_rows,
-        x_sparse,
-        y_sparse,
-        x_shape,
-        y_shape,
-        num_attrs,
-        pass_attrs,
-        batch_size,
-        buffer_bytes,
-        batch_shuffle,
-        within_batch_shuffle,
-    ):
-        x_data = rand_array(num_rows, *x_shape, sparse=x_sparse)
-        x_data[np.random.randint(len(x_data))] = 0
-        with ingest_in_tiledb(
-            tmpdir,
-            x_data=x_data,
-            y_data=rand_array(num_rows, *y_shape, sparse=y_sparse),
-            x_sparse=x_sparse,
-            y_sparse=y_sparse,
-            batch_size=batch_size,
-            num_attrs=num_attrs,
-            pass_attrs=pass_attrs,
-            buffer_bytes=buffer_bytes,
-            batch_shuffle=batch_shuffle,
-            within_batch_shuffle=within_batch_shuffle,
-        ) as dataset_kwargs:
-            dataset = TensorflowTileDBDataset(**dataset_kwargs)
-            with pytest.raises(tf.errors.InvalidArgumentError) as ex:
-                for _ in dataset:
-                    pass
-            assert "x and y batches should have the same length" in str(ex.value)
-
     @parametrize_for_dataset(x_sparse=[True], batch_shuffle=[False])
     def test_sparse_read_order(
         self,

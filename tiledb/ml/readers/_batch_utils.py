@@ -84,13 +84,6 @@ class BaseBatch(ABC, Generic[Tensor]):
             If given, it must be an array equal to `np.arange(len(self))` after sorting.
         """
 
-    @abstractmethod
-    def __len__(self) -> int:
-        """Get the size (i.e. number of rows) of the current batch.
-
-        Must be called after `set_batch_slice`.
-        """
-
     def _read_next_buffer(
         self, batch_slice: slice
     ) -> Tuple[Optional[Dict[str, np.ndarray]], int]:
@@ -148,10 +141,6 @@ class BaseDenseBatch(BaseBatch[Tensor]):
             attr_batches = (attr_batch[perm_idxs] for attr_batch in self._attr_batches)
         return map(self._tensor_from_numpy, attr_batches)
 
-    def __len__(self) -> int:
-        assert hasattr(self, "_attr_batches"), "set_batch_slice() not called"
-        return len(self._attr_batches[0])
-
     @staticmethod
     @abstractmethod
     def _tensor_from_numpy(data: np.ndarray) -> Tensor:
@@ -186,8 +175,10 @@ class BaseSparseBatch(BaseBatch[Tensor]):
             # range. If we do not normalize the sparse tensor is being created but with a
             # dimension [0, max(coord_index)], which is overkill
             offset = self._last_buf_slice.start
+            shape = (buffer_size, *self._row_shape)
             self._buf_csrs = tuple(
-                sp.csr_matrix((data, (row - offset, col))) for data in buffer.values()
+                sp.csr_matrix((data, (row - offset, col)), shape=shape)
+                for data in buffer.values()
             )
         return buffer_size
 
@@ -212,22 +203,6 @@ class BaseSparseBatch(BaseBatch[Tensor]):
             coords = np.stack((batch_coo.row, batch_coo.col), axis=-1)
             dense_shape = (batch_csr.shape[0], *self._row_shape)
             yield self._tensor_from_coo(data, coords, dense_shape, dtype)
-
-    def __len__(self) -> int:
-        assert hasattr(self, "_batch_csrs"), "set_batch_slice() not called"
-        # return number of non-zero rows
-        lengths = {
-            int((batch_csr.getnnz(axis=1) > 0).sum()) for batch_csr in self._batch_csrs
-        }
-        assert len(lengths) == 1, f"Multiple different batch lengths: {lengths}"
-        return lengths.pop()
-
-    def __bool__(self) -> bool:
-        assert hasattr(self, "_batch_csrs"), "set_batch_slice() not called"
-        # faster version of __len__() > 0
-        lengths = {len(batch_csr.data) for batch_csr in self._batch_csrs}
-        assert len(lengths) == 1, f"Multiple different batch lengths: {lengths}"
-        return lengths.pop() > 0
 
     @staticmethod
     @abstractmethod
@@ -317,21 +292,7 @@ def tensor_generator(
 
             x_batch.set_batch_slice(batch_slice)
             y_batch.set_batch_slice(batch_slice)
-            if len(x_batch) != len(y_batch):
-                raise ValueError(
-                    "x and y batches should have the same length: "
-                    f"len(x_batch)={len(x_batch)}, len(y_batch)={len(y_batch)}"
-                )
-            if x_batch:
-                if within_batch_shuffle:
-                    perm_idxs = np.arange(len(x_batch))
-                    np.random.shuffle(perm_idxs)
-                else:
-                    perm_idxs = None
-                yield (
-                    *x_batch.iter_tensors(perm_idxs),
-                    *y_batch.iter_tensors(perm_idxs),
-                )
+            yield (*x_batch.iter_tensors(), *y_batch.iter_tensors())
 
 
 def iter_slices(start: int, stop: int, step: int) -> Iterator[slice]:
