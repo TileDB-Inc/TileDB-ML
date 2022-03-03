@@ -83,28 +83,20 @@ class BaseBatch(ABC, Generic[Tensor]):
             coordinates.
         """
         # read the next buffer if necessary
-        if not self._buffer_contains_slice(batch_slice):
+        if not slice_subsumes(self._last_buf_slice, batch_slice):
             self._last_buf_slice = next(self._buf_slices)
+            assert slice_subsumes(self._last_buf_slice, batch_slice)
             buffer = self._query[self._last_buf_slice]
-            assert self._buffer_contains_slice(batch_slice)
         else:
             buffer = None
         # shift batch_slice to buffer coordinates
         buf_start = self._last_buf_slice.start
         buf_slice = slice(
             batch_slice.start - buf_start,
-            batch_slice.stop - buf_start if batch_slice.stop is not None else None,
+            batch_slice.stop - buf_start,
+            batch_slice.step,
         )
         return buffer, buf_slice
-
-    def _buffer_contains_slice(self, batch_slice: slice) -> bool:
-        if self._last_buf_slice.start > batch_slice.start:
-            return False
-        if self._last_buf_slice.stop is None:
-            return True
-        if batch_slice.stop is None:
-            return False
-        return bool(self._last_buf_slice.stop >= batch_slice.stop)
 
 
 class BaseDenseBatch(BaseBatch[Tensor]):
@@ -301,7 +293,16 @@ def tensor_generator(
 def iter_slices(start: int, stop: int, step: int) -> Iterator[slice]:
     offsets = range(start, stop, step)
     yield from map(slice, offsets, offsets[1:])
-    yield slice(offsets[-1], None)
+    yield slice(offsets[-1], stop)
+
+
+def slice_subsumes(slice1: slice, slice2: slice) -> bool:
+    """Check if slice1 subsumes slice2.
+
+    Both slices must have integer start/stop and step=None.
+    """
+    assert slice1.step is slice2.step is None, (slice1, slice2)
+    return bool(slice1.start <= slice2.start and slice1.stop >= slice2.stop)
 
 
 def get_attr_names(schema: tiledb.ArraySchema) -> Sequence[str]:
