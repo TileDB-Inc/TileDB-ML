@@ -122,6 +122,7 @@ def test_iter_batches():
         y_buffer_size=8 * 7,
         start_offset=104,
         stop_offset=209,
+        shuffle=True,
     )
     assert list(map(str, batches)) == [
         "Batch(x[0:8], y[0:8], x_read[104:144], y_read[104:160], Shuffling(x[0:40], y[0:40]))",

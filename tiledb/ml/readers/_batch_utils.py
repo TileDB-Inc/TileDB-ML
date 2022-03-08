@@ -145,7 +145,7 @@ def tensor_generator(
     y_array: tiledb.Array,
     batch_size: int,
     buffer_bytes: Optional[int] = None,
-    batch_shuffle: bool = False,
+    shuffle: bool = False,
     x_attrs: Sequence[str] = (),
     y_attrs: Sequence[str] = (),
     start_offset: int = 0,
@@ -164,7 +164,7 @@ def tensor_generator(
     :param batch_size: Size of each batch.
     :param buffer_bytes: Size (in bytes) of the buffer used to read from each array.
         If not given, it is determined automatically.
-    :param batch_shuffle: True for shuffling batches.
+    :param shuffle: True for shuffling rows.
     :param x_attrs: Attribute names of x_array; defaults to all x_array attributes.
     :param y_attrs: Attribute names of y_array; defaults to all y_array attributes
     :param start_offset: Start row offset; defaults to 0.
@@ -196,7 +196,7 @@ def tensor_generator(
     y_buffer_size, y_gen = get_buffer_size_generator("y", y_array, y_attrs)
     with futures.ThreadPoolExecutor(max_workers=2) as executor:
         for batch in iter_batches(
-            batch_size, x_buffer_size, y_buffer_size, start_offset, stop_offset
+            batch_size, x_buffer_size, y_buffer_size, start_offset, stop_offset, shuffle
         ):
             if batch.x_read_slice and batch.y_read_slice:
                 futures.wait(
@@ -210,7 +210,7 @@ def tensor_generator(
             elif batch.y_read_slice:
                 y_gen.read_buffer(batch.y_read_slice)
 
-            if batch_shuffle and batch.shuffling:
+            if batch.shuffling:
                 row_idxs = np.arange(batch.shuffling.size)
                 np.random.shuffle(row_idxs)
                 x_gen.shuffle_buffer(batch.shuffling.x_buffer_slice, row_idxs)
@@ -258,6 +258,7 @@ def iter_batches(
     y_buffer_size: int,
     start_offset: int,
     stop_offset: int,
+    shuffle: bool,
 ) -> Iterator[Batch]:
     """
     Generate `Batch` instances describing each batch.
@@ -277,6 +278,7 @@ def iter_batches(
     :param y_buffer_size: (Max) size of the y buffer.
     :param start_offset: Start row offset.
     :param stop_offset: Stop row offset.
+    :param shuffle: True for shuffling rows.
     """
     assert (
         x_buffer_size % batch_size == 0
@@ -304,7 +306,7 @@ def iter_batches(
         else:
             y_read_slice = None
 
-        if x_read_slice or y_read_slice:
+        if shuffle and (x_read_slice or y_read_slice):
             shuffling_size = min(x_read_size - x_buf_offset, y_read_size - y_buf_offset)
             shuffling = Shuffling(
                 shuffling_size,
