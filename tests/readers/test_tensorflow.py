@@ -42,7 +42,6 @@ class TestTensorflowTileDBDataset:
         batch_size,
         buffer_bytes,
         batch_shuffle,
-        within_batch_shuffle,
     ):
         with ingest_in_tiledb(
             tmpdir,
@@ -55,7 +54,6 @@ class TestTensorflowTileDBDataset:
             pass_attrs=pass_attrs,
             buffer_bytes=buffer_bytes,
             batch_shuffle=batch_shuffle,
-            within_batch_shuffle=within_batch_shuffle,
         ) as dataset_kwargs:
             dataset = TensorflowTileDBDataset(**dataset_kwargs)
             assert isinstance(dataset, tf.data.Dataset)
@@ -96,7 +94,6 @@ class TestTensorflowTileDBDataset:
         batch_size,
         buffer_bytes,
         batch_shuffle,
-        within_batch_shuffle,
     ):
         with ingest_in_tiledb(
             tmpdir,
@@ -110,7 +107,6 @@ class TestTensorflowTileDBDataset:
             pass_attrs=pass_attrs,
             buffer_bytes=buffer_bytes,
             batch_shuffle=batch_shuffle,
-            within_batch_shuffle=within_batch_shuffle,
         ) as dataset_kwargs:
             with pytest.raises(ValueError) as ex:
                 TensorflowTileDBDataset(**dataset_kwargs)
@@ -130,7 +126,6 @@ class TestTensorflowTileDBDataset:
         batch_size,
         buffer_bytes,
         batch_shuffle,
-        within_batch_shuffle,
     ):
         x_data = rand_array(num_rows, *x_shape, sparse=x_sparse)
         with ingest_in_tiledb(
@@ -144,7 +139,6 @@ class TestTensorflowTileDBDataset:
             pass_attrs=pass_attrs,
             buffer_bytes=buffer_bytes,
             batch_shuffle=batch_shuffle,
-            within_batch_shuffle=within_batch_shuffle,
         ) as dataset_kwargs:
             dataset = TensorflowTileDBDataset(**dataset_kwargs)
             generated_x_data = np.concatenate(

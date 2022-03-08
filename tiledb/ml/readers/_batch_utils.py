@@ -146,7 +146,6 @@ def tensor_generator(
     batch_size: int,
     buffer_bytes: Optional[int] = None,
     batch_shuffle: bool = False,
-    within_batch_shuffle: bool = False,
     x_attrs: Sequence[str] = (),
     y_attrs: Sequence[str] = (),
     start_offset: int = 0,
@@ -166,7 +165,6 @@ def tensor_generator(
     :param buffer_bytes: Size (in bytes) of the buffer used to read from each array.
         If not given, it is determined automatically.
     :param batch_shuffle: True for shuffling batches.
-    :param within_batch_shuffle: True for shuffling records in each batch.
     :param x_attrs: Attribute names of x_array; defaults to all x_array attributes.
     :param y_attrs: Attribute names of y_array; defaults to all y_array attributes
     :param start_offset: Start row offset; defaults to 0.

@@ -32,7 +32,6 @@ class TestPyTorchTileDBDataset:
         batch_size,
         buffer_bytes,
         batch_shuffle,
-        within_batch_shuffle,
     ):
         if num_workers and (x_sparse or y_sparse):
             pytest.skip("multiple workers not supported with sparse arrays")
@@ -48,7 +47,6 @@ class TestPyTorchTileDBDataset:
             pass_attrs=pass_attrs,
             buffer_bytes=buffer_bytes,
             batch_shuffle=batch_shuffle,
-            within_batch_shuffle=within_batch_shuffle,
         ) as dataset_kwargs:
             dataset = PyTorchTileDBDataset(**dataset_kwargs)
             assert isinstance(dataset, torch.utils.data.IterableDataset)
@@ -99,7 +97,6 @@ class TestPyTorchTileDBDataset:
         batch_size,
         buffer_bytes,
         batch_shuffle,
-        within_batch_shuffle,
     ):
         with ingest_in_tiledb(
             tmpdir,
@@ -113,7 +110,6 @@ class TestPyTorchTileDBDataset:
             pass_attrs=pass_attrs,
             buffer_bytes=buffer_bytes,
             batch_shuffle=batch_shuffle,
-            within_batch_shuffle=within_batch_shuffle,
         ) as dataset_kwargs:
             with pytest.raises(ValueError) as ex:
                 PyTorchTileDBDataset(**dataset_kwargs)
@@ -133,7 +129,6 @@ class TestPyTorchTileDBDataset:
         batch_size,
         buffer_bytes,
         batch_shuffle,
-        within_batch_shuffle,
     ):
         x_data = rand_array(num_rows, *x_shape, sparse=x_sparse)
         with ingest_in_tiledb(
@@ -147,7 +142,6 @@ class TestPyTorchTileDBDataset:
             pass_attrs=pass_attrs,
             buffer_bytes=buffer_bytes,
             batch_shuffle=batch_shuffle,
-            within_batch_shuffle=within_batch_shuffle,
         ) as dataset_kwargs:
             dataset = PyTorchTileDBDataset(**dataset_kwargs)
             generated_x_data = np.concatenate(

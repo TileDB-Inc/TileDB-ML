@@ -27,7 +27,6 @@ def TensorflowTileDBDataset(
     batch_size: int,
     buffer_bytes: Optional[int] = None,
     batch_shuffle: bool = False,
-    within_batch_shuffle: bool = False,
     x_attrs: Sequence[str] = (),
     y_attrs: Sequence[str] = (),
 ) -> tf.data.Dataset:
@@ -39,7 +38,6 @@ def TensorflowTileDBDataset(
     :param buffer_bytes: Size (in bytes) of the buffer used to read from each array.
         If not given, it is determined automatically.
     :param batch_shuffle: True for shuffling batches.
-    :param within_batch_shuffle: True for shuffling records in each batch.
     :param x_attrs: Attribute names of x_array.
     :param y_attrs: Attribute names of y_array.
     """
@@ -58,7 +56,6 @@ def TensorflowTileDBDataset(
             batch_size=batch_size,
             buffer_bytes=buffer_bytes,
             batch_shuffle=batch_shuffle,
-            within_batch_shuffle=within_batch_shuffle,
             x_attrs=x_attrs,
             y_attrs=y_attrs,
         ),
