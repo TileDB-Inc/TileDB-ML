@@ -8,8 +8,8 @@ import tensorflow as tf
 
 from tiledb.ml.readers._batch_utils import tensor_generator
 from tiledb.ml.readers.tensorflow import (
-    TensorflowDenseBatch,
-    TensorflowSparseBatch,
+    TensorflowDenseTileDBTensorGenerator,
+    TensorflowSparseTileDBTensorGenerator,
     TensorflowTileDBDataset,
 )
 
@@ -66,8 +66,8 @@ class TestTensorflowTileDBDataset:
             generators = [
                 dataset,
                 tensor_generator(
-                    dense_batch_cls=TensorflowDenseBatch,
-                    sparse_batch_cls=TensorflowSparseBatch,
+                    dense_tensor_generator_cls=TensorflowDenseTileDBTensorGenerator,
+                    sparse_tensor_generator_cls=TensorflowSparseTileDBTensorGenerator,
                     **dataset_kwargs,
                 ),
             ]

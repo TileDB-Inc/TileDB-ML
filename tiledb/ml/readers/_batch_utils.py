@@ -14,10 +14,8 @@ import tiledb
 Tensor = TypeVar("Tensor")
 
 
-class BaseBatch(ABC, Generic[Tensor]):
-    """
-    Base class used for getting tensors from batches of buffers read from a TileDB array.
-    """
+class TileDBTensorGenerator(ABC, Generic[Tensor]):
+    """Base class for generating tensors read from a TileDB array."""
 
     def __init__(
         self,
@@ -61,7 +59,7 @@ class BaseBatch(ABC, Generic[Tensor]):
         """
 
 
-class BaseDenseBatch(BaseBatch[Tensor]):
+class DenseTileDBTensorGenerator(TileDBTensorGenerator[Tensor]):
     def read_buffer(self, array_slice: slice) -> None:
         self._buf_arrays = tuple(self._query[array_slice].values())
 
@@ -79,7 +77,7 @@ class BaseDenseBatch(BaseBatch[Tensor]):
         """Convert a numpy array to a Tensor"""
 
 
-class BaseSparseBatch(BaseBatch[Tensor]):
+class SparseTileDBTensorGenerator(TileDBTensorGenerator[Tensor]):
     def __init__(
         self,
         array: tiledb.Array,
@@ -87,7 +85,7 @@ class BaseSparseBatch(BaseBatch[Tensor]):
     ) -> None:
         schema = array.schema
         if schema.ndim != 2:
-            raise NotImplementedError("Sparse batches only supported for 2D arrays")
+            raise NotImplementedError("Only 2D sparse tensors are currently supported")
         if not attrs:
             attrs = get_attr_names(schema)
         self._row_dim = schema.domain.dim(0).name
@@ -101,7 +99,7 @@ class BaseSparseBatch(BaseBatch[Tensor]):
         # COO to CSR transformation for batching and row slicing
         row = buffer.pop(self._row_dim)
         col = buffer.pop(self._col_dim)
-        # Normalize indices: We want the coords indices to be in the [0, batch_size]
+        # Normalize indices: We want the coords indices to be in the [0, array_slice size]
         # range. If we do not normalize the sparse tensor is being created but with a
         # dimension [0, max(coord_index)], which is overkill
         start_offset = array_slice.start
@@ -141,8 +139,8 @@ SparseTensor = TypeVar("SparseTensor")
 
 
 def tensor_generator(
-    dense_batch_cls: Type[BaseDenseBatch[DenseTensor]],
-    sparse_batch_cls: Type[BaseSparseBatch[SparseTensor]],
+    dense_tensor_generator_cls: Type[DenseTileDBTensorGenerator[DenseTensor]],
+    sparse_tensor_generator_cls: Type[SparseTileDBTensorGenerator[SparseTensor]],
     x_array: tiledb.Array,
     y_array: tiledb.Array,
     batch_size: int,
@@ -160,8 +158,8 @@ def tensor_generator(
     Each yielded batch is a sequence of N tensors of x_array followed by M tensors
     of y_array, where `N == len(x_attrs)` and `M == len(y_attrs)`.
 
-    :param dense_batch_cls: Type of dense batches.
-    :param sparse_batch_cls: Type of sparse batches.
+    :param dense_tensor_generator_cls: Dense tensor generator type.
+    :param sparse_tensor_generator_cls: Sparse tensor generator type.
     :param x_array: TileDB array of the features.
     :param y_array: TileDB array of the labels.
     :param batch_size: Size of each batch.
@@ -177,11 +175,11 @@ def tensor_generator(
     if not stop_offset:
         stop_offset = x_array.shape[0]
 
-    def batch_factory(
+    def get_buffer_size_generator(
         label: str, array: tiledb.Array, attrs: Sequence[str]
     ) -> Union[
-        Tuple[BaseDenseBatch[DenseTensor], int],
-        Tuple[BaseSparseBatch[SparseTensor], int],
+        Tuple[int, DenseTileDBTensorGenerator[DenseTensor]],
+        Tuple[int, SparseTileDBTensorGenerator[SparseTensor]],
     ]:
         if buffer_bytes is None:
             num_batches = 1
@@ -192,12 +190,12 @@ def tensor_generator(
         buffer_size = batch_size * num_batches
         logging.info(f"{label} buffer: {num_batches} batches ({buffer_size} rows)")
         if array.schema.sparse:
-            return sparse_batch_cls(array, attrs), buffer_size
+            return buffer_size, sparse_tensor_generator_cls(array, attrs)
         else:
-            return dense_batch_cls(array, attrs), buffer_size
+            return buffer_size, dense_tensor_generator_cls(array, attrs)
 
-    x_batch, x_buffer_size = batch_factory("x", x_array, x_attrs)
-    y_batch, y_buffer_size = batch_factory("y", y_array, y_attrs)
+    x_buffer_size, x_gen = get_buffer_size_generator("x", x_array, x_attrs)
+    y_buffer_size, y_gen = get_buffer_size_generator("y", y_array, y_attrs)
     with futures.ThreadPoolExecutor(max_workers=2) as executor:
         for batch in iter_batches(
             batch_size, x_buffer_size, y_buffer_size, start_offset, stop_offset
@@ -205,23 +203,23 @@ def tensor_generator(
             if batch.x_read_slice and batch.y_read_slice:
                 futures.wait(
                     (
-                        executor.submit(x_batch.read_buffer, batch.x_read_slice),
-                        executor.submit(y_batch.read_buffer, batch.y_read_slice),
+                        executor.submit(x_gen.read_buffer, batch.x_read_slice),
+                        executor.submit(y_gen.read_buffer, batch.y_read_slice),
                     )
                 )
             elif batch.x_read_slice:
-                x_batch.read_buffer(batch.x_read_slice)
+                x_gen.read_buffer(batch.x_read_slice)
             elif batch.y_read_slice:
-                y_batch.read_buffer(batch.y_read_slice)
+                y_gen.read_buffer(batch.y_read_slice)
 
             if batch_shuffle and batch.shuffling:
                 row_idxs = np.arange(batch.shuffling.size)
                 np.random.shuffle(row_idxs)
-                x_batch.shuffle_buffer(batch.shuffling.x_buffer_slice, row_idxs)
-                y_batch.shuffle_buffer(batch.shuffling.y_buffer_slice, row_idxs)
+                x_gen.shuffle_buffer(batch.shuffling.x_buffer_slice, row_idxs)
+                y_gen.shuffle_buffer(batch.shuffling.y_buffer_slice, row_idxs)
 
-            x_tensors = x_batch.iter_tensors(batch.x_buffer_slice)
-            y_tensors = y_batch.iter_tensors(batch.y_buffer_slice)
+            x_tensors = x_gen.iter_tensors(batch.x_buffer_slice)
+            y_tensors = y_gen.iter_tensors(batch.y_buffer_slice)
             yield (*x_tensors, *y_tensors)
 
 
