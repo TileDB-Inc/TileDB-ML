@@ -2,7 +2,13 @@ import numpy as np
 import pytest
 
 import tiledb
-from tiledb.ml.readers._batch_utils import estimate_row_bytes, get_num_batches
+from tiledb.ml.readers._batch_utils import (
+    Batch,
+    Shuffling,
+    estimate_row_bytes,
+    get_num_batches,
+    iter_batches,
+)
 
 
 @pytest.fixture
@@ -109,3 +115,341 @@ def test_get_num_batches_sparse(sparse_uri):
         assert get_num_batches(batch_size, buffer_bytes, a, attrs=["af8", "au1"]) == 49
         # int(50000 / 16 / 48) == 65 but there are at most ceil(1000 / 16) == 63 batches
         assert get_num_batches(batch_size, buffer_bytes, a, attrs=["af4"]) == 63
+
+
+def test_iter_batches():
+    batches = iter_batches(
+        batch_size=8,
+        x_buffer_size=8 * 5,
+        y_buffer_size=8 * 7,
+        start_offset=0,
+        stop_offset=219,
+    )
+    assert list(batches) == [
+        Batch(
+            x_read_slice=slice(0, 40, None),
+            y_read_slice=slice(0, 56, None),
+            shuffling=Shuffling(
+                size=40,
+                x_buffer_slice=slice(0, 40, None),
+                y_buffer_slice=slice(0, 40, None),
+            ),
+            x_buffer_slice=slice(0, 8, None),
+            y_buffer_slice=slice(0, 8, None),
+        ),
+        Batch(
+            x_read_slice=None,
+            y_read_slice=None,
+            shuffling=None,
+            x_buffer_slice=slice(8, 16, None),
+            y_buffer_slice=slice(8, 16, None),
+        ),
+        Batch(
+            x_read_slice=None,
+            y_read_slice=None,
+            shuffling=None,
+            x_buffer_slice=slice(16, 24, None),
+            y_buffer_slice=slice(16, 24, None),
+        ),
+        Batch(
+            x_read_slice=None,
+            y_read_slice=None,
+            shuffling=None,
+            x_buffer_slice=slice(24, 32, None),
+            y_buffer_slice=slice(24, 32, None),
+        ),
+        Batch(
+            x_read_slice=None,
+            y_read_slice=None,
+            shuffling=None,
+            x_buffer_slice=slice(32, 40, None),
+            y_buffer_slice=slice(32, 40, None),
+        ),
+        Batch(
+            x_read_slice=slice(40, 80, None),
+            y_read_slice=None,
+            shuffling=Shuffling(
+                size=16,
+                x_buffer_slice=slice(0, 16, None),
+                y_buffer_slice=slice(40, 56, None),
+            ),
+            x_buffer_slice=slice(0, 8, None),
+            y_buffer_slice=slice(40, 48, None),
+        ),
+        Batch(
+            x_read_slice=None,
+            y_read_slice=None,
+            shuffling=None,
+            x_buffer_slice=slice(8, 16, None),
+            y_buffer_slice=slice(48, 56, None),
+        ),
+        Batch(
+            x_read_slice=None,
+            y_read_slice=slice(56, 112, None),
+            shuffling=Shuffling(
+                size=24,
+                x_buffer_slice=slice(16, 40, None),
+                y_buffer_slice=slice(0, 24, None),
+            ),
+            x_buffer_slice=slice(16, 24, None),
+            y_buffer_slice=slice(0, 8, None),
+        ),
+        Batch(
+            x_read_slice=None,
+            y_read_slice=None,
+            shuffling=None,
+            x_buffer_slice=slice(24, 32, None),
+            y_buffer_slice=slice(8, 16, None),
+        ),
+        Batch(
+            x_read_slice=None,
+            y_read_slice=None,
+            shuffling=None,
+            x_buffer_slice=slice(32, 40, None),
+            y_buffer_slice=slice(16, 24, None),
+        ),
+        Batch(
+            x_read_slice=slice(80, 120, None),
+            y_read_slice=None,
+            shuffling=Shuffling(
+                size=32,
+                x_buffer_slice=slice(0, 32, None),
+                y_buffer_slice=slice(24, 56, None),
+            ),
+            x_buffer_slice=slice(0, 8, None),
+            y_buffer_slice=slice(24, 32, None),
+        ),
+        Batch(
+            x_read_slice=None,
+            y_read_slice=None,
+            shuffling=None,
+            x_buffer_slice=slice(8, 16, None),
+            y_buffer_slice=slice(32, 40, None),
+        ),
+        Batch(
+            x_read_slice=None,
+            y_read_slice=None,
+            shuffling=None,
+            x_buffer_slice=slice(16, 24, None),
+            y_buffer_slice=slice(40, 48, None),
+        ),
+        Batch(
+            x_read_slice=None,
+            y_read_slice=None,
+            shuffling=None,
+            x_buffer_slice=slice(24, 32, None),
+            y_buffer_slice=slice(48, 56, None),
+        ),
+        Batch(
+            x_read_slice=None,
+            y_read_slice=slice(112, 168, None),
+            shuffling=Shuffling(
+                size=8,
+                x_buffer_slice=slice(32, 40, None),
+                y_buffer_slice=slice(0, 8, None),
+            ),
+            x_buffer_slice=slice(32, 40, None),
+            y_buffer_slice=slice(0, 8, None),
+        ),
+        Batch(
+            x_read_slice=slice(120, 160, None),
+            y_read_slice=None,
+            shuffling=Shuffling(
+                size=40,
+                x_buffer_slice=slice(0, 40, None),
+                y_buffer_slice=slice(8, 48, None),
+            ),
+            x_buffer_slice=slice(0, 8, None),
+            y_buffer_slice=slice(8, 16, None),
+        ),
+        Batch(
+            x_read_slice=None,
+            y_read_slice=None,
+            shuffling=None,
+            x_buffer_slice=slice(8, 16, None),
+            y_buffer_slice=slice(16, 24, None),
+        ),
+        Batch(
+            x_read_slice=None,
+            y_read_slice=None,
+            shuffling=None,
+            x_buffer_slice=slice(16, 24, None),
+            y_buffer_slice=slice(24, 32, None),
+        ),
+        Batch(
+            x_read_slice=None,
+            y_read_slice=None,
+            shuffling=None,
+            x_buffer_slice=slice(24, 32, None),
+            y_buffer_slice=slice(32, 40, None),
+        ),
+        Batch(
+            x_read_slice=None,
+            y_read_slice=None,
+            shuffling=None,
+            x_buffer_slice=slice(32, 40, None),
+            y_buffer_slice=slice(40, 48, None),
+        ),
+        Batch(
+            x_read_slice=slice(160, 200, None),
+            y_read_slice=None,
+            shuffling=Shuffling(
+                size=8,
+                x_buffer_slice=slice(0, 8, None),
+                y_buffer_slice=slice(48, 56, None),
+            ),
+            x_buffer_slice=slice(0, 8, None),
+            y_buffer_slice=slice(48, 56, None),
+        ),
+        Batch(
+            x_read_slice=None,
+            y_read_slice=slice(168, 219, None),
+            shuffling=Shuffling(
+                size=32,
+                x_buffer_slice=slice(8, 40, None),
+                y_buffer_slice=slice(0, 32, None),
+            ),
+            x_buffer_slice=slice(8, 16, None),
+            y_buffer_slice=slice(0, 8, None),
+        ),
+        Batch(
+            x_read_slice=None,
+            y_read_slice=None,
+            shuffling=None,
+            x_buffer_slice=slice(16, 24, None),
+            y_buffer_slice=slice(8, 16, None),
+        ),
+        Batch(
+            x_read_slice=None,
+            y_read_slice=None,
+            shuffling=None,
+            x_buffer_slice=slice(24, 32, None),
+            y_buffer_slice=slice(16, 24, None),
+        ),
+        Batch(
+            x_read_slice=None,
+            y_read_slice=None,
+            shuffling=None,
+            x_buffer_slice=slice(32, 40, None),
+            y_buffer_slice=slice(24, 32, None),
+        ),
+        Batch(
+            x_read_slice=slice(200, 219, None),
+            y_read_slice=None,
+            shuffling=Shuffling(
+                size=19,
+                x_buffer_slice=slice(0, 19, None),
+                y_buffer_slice=slice(32, 51, None),
+            ),
+            x_buffer_slice=slice(0, 8, None),
+            y_buffer_slice=slice(32, 40, None),
+        ),
+        Batch(
+            x_read_slice=None,
+            y_read_slice=None,
+            shuffling=None,
+            x_buffer_slice=slice(8, 16, None),
+            y_buffer_slice=slice(40, 48, None),
+        ),
+        Batch(
+            x_read_slice=None,
+            y_read_slice=None,
+            shuffling=None,
+            x_buffer_slice=slice(16, 19, None),
+            y_buffer_slice=slice(48, 51, None),
+        ),
+    ]
+
+
+def test_iter_batches_offsets():
+    batches = iter_batches(
+        batch_size=8,
+        x_buffer_size=8 * 5,
+        y_buffer_size=8 * 7,
+        start_offset=73,
+        stop_offset=146,
+    )
+    assert list(batches) == [
+        Batch(
+            x_read_slice=slice(73, 113, None),
+            y_read_slice=slice(73, 129, None),
+            shuffling=Shuffling(
+                size=40,
+                x_buffer_slice=slice(0, 40, None),
+                y_buffer_slice=slice(0, 40, None),
+            ),
+            x_buffer_slice=slice(0, 8, None),
+            y_buffer_slice=slice(0, 8, None),
+        ),
+        Batch(
+            x_read_slice=None,
+            y_read_slice=None,
+            shuffling=None,
+            x_buffer_slice=slice(8, 16, None),
+            y_buffer_slice=slice(8, 16, None),
+        ),
+        Batch(
+            x_read_slice=None,
+            y_read_slice=None,
+            shuffling=None,
+            x_buffer_slice=slice(16, 24, None),
+            y_buffer_slice=slice(16, 24, None),
+        ),
+        Batch(
+            x_read_slice=None,
+            y_read_slice=None,
+            shuffling=None,
+            x_buffer_slice=slice(24, 32, None),
+            y_buffer_slice=slice(24, 32, None),
+        ),
+        Batch(
+            x_read_slice=None,
+            y_read_slice=None,
+            shuffling=None,
+            x_buffer_slice=slice(32, 40, None),
+            y_buffer_slice=slice(32, 40, None),
+        ),
+        Batch(
+            x_read_slice=slice(113, 146, None),
+            y_read_slice=None,
+            shuffling=Shuffling(
+                size=16,
+                x_buffer_slice=slice(0, 16, None),
+                y_buffer_slice=slice(40, 56, None),
+            ),
+            x_buffer_slice=slice(0, 8, None),
+            y_buffer_slice=slice(40, 48, None),
+        ),
+        Batch(
+            x_read_slice=None,
+            y_read_slice=None,
+            shuffling=None,
+            x_buffer_slice=slice(8, 16, None),
+            y_buffer_slice=slice(48, 56, None),
+        ),
+        Batch(
+            x_read_slice=None,
+            y_read_slice=slice(129, 146, None),
+            shuffling=Shuffling(
+                size=17,
+                x_buffer_slice=slice(16, 33, None),
+                y_buffer_slice=slice(0, 17, None),
+            ),
+            x_buffer_slice=slice(16, 24, None),
+            y_buffer_slice=slice(0, 8, None),
+        ),
+        Batch(
+            x_read_slice=None,
+            y_read_slice=None,
+            shuffling=None,
+            x_buffer_slice=slice(24, 32, None),
+            y_buffer_slice=slice(8, 16, None),
+        ),
+        Batch(
+            x_read_slice=None,
+            y_read_slice=None,
+            shuffling=None,
+            x_buffer_slice=slice(32, 33, None),
+            y_buffer_slice=slice(16, 17, None),
+        ),
+    ]
