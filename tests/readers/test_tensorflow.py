@@ -41,8 +41,7 @@ class TestTensorflowTileDBDataset:
         pass_attrs,
         batch_size,
         buffer_bytes,
-        batch_shuffle,
-        within_batch_shuffle,
+        shuffle,
     ):
         with ingest_in_tiledb(
             tmpdir,
@@ -54,8 +53,7 @@ class TestTensorflowTileDBDataset:
             num_attrs=num_attrs,
             pass_attrs=pass_attrs,
             buffer_bytes=buffer_bytes,
-            batch_shuffle=batch_shuffle,
-            within_batch_shuffle=within_batch_shuffle,
+            shuffle=shuffle,
         ) as dataset_kwargs:
             dataset = TensorflowTileDBDataset(**dataset_kwargs)
             assert isinstance(dataset, tf.data.Dataset)
@@ -95,8 +93,7 @@ class TestTensorflowTileDBDataset:
         pass_attrs,
         batch_size,
         buffer_bytes,
-        batch_shuffle,
-        within_batch_shuffle,
+        shuffle,
     ):
         with ingest_in_tiledb(
             tmpdir,
@@ -109,14 +106,13 @@ class TestTensorflowTileDBDataset:
             num_attrs=num_attrs,
             pass_attrs=pass_attrs,
             buffer_bytes=buffer_bytes,
-            batch_shuffle=batch_shuffle,
-            within_batch_shuffle=within_batch_shuffle,
+            shuffle=shuffle,
         ) as dataset_kwargs:
             with pytest.raises(ValueError) as ex:
                 TensorflowTileDBDataset(**dataset_kwargs)
             assert "X and Y arrays must have the same number of rows" in str(ex.value)
 
-    @parametrize_for_dataset(x_sparse=[True], batch_shuffle=[False])
+    @parametrize_for_dataset(x_sparse=[True], shuffle=[False])
     def test_sparse_read_order(
         self,
         tmpdir,
@@ -129,8 +125,7 @@ class TestTensorflowTileDBDataset:
         pass_attrs,
         batch_size,
         buffer_bytes,
-        batch_shuffle,
-        within_batch_shuffle,
+        shuffle,
     ):
         x_data = rand_array(num_rows, *x_shape, sparse=x_sparse)
         with ingest_in_tiledb(
@@ -143,8 +138,7 @@ class TestTensorflowTileDBDataset:
             num_attrs=num_attrs,
             pass_attrs=pass_attrs,
             buffer_bytes=buffer_bytes,
-            batch_shuffle=batch_shuffle,
-            within_batch_shuffle=within_batch_shuffle,
+            shuffle=shuffle,
         ) as dataset_kwargs:
             dataset = TensorflowTileDBDataset(**dataset_kwargs)
             generated_x_data = np.concatenate(

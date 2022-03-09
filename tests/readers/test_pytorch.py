@@ -31,8 +31,7 @@ class TestPyTorchTileDBDataset:
         pass_attrs,
         batch_size,
         buffer_bytes,
-        batch_shuffle,
-        within_batch_shuffle,
+        shuffle,
     ):
         if num_workers and (x_sparse or y_sparse):
             pytest.skip("multiple workers not supported with sparse arrays")
@@ -47,8 +46,7 @@ class TestPyTorchTileDBDataset:
             num_attrs=num_attrs,
             pass_attrs=pass_attrs,
             buffer_bytes=buffer_bytes,
-            batch_shuffle=batch_shuffle,
-            within_batch_shuffle=within_batch_shuffle,
+            shuffle=shuffle,
         ) as dataset_kwargs:
             dataset = PyTorchTileDBDataset(**dataset_kwargs)
             assert isinstance(dataset, torch.utils.data.IterableDataset)
@@ -98,8 +96,7 @@ class TestPyTorchTileDBDataset:
         pass_attrs,
         batch_size,
         buffer_bytes,
-        batch_shuffle,
-        within_batch_shuffle,
+        shuffle,
     ):
         with ingest_in_tiledb(
             tmpdir,
@@ -112,14 +109,13 @@ class TestPyTorchTileDBDataset:
             num_attrs=num_attrs,
             pass_attrs=pass_attrs,
             buffer_bytes=buffer_bytes,
-            batch_shuffle=batch_shuffle,
-            within_batch_shuffle=within_batch_shuffle,
+            shuffle=shuffle,
         ) as dataset_kwargs:
             with pytest.raises(ValueError) as ex:
                 PyTorchTileDBDataset(**dataset_kwargs)
             assert "X and Y arrays must have the same number of rows" in str(ex.value)
 
-    @parametrize_for_dataset(x_sparse=[True], batch_shuffle=[False])
+    @parametrize_for_dataset(x_sparse=[True], shuffle=[False])
     def test_sparse_read_order(
         self,
         tmpdir,
@@ -132,8 +128,7 @@ class TestPyTorchTileDBDataset:
         pass_attrs,
         batch_size,
         buffer_bytes,
-        batch_shuffle,
-        within_batch_shuffle,
+        shuffle,
     ):
         x_data = rand_array(num_rows, *x_shape, sparse=x_sparse)
         with ingest_in_tiledb(
@@ -146,8 +141,7 @@ class TestPyTorchTileDBDataset:
             num_attrs=num_attrs,
             pass_attrs=pass_attrs,
             buffer_bytes=buffer_bytes,
-            batch_shuffle=batch_shuffle,
-            within_batch_shuffle=within_batch_shuffle,
+            shuffle=shuffle,
         ) as dataset_kwargs:
             dataset = PyTorchTileDBDataset(**dataset_kwargs)
             generated_x_data = np.concatenate(

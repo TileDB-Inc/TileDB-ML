@@ -20,14 +20,10 @@ def parametrize_for_dataset(
     pass_attrs=(True, False),
     batch_size=(8,),
     buffer_bytes=(1024, None),
-    batch_shuffle=(True, False),
-    within_batch_shuffle=(True, False),
+    shuffle=(True, False),
 ):
     def is_valid_combination(t):
-        x_sparse_, y_sparse_, x_shape_, y_shape_, *_, within_batch_shuffle_ = t
-        # within_batch_shuffle not supported with sparse arrays
-        if within_batch_shuffle_ and (x_sparse_ or y_sparse_):
-            return False
+        x_sparse_, y_sparse_, x_shape_, y_shape_, *_ = t
         # sparse not supported with multi-dimensional arrays
         if x_sparse_ and len(x_shape_) > 1 or y_sparse_ and len(y_shape_) > 1:
             return False
@@ -42,8 +38,7 @@ def parametrize_for_dataset(
         "pass_attrs",
         "batch_size",
         "buffer_bytes",
-        "batch_shuffle",
-        "within_batch_shuffle",
+        "shuffle",
     ]
     argvalues = filter(
         is_valid_combination,
@@ -56,8 +51,7 @@ def parametrize_for_dataset(
             pass_attrs,
             batch_size,
             buffer_bytes,
-            batch_shuffle,
-            within_batch_shuffle,
+            shuffle,
         ),
     )
     return pytest.mark.parametrize(argnames, argvalues)
@@ -74,8 +68,7 @@ def ingest_in_tiledb(
     num_attrs,
     pass_attrs,
     buffer_bytes,
-    batch_shuffle,
-    within_batch_shuffle,
+    shuffle,
 ):
     """Context manager for ingest data into TileDB.
 
@@ -93,8 +86,7 @@ def ingest_in_tiledb(
             y_array=y_array,
             batch_size=batch_size,
             buffer_bytes=buffer_bytes,
-            batch_shuffle=batch_shuffle,
-            within_batch_shuffle=within_batch_shuffle,
+            shuffle=shuffle,
             x_attrs=attrs,
             y_attrs=attrs,
         )
