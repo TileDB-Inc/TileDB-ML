@@ -3,17 +3,8 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from concurrent import futures
-from typing import (
-    Dict,
-    Generic,
-    Iterator,
-    Optional,
-    Sequence,
-    Tuple,
-    Type,
-    TypeVar,
-    Union,
-)
+from dataclasses import dataclass
+from typing import Generic, Iterator, Optional, Sequence, Tuple, Type, TypeVar, Union
 
 import numpy as np
 import scipy.sparse as sp
@@ -23,112 +14,62 @@ import tiledb
 Tensor = TypeVar("Tensor")
 
 
-class BaseBatch(ABC, Generic[Tensor]):
-    """
-    Base class used for getting tensors from batches of buffers read from a TileDB array.
-    """
+class TileDBTensorGenerator(ABC, Generic[Tensor]):
+    """Base class for generating tensors read from a TileDB array."""
 
     def __init__(
         self,
-        buffer_slices: Iterator[slice],
         array: tiledb.Array,
         attrs: Sequence[str] = (),
     ) -> None:
         """
-        :param buffer_slices: Iterator of slices to be read.
         :param array: TileDB array to read from.
         :param attrs: Attribute names of array to read; defaults to all array attributes.
         """
         self._query = array.query(attrs=attrs or None)
-        self._buf_slices = buffer_slices
-        self._last_buf_slice = slice(0, 0)
 
     @abstractmethod
-    def set_batch_slice(self, batch_slice: slice) -> None:
-        """Set the current batch as a slice of the read buffer.
+    def read_buffer(self, array_slice: slice) -> None:
+        """
+        Read an array slice and save it as the current buffer.
+
+        :param array_slice: Requested array slice.
+        """
+
+    @abstractmethod
+    def shuffle_buffer(self, buffer_slice: slice, row_idxs: np.ndarray) -> None:
+        """
+        Shuffle a slice of the current buffer.
 
         Must be called after `read_buffer`.
 
-        :param batch_slice: Slice of the buffer to be used as the current batch.
+        :param buffer_slice: Slice of the current buffer to shuffle.
+        :param row_idxs: Shuffled indices; a shuffled version of
+            `np.arange(0, buffer_slice.stop - buffer_slice.start)`
         """
 
     @abstractmethod
-    def iter_tensors(self, perm_idxs: Optional[np.ndarray] = None) -> Iterator[Tensor]:
+    def iter_tensors(self, buffer_slice: slice) -> Iterator[Tensor]:
         """
-        Return an iterator of tensors for the current batch, one tensor per attribute
-        given in the constructor.
+        Return an iterator of tensors for the given slice, one tensor per attribute
 
-        Must be called after `set_batch_slice`.
+        Must be called after `read_buffer`.
 
-        :param perm_idxs: Optional permutation indices for the current batch.
-            If given, it must be an array equal to `np.arange(len(self))` after sorting.
+        :param buffer_slice: Slice of the current buffer to convert to tensors.
         """
 
-    @abstractmethod
-    def __len__(self) -> int:
-        """Get the size (i.e. number of rows) of the current batch.
 
-        Must be called after `set_batch_slice`.
-        """
+class DenseTileDBTensorGenerator(TileDBTensorGenerator[Tensor]):
+    def read_buffer(self, array_slice: slice) -> None:
+        self._buf_arrays = tuple(self._query[array_slice].values())
 
-    def _read_next_buffer_if_needed(
-        self, batch_slice: slice
-    ) -> Tuple[Optional[Dict[str, np.ndarray]], slice]:
-        """
-        Read the next buffer if needed in order to access the given batch_slice.
+    def shuffle_buffer(self, buffer_slice: slice, row_idxs: np.ndarray) -> None:
+        for buf_array in self._buf_arrays:
+            buf_array[buffer_slice] = buf_array[buffer_slice.start + row_idxs]
 
-        :param batch_slice: Requested batch slice in absolute row coordinates.
-        :return: (buffer, buf_slice) tuple, where `buffer` is the buffer if read
-            or None otherwise, and `buf_slice` is `batch_slice` translated to buffer
-            coordinates.
-        """
-        # read the next buffer if necessary
-        if not self._buffer_contains_slice(batch_slice):
-            self._last_buf_slice = next(self._buf_slices)
-            buffer = self._query[self._last_buf_slice]
-            assert self._buffer_contains_slice(batch_slice)
-        else:
-            buffer = None
-        # shift batch_slice to buffer coordinates
-        buf_start = self._last_buf_slice.start
-        buf_slice = slice(
-            batch_slice.start - buf_start,
-            batch_slice.stop - buf_start if batch_slice.stop is not None else None,
-        )
-        return buffer, buf_slice
-
-    def _buffer_contains_slice(self, batch_slice: slice) -> bool:
-        if self._last_buf_slice.start > batch_slice.start:
-            return False
-        if self._last_buf_slice.stop is None:
-            return True
-        if batch_slice.stop is None:
-            return False
-        return bool(self._last_buf_slice.stop >= batch_slice.stop)
-
-
-class BaseDenseBatch(BaseBatch[Tensor]):
-    def set_batch_slice(self, batch_slice: slice) -> None:
-        buffer, buf_slice = self._read_next_buffer_if_needed(batch_slice)
-        if buffer is not None:
-            self._buffer = buffer
-        self._attr_batches = tuple(data[buf_slice] for data in self._buffer.values())
-
-    def iter_tensors(self, perm_idxs: Optional[np.ndarray] = None) -> Iterator[Tensor]:
-        assert hasattr(self, "_attr_batches"), "set_batch_slice() not called"
-        if perm_idxs is None:
-            attr_batches = iter(self._attr_batches)
-        else:
-            n = len(self)
-            assert (
-                len(perm_idxs) == n and (np.sort(perm_idxs) == np.arange(n)).all()
-            ), f"Invalid permutation of size {n}: {perm_idxs}"
-            attr_batches = (attr_batch[perm_idxs] for attr_batch in self._attr_batches)
-        return map(self._tensor_from_numpy, attr_batches)
-
-    def __len__(self) -> int:
-        assert hasattr(self, "_attr_batches"), "set_batch_slice() not called"
-        return len(self._attr_batches[0])
+    def iter_tensors(self, buffer_slice: slice) -> Iterator[Tensor]:
+        for buf_array in self._buf_arrays:
+            yield self._tensor_from_numpy(buf_array[buffer_slice])
 
     @staticmethod
     @abstractmethod
@@ -136,67 +77,51 @@ class BaseDenseBatch(BaseBatch[Tensor]):
         """Convert a numpy array to a Tensor"""
 
 
-class BaseSparseBatch(BaseBatch[Tensor]):
+class SparseTileDBTensorGenerator(TileDBTensorGenerator[Tensor]):
     def __init__(
         self,
-        buffer_slices: Iterator[slice],
         array: tiledb.Array,
         attrs: Sequence[str] = (),
     ) -> None:
         schema = array.schema
         if schema.ndim != 2:
-            raise NotImplementedError("Sparse batches only supported for 2D arrays")
+            raise NotImplementedError("Only 2D sparse tensors are currently supported")
         if not attrs:
             attrs = get_attr_names(schema)
         self._row_dim = schema.domain.dim(0).name
         self._col_dim = schema.domain.dim(1).name
         self._row_shape = schema.shape[1:]
         self._attr_dtypes = tuple(schema.attr(attr).dtype for attr in attrs)
-        super().__init__(buffer_slices, array, attrs)
+        super().__init__(array, attrs)
 
-    def set_batch_slice(self, batch_slice: slice) -> None:
-        buffer, buf_slice = self._read_next_buffer_if_needed(batch_slice)
-        if buffer is not None:
-            # COO to CSR transformation for batching and row slicing
-            row = buffer.pop(self._row_dim)
-            col = buffer.pop(self._col_dim)
-            # Normalize indices: We want the coords indices to be in the [0, batch_size]
-            # range. If we do not normalize the sparse tensor is being created but with a
-            # dimension [0, max(coord_index)], which is overkill
-            offset = self._last_buf_slice.start
-            self._buf_csrs = tuple(
-                sp.csr_matrix((data, (row - offset, col))) for data in buffer.values()
-            )
-        self._batch_csrs = tuple(buf_csr[buf_slice] for buf_csr in self._buf_csrs)
+    def read_buffer(self, array_slice: slice) -> None:
+        buffer = self._query[array_slice]
+        # COO to CSR transformation for batching and row slicing
+        row = buffer.pop(self._row_dim)
+        col = buffer.pop(self._col_dim)
+        # Normalize indices: We want the coords indices to be in the [0, array_slice size]
+        # range. If we do not normalize the sparse tensor is being created but with a
+        # dimension [0, max(coord_index)], which is overkill
+        start_offset = array_slice.start
+        stop_offset = array_slice.stop
+        shape = (stop_offset - start_offset, *self._row_shape)
+        self._buf_csrs = tuple(
+            sp.csr_matrix((data, (row - start_offset, col)), shape=shape)
+            for data in buffer.values()
+        )
 
-    def iter_tensors(self, perm_idxs: Optional[np.ndarray] = None) -> Iterator[Tensor]:
-        assert hasattr(self, "_batch_csrs"), "set_batch_slice() not called"
-        if perm_idxs is not None:
-            raise NotImplementedError(
-                "within_batch_shuffle not implemented for sparse arrays"
-            )
-        for batch_csr, dtype in zip(self._batch_csrs, self._attr_dtypes):
+    def shuffle_buffer(self, buffer_slice: slice, row_idxs: np.ndarray) -> None:
+        for buf_csr in self._buf_csrs:
+            buf_csr[buffer_slice] = buf_csr[buffer_slice.start + row_idxs]
+
+    def iter_tensors(self, buffer_slice: slice) -> Iterator[Tensor]:
+        for buf_csr, dtype in zip(self._buf_csrs, self._attr_dtypes):
+            batch_csr = buf_csr[buffer_slice]
             batch_coo = batch_csr.tocoo()
             data = batch_coo.data
             coords = np.stack((batch_coo.row, batch_coo.col), axis=-1)
             dense_shape = (batch_csr.shape[0], *self._row_shape)
             yield self._tensor_from_coo(data, coords, dense_shape, dtype)
-
-    def __len__(self) -> int:
-        assert hasattr(self, "_batch_csrs"), "set_batch_slice() not called"
-        # return number of non-zero rows
-        lengths = {
-            int((batch_csr.getnnz(axis=1) > 0).sum()) for batch_csr in self._batch_csrs
-        }
-        assert len(lengths) == 1, f"Multiple different batch lengths: {lengths}"
-        return lengths.pop()
-
-    def __bool__(self) -> bool:
-        assert hasattr(self, "_batch_csrs"), "set_batch_slice() not called"
-        # faster version of __len__() > 0
-        lengths = {len(batch_csr.data) for batch_csr in self._batch_csrs}
-        assert len(lengths) == 1, f"Multiple different batch lengths: {lengths}"
-        return lengths.pop() > 0
 
     @staticmethod
     @abstractmethod
@@ -214,8 +139,8 @@ SparseTensor = TypeVar("SparseTensor")
 
 
 def tensor_generator(
-    dense_batch_cls: Type[BaseDenseBatch[DenseTensor]],
-    sparse_batch_cls: Type[BaseSparseBatch[SparseTensor]],
+    dense_tensor_generator_cls: Type[DenseTileDBTensorGenerator[DenseTensor]],
+    sparse_tensor_generator_cls: Type[SparseTileDBTensorGenerator[SparseTensor]],
     x_array: tiledb.Array,
     y_array: tiledb.Array,
     batch_size: int,
@@ -233,8 +158,8 @@ def tensor_generator(
     Each yielded batch is a sequence of N tensors of x_array followed by M tensors
     of y_array, where `N == len(x_attrs)` and `M == len(y_attrs)`.
 
-    :param dense_batch_cls: Type of dense batches.
-    :param sparse_batch_cls: Type of sparse batches.
+    :param dense_tensor_generator_cls: Dense tensor generator type.
+    :param sparse_tensor_generator_cls: Sparse tensor generator type.
     :param x_array: TileDB array of the features.
     :param y_array: TileDB array of the labels.
     :param batch_size: Size of each batch.
@@ -247,16 +172,15 @@ def tensor_generator(
     :param start_offset: Start row offset; defaults to 0.
     :param stop_offset: Stop row offset; defaults to number of rows.
     """
-    if batch_shuffle:
-        # TODO(?): Try to reintroduce batch_shuffle
-        raise NotImplementedError("batch_shuffle not implemented")
-
     if not stop_offset:
         stop_offset = x_array.shape[0]
 
-    def batch_factory(
+    def get_buffer_size_generator(
         label: str, array: tiledb.Array, attrs: Sequence[str]
-    ) -> Union[BaseDenseBatch[DenseTensor], BaseSparseBatch[SparseTensor]]:
+    ) -> Union[
+        Tuple[int, DenseTileDBTensorGenerator[DenseTensor]],
+        Tuple[int, SparseTileDBTensorGenerator[SparseTensor]],
+    ]:
         if buffer_bytes is None:
             num_batches = 1
         else:
@@ -265,43 +189,151 @@ def tensor_generator(
             )
         buffer_size = batch_size * num_batches
         logging.info(f"{label} buffer: {num_batches} batches ({buffer_size} rows)")
-        buffer_slices = iter_slices(start_offset, stop_offset, buffer_size)
         if array.schema.sparse:
-            return sparse_batch_cls(buffer_slices, array, attrs)
+            return buffer_size, sparse_tensor_generator_cls(array, attrs)
         else:
-            return dense_batch_cls(buffer_slices, array, attrs)
+            return buffer_size, dense_tensor_generator_cls(array, attrs)
 
-    x_batch = batch_factory("x", x_array, x_attrs)
-    y_batch = batch_factory("y", y_array, y_attrs)
+    x_buffer_size, x_gen = get_buffer_size_generator("x", x_array, x_attrs)
+    y_buffer_size, y_gen = get_buffer_size_generator("y", y_array, y_attrs)
     with futures.ThreadPoolExecutor(max_workers=2) as executor:
-        for batch_slice in iter_slices(start_offset, stop_offset, batch_size):
-            futures.wait(
-                (
-                    executor.submit(x_batch.set_batch_slice, batch_slice),
-                    executor.submit(y_batch.set_batch_slice, batch_slice),
+        for batch in iter_batches(
+            batch_size, x_buffer_size, y_buffer_size, start_offset, stop_offset
+        ):
+            if batch.x_read_slice and batch.y_read_slice:
+                futures.wait(
+                    (
+                        executor.submit(x_gen.read_buffer, batch.x_read_slice),
+                        executor.submit(y_gen.read_buffer, batch.y_read_slice),
+                    )
                 )
+            elif batch.x_read_slice:
+                x_gen.read_buffer(batch.x_read_slice)
+            elif batch.y_read_slice:
+                y_gen.read_buffer(batch.y_read_slice)
+
+            if batch_shuffle and batch.shuffling:
+                row_idxs = np.arange(batch.shuffling.size)
+                np.random.shuffle(row_idxs)
+                x_gen.shuffle_buffer(batch.shuffling.x_buffer_slice, row_idxs)
+                y_gen.shuffle_buffer(batch.shuffling.y_buffer_slice, row_idxs)
+
+            x_tensors = x_gen.iter_tensors(batch.x_buffer_slice)
+            y_tensors = y_gen.iter_tensors(batch.y_buffer_slice)
+            yield (*x_tensors, *y_tensors)
+
+
+@dataclass(frozen=True, repr=False)
+class Shuffling:
+    size: int
+    x_buffer_slice: slice
+    y_buffer_slice: slice
+
+    def __repr__(self) -> str:
+        x, y = self.x_buffer_slice, self.y_buffer_slice
+        return f"Shuffling(x[{x.start}:{x.stop}], y[{y.start}:{y.stop}])"
+
+
+@dataclass(frozen=True, repr=False)
+class Batch:
+    x_read_slice: Optional[slice]
+    y_read_slice: Optional[slice]
+    shuffling: Optional[Shuffling]
+    x_buffer_slice: slice
+    y_buffer_slice: slice
+
+    def __repr__(self) -> str:
+        x, y = self.x_buffer_slice, self.y_buffer_slice
+        s = f"Batch(x[{x.start}:{x.stop}], y[{y.start}:{y.stop}]"
+        if self.x_read_slice:
+            s += f", x_read[{self.x_read_slice.start}:{self.x_read_slice.stop}]"
+        if self.y_read_slice:
+            s += f", y_read[{self.y_read_slice.start}:{self.y_read_slice.stop}]"
+        if self.shuffling:
+            s += f", {self.shuffling}"
+        return s + ")"
+
+
+def iter_batches(
+    batch_size: int,
+    x_buffer_size: int,
+    y_buffer_size: int,
+    start_offset: int,
+    stop_offset: int,
+) -> Iterator[Batch]:
+    """
+    Generate `Batch` instances describing each batch.
+
+    Each yielded `Batch` instance describes:
+    - The slice to read from the x array into x buffer (if the current x buffer is consumed).
+    - The slice to read from the y array into y buffer (if the current y buffer is consumed).
+    - The shuffling to apply to x and y buffers (if there is new x and/or y buffer).
+      - How many buffer rows to shuffle.
+      - The slice of the x buffer to shuffle.
+      - The slice of the y buffer to shuffle.
+    - The batch slice to read from the x buffer.
+    - The batch slice to read from the y buffer.
+
+    :param batch_size: (Max) size of each batch.
+    :param x_buffer_size: (Max) size of the x buffer.
+    :param y_buffer_size: (Max) size of the y buffer.
+    :param start_offset: Start row offset.
+    :param stop_offset: Stop row offset.
+    """
+    assert (
+        x_buffer_size % batch_size == 0
+    ), "x_buffer_size must be a multiple of batch_size"
+    assert (
+        y_buffer_size % batch_size == 0
+    ), "y_buffer_size must be a multiple of batch_size"
+
+    x_buf_offset = x_buffer_size
+    y_buf_offset = y_buffer_size
+    x_read_slices = iter_slices(start_offset, stop_offset, x_buffer_size)
+    y_read_slices = iter_slices(start_offset, stop_offset, y_buffer_size)
+    for batch_slice in iter_slices(start_offset, stop_offset, batch_size):
+        if x_buf_offset == x_buffer_size:
+            x_read_slice = next(x_read_slices)
+            x_read_size = x_read_slice.stop - x_read_slice.start
+            x_buf_offset = 0
+        else:
+            x_read_slice = None
+
+        if y_buf_offset == y_buffer_size:
+            y_read_slice = next(y_read_slices)
+            y_read_size = y_read_slice.stop - y_read_slice.start
+            y_buf_offset = 0
+        else:
+            y_read_slice = None
+
+        if x_read_slice or y_read_slice:
+            shuffling_size = min(x_read_size - x_buf_offset, y_read_size - y_buf_offset)
+            shuffling = Shuffling(
+                shuffling_size,
+                slice(x_buf_offset, x_buf_offset + shuffling_size),
+                slice(y_buf_offset, y_buf_offset + shuffling_size),
             )
-            if len(x_batch) != len(y_batch):
-                raise ValueError(
-                    "x and y batches should have the same length: "
-                    f"len(x_batch)={len(x_batch)}, len(y_batch)={len(y_batch)}"
-                )
-            if x_batch:
-                if within_batch_shuffle:
-                    perm_idxs = np.arange(len(x_batch))
-                    np.random.shuffle(perm_idxs)
-                else:
-                    perm_idxs = None
-                yield (
-                    *x_batch.iter_tensors(perm_idxs),
-                    *y_batch.iter_tensors(perm_idxs),
-                )
+        else:
+            shuffling = None
+
+        batch_slice_size = batch_slice.stop - batch_slice.start
+        x_next_buf_offset = x_buf_offset + batch_slice_size
+        y_next_buf_offset = y_buf_offset + batch_slice_size
+        yield Batch(
+            x_read_slice,
+            y_read_slice,
+            shuffling,
+            slice(x_buf_offset, x_next_buf_offset),
+            slice(y_buf_offset, y_next_buf_offset),
+        )
+        x_buf_offset = x_next_buf_offset
+        y_buf_offset = y_next_buf_offset
 
 
 def iter_slices(start: int, stop: int, step: int) -> Iterator[slice]:
     offsets = range(start, stop, step)
     yield from map(slice, offsets, offsets[1:])
-    yield slice(offsets[-1], None)
+    yield slice(offsets[-1], stop)
 
 
 def get_attr_names(schema: tiledb.ArraySchema) -> Sequence[str]:

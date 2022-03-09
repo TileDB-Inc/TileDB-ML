@@ -2,7 +2,11 @@ import numpy as np
 import pytest
 
 import tiledb
-from tiledb.ml.readers._batch_utils import estimate_row_bytes, get_num_batches
+from tiledb.ml.readers._batch_utils import (
+    estimate_row_bytes,
+    get_num_batches,
+    iter_batches,
+)
 
 
 @pytest.fixture
@@ -109,3 +113,29 @@ def test_get_num_batches_sparse(sparse_uri):
         assert get_num_batches(batch_size, buffer_bytes, a, attrs=["af8", "au1"]) == 49
         # int(50000 / 16 / 48) == 65 but there are at most ceil(1000 / 16) == 63 batches
         assert get_num_batches(batch_size, buffer_bytes, a, attrs=["af4"]) == 63
+
+
+def test_iter_batches():
+    batches = iter_batches(
+        batch_size=8,
+        x_buffer_size=8 * 5,
+        y_buffer_size=8 * 7,
+        start_offset=104,
+        stop_offset=209,
+    )
+    assert list(map(str, batches)) == [
+        "Batch(x[0:8], y[0:8], x_read[104:144], y_read[104:160], Shuffling(x[0:40], y[0:40]))",
+        "Batch(x[8:16], y[8:16])",
+        "Batch(x[16:24], y[16:24])",
+        "Batch(x[24:32], y[24:32])",
+        "Batch(x[32:40], y[32:40])",
+        "Batch(x[0:8], y[40:48], x_read[144:184], Shuffling(x[0:16], y[40:56]))",
+        "Batch(x[8:16], y[48:56])",
+        "Batch(x[16:24], y[0:8], y_read[160:209], Shuffling(x[16:40], y[0:24]))",
+        "Batch(x[24:32], y[8:16])",
+        "Batch(x[32:40], y[16:24])",
+        "Batch(x[0:8], y[24:32], x_read[184:209], Shuffling(x[0:25], y[24:49]))",
+        "Batch(x[8:16], y[32:40])",
+        "Batch(x[16:24], y[40:48])",
+        "Batch(x[24:25], y[48:49])",
+    ]

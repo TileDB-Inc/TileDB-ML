@@ -9,8 +9,8 @@ import tensorflow as tf
 import tiledb
 
 from ._batch_utils import (
-    BaseDenseBatch,
-    BaseSparseBatch,
+    DenseTileDBTensorGenerator,
+    SparseTileDBTensorGenerator,
     get_attr_names,
     tensor_generator,
 )
@@ -51,8 +51,8 @@ def TensorflowTileDBDataset(
     return tf.data.Dataset.from_generator(
         partial(
             tensor_generator,
-            dense_batch_cls=TensorflowDenseBatch,
-            sparse_batch_cls=TensorflowSparseBatch,
+            dense_tensor_generator_cls=TensorflowDenseTileDBTensorGenerator,
+            sparse_tensor_generator_cls=TensorflowSparseTileDBTensorGenerator,
             x_array=x_array,
             y_array=y_array,
             batch_size=batch_size,
@@ -77,13 +77,15 @@ def _iter_tensor_specs(
         yield cls(shape=(None, *schema.shape[1:]), dtype=schema.attr(attr).dtype)
 
 
-class TensorflowDenseBatch(BaseDenseBatch[tf.Tensor]):
+class TensorflowDenseTileDBTensorGenerator(DenseTileDBTensorGenerator[tf.Tensor]):
     @staticmethod
     def _tensor_from_numpy(data: np.ndarray) -> tf.Tensor:
         return tf.convert_to_tensor(data)
 
 
-class TensorflowSparseBatch(BaseSparseBatch[tf.SparseTensor]):
+class TensorflowSparseTileDBTensorGenerator(
+    SparseTileDBTensorGenerator[tf.SparseTensor]
+):
     @staticmethod
     def _tensor_from_coo(
         data: np.ndarray,

@@ -20,8 +20,7 @@ def parametrize_for_dataset(
     pass_attrs=(True, False),
     batch_size=(8,),
     buffer_bytes=(1024, None),
-    # batch_shuffle=(True, False),
-    batch_shuffle=(False,),
+    batch_shuffle=(True, False),
     within_batch_shuffle=(True, False),
 ):
     def is_valid_combination(t):
@@ -133,20 +132,21 @@ def _ingest_in_tiledb(
         tiledb_array[idx] = {f"features_{attr}": data[idx] for attr in range(num_attrs)}
 
 
-def rand_array(num_rows: int, *row_shape: int, sparse=False) -> np.ndarray:
+def rand_array(num_rows: int, *row_shape: int, sparse: bool = False) -> np.ndarray:
     """Create a random array of shape (num_rows, *row_shape).
 
     :param num_rows: Number of rows of the array (i.e. first dimension size).
     :param row_shape: Shape of each row (i.e. remaining dimension sizes).
-    :param sparse: If True, the array will be sparse: exactly one element per row
-        will be non-zero.
+    :param sparse:
+      - If false, all values will be in the (0, 1) range.
+      - If true, only `num_rows` values will be in the (0, 1) range, the rest will be 0.
+        Note: some rows may be all zeros.
     """
     shape = (num_rows, *row_shape)
     if sparse:
-        a = np.zeros((num_rows, np.asarray(row_shape).prod()))
-        non_zero_coords = np.random.randint(a.shape[1], size=num_rows)
-        a[np.arange(num_rows), non_zero_coords] = np.random.rand(num_rows)
-        a = a.reshape(shape)
+        a = np.zeros(shape)
+        flat_idxs = np.random.choice(a.size, size=len(a), replace=False)
+        a.flat[flat_idxs] = np.random.random(len(flat_idxs))
     else:
         a = np.random.random(shape)
     assert a.shape == shape
