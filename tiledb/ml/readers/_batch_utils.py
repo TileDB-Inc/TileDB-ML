@@ -223,20 +223,35 @@ def tensor_generator(
             yield (*x_tensors, *y_tensors)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, repr=False)
 class Shuffling:
     size: int
     x_buffer_slice: slice
     y_buffer_slice: slice
 
+    def __repr__(self) -> str:
+        x, y = self.x_buffer_slice, self.y_buffer_slice
+        return f"Shuffling(x[{x.start}:{x.stop}], y[{y.start}:{y.stop}])"
 
-@dataclass(frozen=True)
+
+@dataclass(frozen=True, repr=False)
 class Batch:
     x_read_slice: Optional[slice]
     y_read_slice: Optional[slice]
     shuffling: Optional[Shuffling]
     x_buffer_slice: slice
     y_buffer_slice: slice
+
+    def __repr__(self) -> str:
+        x, y = self.x_buffer_slice, self.y_buffer_slice
+        s = f"Batch(x[{x.start}:{x.stop}], y[{y.start}:{y.stop}]"
+        if self.x_read_slice:
+            s += f", x_read[{self.x_read_slice.start}:{self.x_read_slice.stop}]"
+        if self.y_read_slice:
+            s += f", y_read[{self.y_read_slice.start}:{self.y_read_slice.stop}]"
+        if self.shuffling:
+            s += f", {self.shuffling}"
+        return s + ")"
 
 
 def iter_batches(
