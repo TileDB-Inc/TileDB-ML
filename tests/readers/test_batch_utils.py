@@ -4,6 +4,7 @@ import pytest
 import tiledb
 from tiledb.ml.readers._batch_utils import (
     estimate_row_bytes,
+    get_max_buffer_size,
     iter_batches,
     normalize_buffer_size,
 )
@@ -15,9 +16,9 @@ def dense_uri(tmp_path):
     schema = tiledb.ArraySchema(
         sparse=False,
         domain=tiledb.Domain(
-            tiledb.Dim(name="d0", domain=(0, 999), dtype=np.uint32),
-            tiledb.Dim(name="d1", domain=(1, 5), dtype=np.uint32),
-            tiledb.Dim(name="d2", domain=(1, 2), dtype=np.uint32),
+            tiledb.Dim(name="d0", domain=(0, 9999), dtype=np.uint32, tile=123),
+            tiledb.Dim(name="d1", domain=(1, 5), dtype=np.uint32, tile=2),
+            tiledb.Dim(name="d2", domain=(1, 2), dtype=np.uint32, tile=1),
         ),
         attrs=[
             tiledb.Attr(name="af8", dtype=np.float64),
@@ -138,3 +139,31 @@ def test_iter_batches():
         "Batch(x[16:24], y[40:48])",
         "Batch(x[24:25], y[48:49])",
     ]
+
+
+@pytest.mark.parametrize("memory_budget", [2**i for i in range(14, 20)])
+@pytest.mark.parametrize(
+    "attrs",
+    [(), ("af8",), ("af4",), ("au1",), ("af8", "af4"), ("af8", "au1"), ("af4", "au1")],
+)
+def test_get_max_buffer_size(dense_uri, memory_budget, attrs):
+    config = {
+        "sm.memory_budget": memory_budget,
+        "py.max_incomplete_retries": 0,
+    }
+    with tiledb.scope_ctx(config), tiledb.open(dense_uri) as a:
+        buffer_size = get_max_buffer_size(a.schema, attrs)
+        # Check that the buffer size is a multiple of the row tile extent
+        assert buffer_size % a.dim(0).tile == 0
+
+        # Check that we can slice with buffer_size without incomplete reads
+        query = a.query(attrs=attrs or None)
+        for offset in range(0, a.shape[0], buffer_size):
+            query[offset : offset + buffer_size]
+
+        if buffer_size < a.shape[0]:
+            # Check that buffer_size is the max size we can slice without incomplete reads
+            buffer_size += 1
+            with pytest.raises(tiledb.TileDBError):
+                for offset in range(0, a.shape[0], buffer_size):
+                    query[offset : offset + buffer_size]
