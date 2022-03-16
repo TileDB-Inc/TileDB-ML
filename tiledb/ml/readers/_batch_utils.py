@@ -4,6 +4,7 @@ import logging
 from abc import ABC, abstractmethod
 from concurrent import futures
 from dataclasses import dataclass
+from math import ceil
 from typing import Generic, Iterator, Optional, Sequence, Tuple, Type, TypeVar, Union
 
 import numpy as np
@@ -180,13 +181,14 @@ def tensor_generator(
         Tuple[int, SparseTileDBTensorGenerator[SparseTensor]],
     ]:
         if buffer_bytes is None:
-            num_batches = 1
+            buffer_size = batch_size
         else:
-            num_batches = get_num_batches(
-                batch_size, buffer_bytes, array, attrs, start_offset, stop_offset
-            )
-        buffer_size = batch_size * num_batches
-        logging.info(f"{label} buffer: {num_batches} batches ({buffer_size} rows)")
+            est_row_bytes = estimate_row_bytes(array, attrs, start_offset, stop_offset)
+            buffer_size = buffer_bytes // est_row_bytes
+        buffer_size = normalize_buffer_size(
+            buffer_size, batch_size, stop_offset - start_offset
+        )
+        logging.info("%s: buffer size = %d", label, buffer_size)
         if array.schema.sparse:
             return buffer_size, sparse_tensor_generator_cls(array, attrs)
         else:
@@ -383,24 +385,19 @@ def estimate_row_bytes(
     return int(est_row_bytes)
 
 
-def get_num_batches(
-    batch_size: int,
-    buffer_bytes: int,
-    array: tiledb.Array,
-    attrs: Sequence[str] = (),
-    start_offset: int = 0,
-    stop_offset: int = 0,
-) -> int:
+def normalize_buffer_size(buffer_size: int, batch_size: int, array_size: int) -> int:
     """
-    Determine the number of batches to read from the given array.
+    Normalize `buffer_size` to the largest multiple of `batch_size` that is lower than
+    or equal to `buffer_size`.
 
-    The number of buffer rows is determined by dividing buffer_bytes with the (estimated)
-    row size. This number is then divided with batch_size to give the number of batches.
+    There are two exceptions that the normalized buffer size may be larger than `buffer_size`:
+    - If `buffer_size < batch_size`, normalize it to `batch_size`.
+    - If `buffer_size >= array_size`, normalize it to `ceil(array_size / batch_size) * batch_size`.
     """
-    if not stop_offset:
-        stop_offset = array.shape[0]
-    est_row_bytes = estimate_row_bytes(array, attrs, start_offset, stop_offset)
-    num_batches = max(1, buffer_bytes / est_row_bytes / batch_size)
-    # upper num_batches bound is ceil(num_rows / batch_size)
-    num_batches = min(num_batches, np.ceil((stop_offset - start_offset) / batch_size))
-    return int(num_batches)
+    if buffer_size < batch_size:
+        num_batches = 1
+    elif buffer_size < array_size:
+        num_batches = buffer_size // batch_size
+    else:
+        num_batches = ceil(array_size / batch_size)
+    return num_batches * batch_size
