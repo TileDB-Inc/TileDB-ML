@@ -4,6 +4,7 @@ import logging
 from abc import ABC, abstractmethod
 from concurrent import futures
 from dataclasses import dataclass
+from math import ceil
 from typing import Generic, Iterator, Optional, Sequence, Tuple, Type, TypeVar, Union
 
 import numpy as np
@@ -179,14 +180,18 @@ def tensor_generator(
         Tuple[int, DenseTileDBTensorGenerator[DenseTensor]],
         Tuple[int, SparseTileDBTensorGenerator[SparseTensor]],
     ]:
-        if buffer_bytes is None:
-            num_batches = 1
+        if buffer_bytes is not None:
+            est_row_bytes = estimate_row_bytes(array, attrs, start_offset, stop_offset)
+            buffer_size = buffer_bytes // est_row_bytes
+        elif not array.schema.sparse:
+            buffer_size = get_max_buffer_size(array.schema, attrs)
         else:
-            num_batches = get_num_batches(
-                batch_size, buffer_bytes, array, attrs, start_offset, stop_offset
-            )
-        buffer_size = batch_size * num_batches
-        logging.info(f"{label} buffer: {num_batches} batches ({buffer_size} rows)")
+            # TODO
+            buffer_size = batch_size
+        buffer_size = normalize_buffer_size(
+            buffer_size, batch_size, stop_offset - start_offset
+        )
+        logging.info("%s: buffer size = %d", label, buffer_size)
         if array.schema.sparse:
             return buffer_size, sparse_tensor_generator_cls(array, attrs)
         else:
@@ -383,24 +388,73 @@ def estimate_row_bytes(
     return int(est_row_bytes)
 
 
-def get_num_batches(
-    batch_size: int,
-    buffer_bytes: int,
-    array: tiledb.Array,
+def normalize_buffer_size(buffer_size: int, batch_size: int, array_size: int) -> int:
+    """
+    Normalize `buffer_size` to the largest multiple of `batch_size` that is lower than
+    or equal to `buffer_size`.
+
+    There are two exceptions that the normalized buffer size may be larger than `buffer_size`:
+    - If `buffer_size < batch_size`, normalize it to `batch_size`.
+    - If `buffer_size >= array_size`, normalize it to `ceil(array_size / batch_size) * batch_size`.
+    """
+    if buffer_size < batch_size:
+        num_batches = 1
+    elif buffer_size < array_size:
+        num_batches = buffer_size // batch_size
+    else:
+        num_batches = ceil(array_size / batch_size)
+    return num_batches * batch_size
+
+
+def get_max_buffer_size(
+    schema: tiledb.ArraySchema,
     attrs: Sequence[str] = (),
-    start_offset: int = 0,
-    stop_offset: int = 0,
+    memory_budget: Optional[int] = None,
 ) -> int:
     """
-    Determine the number of batches to read from the given array.
+    Get the maximum number of "rows" that can be read from an array with the given schema
+    without incurring incomplete reads.
 
-    The number of buffer rows is determined by dividing buffer_bytes with the (estimated)
-    row size. This number is then divided with batch_size to give the number of batches.
+    A "row" is a slice with the first dimension fixed.
+
+    :param schema: The array schema.
+    :param attrs: The attributes to read; defaults to all array attributes.
+    :param memory_budget: The maximum amount of memory to use. If not given, it is
+        determined from `tiledb.default_ctx().config()["sm.memory_budget"]`
     """
-    if not stop_offset:
-        stop_offset = array.shape[0]
-    est_row_bytes = estimate_row_bytes(array, attrs, start_offset, stop_offset)
-    num_batches = max(1, buffer_bytes / est_row_bytes / batch_size)
-    # upper num_batches bound is ceil(num_rows / batch_size)
-    num_batches = min(num_batches, np.ceil((stop_offset - start_offset) / batch_size))
-    return int(num_batches)
+    if schema.sparse:
+        raise NotImplementedError(
+            "get_max_buffer_size() is not implemented for sparse arrays"
+        )
+
+    if memory_budget is None:
+        memory_budget = int(tiledb.default_ctx().config()["sm.memory_budget"])
+
+    # The memory budget should be large enough to read the cells of the largest attribute
+    if not attrs:
+        attrs = get_attr_names(schema)
+    bytes_per_cell = max(schema.attr(attr).dtype.itemsize for attr in attrs)
+
+    # We want to be reading tiles following the tile extents along each dimension.
+    # The number of cells for each such tile is the product of all tile extents.
+    dim_tiles = tuple(int(schema.domain.dim(idx).tile) for idx in range(schema.ndim))
+    cells_per_tile = np.prod(dim_tiles)
+
+    # Reading a slice of dim_tiles[0] rows requires reading a number of tiles that
+    # depends on the size and tile extent of each dimension after the first one.
+    assert len(schema.shape) == len(dim_tiles)
+    tiles_per_slice = np.prod(
+        tuple(
+            ceil(dim_size / dim_tile)
+            for dim_size, dim_tile in zip(schema.shape[1:], dim_tiles[1:])
+        )
+    )
+
+    # Compute the size in bytes of each slice of dim_tiles[0] rows
+    bytes_per_slice = int(bytes_per_cell * cells_per_tile * tiles_per_slice)
+
+    # Compute the number of slices that fit within the memory budget
+    num_slices = memory_budget // bytes_per_slice
+
+    # Compute the total number of rows to slice
+    return dim_tiles[0] * num_slices
