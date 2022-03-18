@@ -35,8 +35,8 @@ def TensorflowTileDBDataset(
     :param x_array: TileDB array of the features.
     :param y_array: TileDB array of the labels.
     :param batch_size: Size of each batch.
-    :param buffer_bytes: Size (in bytes) of the buffer used to read from each array.
-        If not given, it is determined automatically.
+    :param buffer_bytes: Maximum size (in bytes) of memory to allocate for reading from
+        each array (default=`tiledb.default_ctx().config()["sm.memory_budget"]`).
     :param shuffle: True for shuffling rows.
     :param x_attrs: Attribute names of x_array.
     :param y_attrs: Attribute names of y_array.
