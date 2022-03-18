@@ -163,8 +163,8 @@ def tensor_generator(
     :param x_array: TileDB array of the features.
     :param y_array: TileDB array of the labels.
     :param batch_size: Size of each batch.
-    :param buffer_bytes: Size (in bytes) of the buffer used to read from each array.
-        If not given, it is determined automatically.
+    :param buffer_bytes: Maximum size (in bytes) of memory to allocate for reading from
+        each array (default=`tiledb.default_ctx().config()["sm.memory_budget"]`).
     :param shuffle: True for shuffling rows.
     :param x_attrs: Attribute names of x_array; defaults to all x_array attributes.
     :param y_attrs: Attribute names of y_array; defaults to all y_array attributes
@@ -180,14 +180,15 @@ def tensor_generator(
         Tuple[int, DenseTileDBTensorGenerator[DenseTensor]],
         Tuple[int, SparseTileDBTensorGenerator[SparseTensor]],
     ]:
-        if buffer_bytes is not None:
-            est_row_bytes = estimate_row_bytes(array, attrs, start_offset, stop_offset)
-            buffer_size = buffer_bytes // est_row_bytes
-        elif not array.schema.sparse:
-            buffer_size = get_max_buffer_size(array.schema, attrs)
+        if array.schema.sparse:
+            if buffer_bytes is not None:
+                row_bytes = estimate_row_bytes(array, attrs, start_offset, stop_offset)
+                buffer_size = buffer_bytes // row_bytes
+            else:
+                # TODO: implement get_max_buffer_size() for sparse arrays
+                buffer_size = batch_size
         else:
-            # TODO
-            buffer_size = batch_size
+            buffer_size = get_max_buffer_size(array.schema, attrs, buffer_bytes)
         buffer_size = normalize_buffer_size(
             buffer_size, batch_size, stop_offset - start_offset
         )
@@ -419,16 +420,18 @@ def get_max_buffer_size(
 
     :param schema: The array schema.
     :param attrs: The attributes to read; defaults to all array attributes.
-    :param memory_budget: The maximum amount of memory to use. If not given, it is
-        determined from `tiledb.default_ctx().config()["sm.memory_budget"]`
+    :param memory_budget: The maximum amount of memory to use. This is bounded by
+        `tiledb.default_ctx().config()["sm.memory_budget"]`, which is also used as the
+        default memory_budget.
     """
     if schema.sparse:
         raise NotImplementedError(
             "get_max_buffer_size() is not implemented for sparse arrays"
         )
 
-    if memory_budget is None:
-        memory_budget = int(tiledb.default_ctx().config()["sm.memory_budget"])
+    config_memory_budget = int(tiledb.default_ctx().config()["sm.memory_budget"])
+    if memory_budget is None or memory_budget > config_memory_budget:
+        memory_budget = config_memory_budget
 
     # The memory budget should be large enough to read the cells of the largest attribute
     if not attrs:
