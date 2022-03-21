@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 import torch
 
-from tiledb.ml.readers.pytorch import PyTorchTileDBDataset
+from tiledb.ml.readers.pytorch import PyTorchTileDBDataLoader, PyTorchTileDBDataset
 
 from .utils import (
     ingest_in_tiledb,
@@ -17,8 +17,47 @@ from .utils import (
 @pytest.mark.parametrize("num_rows", [107])
 class TestPyTorchTileDBDataset:
     @parametrize_for_dataset()
+    def test_dataset(
+        self,
+        tmpdir,
+        num_rows,
+        x_sparse,
+        y_sparse,
+        x_shape,
+        y_shape,
+        num_attrs,
+        pass_attrs,
+        batch_size,
+        buffer_bytes,
+        shuffle,
+    ):
+        with ingest_in_tiledb(
+            tmpdir,
+            x_data=rand_array(num_rows, *x_shape, sparse=x_sparse),
+            y_data=rand_array(num_rows, *y_shape, sparse=y_sparse),
+            x_sparse=x_sparse,
+            y_sparse=y_sparse,
+            batch_size=batch_size,
+            num_attrs=num_attrs,
+            pass_attrs=pass_attrs,
+            buffer_bytes=buffer_bytes,
+            shuffle=shuffle,
+        ) as dataset_kwargs:
+            dataset = PyTorchTileDBDataset(**dataset_kwargs)
+            assert isinstance(dataset, torch.utils.data.IterableDataset)
+            validate_tensor_generator(
+                dataset,
+                x_sparse=x_sparse,
+                y_sparse=y_sparse,
+                x_shape=x_shape,
+                y_shape=y_shape,
+                batch_size=batch_size,
+                num_attrs=num_attrs,
+            )
+
+    @parametrize_for_dataset()
     @pytest.mark.parametrize("num_workers", [0, 2])
-    def test_generator(
+    def test_dataloader(
         self,
         tmpdir,
         num_rows,
@@ -47,24 +86,12 @@ class TestPyTorchTileDBDataset:
             pass_attrs=pass_attrs,
             buffer_bytes=buffer_bytes,
             shuffle=shuffle,
-        ) as dataset_kwargs:
-            dataset = PyTorchTileDBDataset(**dataset_kwargs)
-            assert isinstance(dataset, torch.utils.data.IterableDataset)
-            validate_tensor_generator(
-                dataset,
-                x_sparse=x_sparse,
-                y_sparse=y_sparse,
-                x_shape=x_shape,
-                y_shape=y_shape,
-                batch_size=batch_size,
-                num_attrs=num_attrs,
-            )
-            train_loader = torch.utils.data.DataLoader(
-                dataset, batch_size=None, num_workers=num_workers
-            )
+        ) as kwargs:
+            dataloader = PyTorchTileDBDataLoader(num_workers=num_workers, **kwargs)
+            assert isinstance(dataloader, torch.utils.data.DataLoader)
             unique_x_tensors = []
             unique_y_tensors = []
-            for batchindx, data in enumerate(train_loader):
+            for batchindx, data in enumerate(dataloader):
                 for attr in range(num_attrs):
                     # Keep unique X tensors
                     x_tensor = data[attr]

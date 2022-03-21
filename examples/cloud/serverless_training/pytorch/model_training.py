@@ -29,7 +29,7 @@ def train() -> None:
     import torch.optim as optim
 
     from tiledb.ml.models.pytorch import PyTorchTileDBModel
-    from tiledb.ml.readers.pytorch import PyTorchTileDBDataset
+    from tiledb.ml.readers.pytorch import PyTorchTileDBDataLoader
 
     class Net(nn.Module):
         def __init__(self, shape: Tuple[int, int]):
@@ -50,10 +50,7 @@ def train() -> None:
             return logits
 
     with tiledb.open(IMAGES_URI) as x, tiledb.open(LABELS_URI) as y:
-        tiledb_dataset = PyTorchTileDBDataset(
-            x_array=x, y_array=y, batch_size=IO_BATCH_SIZE
-        )
-        train_loader = torch.utils.data.DataLoader(tiledb_dataset, batch_size=None)
+        train_loader = PyTorchTileDBDataLoader(x, y, batch_size=IO_BATCH_SIZE)
 
         net = Net(shape=(28, 28))
         criterion = nn.CrossEntropyLoss()

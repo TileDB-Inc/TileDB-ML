@@ -15,6 +15,24 @@ from ._batch_utils import (
 )
 
 
+class PyTorchTileDBDataLoader(torch.utils.data.DataLoader):
+    def __init__(
+        self,
+        x_array: tiledb.Array,
+        y_array: tiledb.Array,
+        batch_size: int,
+        buffer_bytes: Optional[int] = None,
+        shuffle: bool = False,
+        x_attrs: Sequence[str] = (),
+        y_attrs: Sequence[str] = (),
+        num_workers: int = 0,
+    ):
+        dataset = PyTorchTileDBDataset(
+            x_array, y_array, batch_size, buffer_bytes, shuffle, x_attrs, y_attrs
+        )
+        super().__init__(dataset, batch_size=None, num_workers=num_workers)
+
+
 class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Sequence[torch.Tensor]]):
     """Loads data from TileDB to the PyTorch Dataloader API."""
 
