@@ -24,9 +24,9 @@ class PyTorchTileDBDataLoader(torch.utils.data.DataLoader):
         num_workers: int = 0,
     ):
         dataset = PyTorchTileDBDataset(
-            x_array, y_array, batch_size, buffer_bytes, shuffle, x_attrs, y_attrs
+            x_array, y_array, buffer_bytes, shuffle, x_attrs, y_attrs
         )
-        super().__init__(dataset, batch_size=None, num_workers=num_workers)
+        super().__init__(dataset, batch_size=batch_size, num_workers=num_workers)
 
 
 class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Sequence[torch.Tensor]]):
@@ -36,7 +36,6 @@ class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Sequence[torch.Tenso
         self,
         x_array: tiledb.Array,
         y_array: tiledb.Array,
-        batch_size: int,
         buffer_bytes: Optional[int] = None,
         shuffle: bool = False,
         x_attrs: Sequence[str] = (),
@@ -46,7 +45,6 @@ class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Sequence[torch.Tenso
 
         :param x_array: TileDB array of the features.
         :param y_array: TileDB array of the labels.
-        :param batch_size: Size of each batch.
         :param buffer_bytes: Maximum size (in bytes) of memory to allocate for reading
             from each array (default=`tiledb.default_ctx().config()["sm.memory_budget"]`).
         :param shuffle: True for shuffling rows.
@@ -62,7 +60,6 @@ class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Sequence[torch.Tenso
         self._generator_kwargs = dict(
             x_array=x_array,
             y_array=y_array,
-            batch_size=batch_size,
             buffer_bytes=buffer_bytes,
             shuffle=shuffle,
             x_attrs=x_attrs,

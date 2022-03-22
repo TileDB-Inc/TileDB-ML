@@ -64,11 +64,8 @@ def ingest_in_tiledb(
     y_data,
     x_sparse,
     y_sparse,
-    batch_size,
     num_attrs,
     pass_attrs,
-    buffer_bytes,
-    shuffle,
 ):
     """Context manager for ingest data into TileDB.
 
@@ -77,29 +74,19 @@ def ingest_in_tiledb(
     array_uuid = str(uuid.uuid4())
     x_uri = os.path.join(tmpdir, "x_" + array_uuid)
     y_uri = os.path.join(tmpdir, "y_" + array_uuid)
-    _ingest_in_tiledb(x_uri, x_data, x_sparse, batch_size, num_attrs)
-    _ingest_in_tiledb(y_uri, y_data, y_sparse, batch_size, num_attrs)
+    _ingest_in_tiledb(x_uri, x_data, x_sparse, num_attrs)
+    _ingest_in_tiledb(y_uri, y_data, y_sparse, num_attrs)
     attrs = [f"features_{attr}" for attr in range(num_attrs)] if pass_attrs else []
     with tiledb.open(x_uri) as x_array, tiledb.open(y_uri) as y_array:
-        yield dict(
-            x_array=x_array,
-            y_array=y_array,
-            batch_size=batch_size,
-            buffer_bytes=buffer_bytes,
-            shuffle=shuffle,
-            x_attrs=attrs,
-            y_attrs=attrs,
-        )
+        yield dict(x_array=x_array, y_array=y_array, x_attrs=attrs, y_attrs=attrs)
 
 
-def _ingest_in_tiledb(
-    uri: str, data: np.ndarray, sparse: bool, batch_size: int, num_attrs: int
-) -> None:
+def _ingest_in_tiledb(uri: str, data: np.ndarray, sparse: bool, num_attrs: int) -> None:
     dims = [
         tiledb.Dim(
             name=f"dim_{dim}",
             domain=(0, data.shape[dim] - 1),
-            tile=np.random.randint(1, data.shape[dim] if dim > 0 else batch_size),
+            tile=np.random.randint(1, data.shape[dim] + 1),
             dtype=np.int32,
         )
         for dim in range(data.ndim)
@@ -146,24 +133,27 @@ def rand_array(num_rows: int, *row_shape: int, sparse: bool = False) -> np.ndarr
 
 
 def validate_tensor_generator(
-    generator, *, x_sparse, y_sparse, x_shape, y_shape, batch_size, num_attrs
+    generator, num_attrs, x_sparse, y_sparse, x_shape, y_shape, batch_size=None
 ):
     for tensors in generator:
         assert len(tensors) == 2 * num_attrs
         # the first num_attrs tensors are the features (x)
         for tensor in tensors[:num_attrs]:
-            _validate_tensor(tensor, batch_size, x_sparse, x_shape)
+            _validate_tensor(tensor, x_sparse, x_shape, batch_size)
         # the last num_attrs tensors are the labels (y)
         for tensor in tensors[num_attrs:]:
-            _validate_tensor(tensor, batch_size, y_sparse, y_shape)
+            _validate_tensor(tensor, y_sparse, y_shape, batch_size)
 
 
-def _validate_tensor(tensor, batch_size, expected_sparse, expected_shape):
-    num_rows, *row_shape = tensor.shape
-    assert row_shape == list(expected_shape)
+def _validate_tensor(tensor, expected_sparse, expected_shape, batch_size=None):
+    if batch_size is None:
+        row_shape = tensor.shape
+    else:
+        num_rows, *row_shape = tensor.shape
+        # num_rows may be less than batch_size
+        assert num_rows <= batch_size, (num_rows, batch_size)
+    assert tuple(row_shape) == expected_shape
     assert _is_sparse_tensor(tensor) == expected_sparse
-    # num_rows may be less than batch_size
-    assert num_rows <= batch_size
 
 
 def _is_sparse_tensor(tensor):
