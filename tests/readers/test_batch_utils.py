@@ -6,7 +6,6 @@ from tiledb.ml.readers._batch_utils import (
     estimate_row_bytes,
     get_max_buffer_size,
     iter_batches,
-    normalize_buffer_size,
 )
 
 
@@ -90,28 +89,6 @@ def test_estimate_row_bytes_sparse(sparse_uri):
         assert estimate_row_bytes(a, attrs=["af8", "au1"]) == 63
         # 3 cells/row, 3*4 bytes for dims + 4 bytes for attrs = 16 bytes/cell
         assert estimate_row_bytes(a, attrs=["af4"]) == 48
-
-
-def test_normalize_buffer_size():
-    batch_size = 16
-
-    array_size = 48
-    for buffer_size in range(1, 32):
-        assert normalize_buffer_size(buffer_size, batch_size, array_size) == 16
-    for buffer_size in range(32, 48):
-        assert normalize_buffer_size(buffer_size, batch_size, array_size) == 32
-    for buffer_size in range(48, 1000):
-        assert normalize_buffer_size(buffer_size, batch_size, array_size) == 48
-
-    array_size = 53
-    for buffer_size in range(1, 32):
-        assert normalize_buffer_size(buffer_size, batch_size, array_size) == 16
-    for buffer_size in range(32, 48):
-        assert normalize_buffer_size(buffer_size, batch_size, array_size) == 32
-    for buffer_size in range(48, 53):
-        assert normalize_buffer_size(buffer_size, batch_size, array_size) == 48
-    for buffer_size in range(53, 1000):
-        assert normalize_buffer_size(buffer_size, batch_size, array_size) == 64
 
 
 def test_iter_batches():

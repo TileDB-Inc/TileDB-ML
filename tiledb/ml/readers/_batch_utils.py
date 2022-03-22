@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from abc import ABC, abstractmethod
 from concurrent import futures
 from dataclasses import dataclass
@@ -137,7 +136,6 @@ SparseTensor = TypeVar("SparseTensor")
 def tensor_generator(
     x_array: tiledb.Array,
     y_array: tiledb.Array,
-    batch_size: int,
     buffer_bytes: Optional[int] = None,
     shuffle: bool = False,
     x_attrs: Sequence[str] = (),
@@ -159,7 +157,6 @@ def tensor_generator(
 
     :param x_array: TileDB array of the features.
     :param y_array: TileDB array of the labels.
-    :param batch_size: Size of each batch.
     :param buffer_bytes: Maximum size (in bytes) of memory to allocate for reading from
         each array (default=`tiledb.default_ctx().config()["sm.memory_budget"]`).
     :param shuffle: True for shuffling rows.
@@ -174,31 +171,26 @@ def tensor_generator(
         stop_offset = x_array.shape[0]
 
     def get_buffer_size_generator(
-        label: str, array: tiledb.Array, attrs: Sequence[str]
+        array: tiledb.Array, attrs: Sequence[str]
     ) -> Union[
         Tuple[int, TileDBTensorGenerator[DenseTensor]],
         Tuple[int, TileDBTensorGenerator[SparseTensor]],
     ]:
         if array.schema.sparse:
-            if buffer_bytes is not None:
-                row_bytes = estimate_row_bytes(array, attrs, start_offset, stop_offset)
-                buffer_size = buffer_bytes // row_bytes
-            else:
-                # TODO: implement get_max_buffer_size() for sparse arrays
-                buffer_size = batch_size
+            # TODO: implement get_max_buffer_size() for sparse arrays
+            row_bytes = estimate_row_bytes(array, attrs, start_offset, stop_offset)
+            buffer_size = (buffer_bytes or 100 * 1024**2) // row_bytes
         else:
             buffer_size = get_max_buffer_size(array.schema, attrs, buffer_bytes)
-        buffer_size = normalize_buffer_size(
-            buffer_size, batch_size, stop_offset - start_offset
-        )
-        logging.info("%s: buffer size = %d", label, buffer_size)
+        # clip the buffer size between 1 and total number of rows
+        buffer_size = max(1, min(buffer_size, stop_offset - start_offset))
         if array.schema.sparse:
             return buffer_size, sparse_tensor_generator_cls(array, attrs)
         else:
             return buffer_size, dense_tensor_generator_cls(array, attrs)
 
-    x_buf_size, x_gen = get_buffer_size_generator("x", x_array, x_attrs)
-    y_buf_size, y_gen = get_buffer_size_generator("y", y_array, y_attrs)
+    x_buf_size, x_gen = get_buffer_size_generator(x_array, x_attrs)
+    y_buf_size, y_gen = get_buffer_size_generator(y_array, y_attrs)
     with futures.ThreadPoolExecutor(max_workers=2) as executor:
         for batch in iter_batches(x_buf_size, y_buf_size, start_offset, stop_offset):
             if batch.x_read_slice and batch.y_read_slice:
@@ -221,7 +213,10 @@ def tensor_generator(
 
             x_tensors = x_gen.iter_tensors(batch.x_buffer_slice)
             y_tensors = y_gen.iter_tensors(batch.y_buffer_slice)
-            yield (*x_tensors, *y_tensors)
+            tensors = (*x_tensors, *y_tensors)
+            assert (tensor.shape[0] == batch.size for tensor in tensors)
+            for i in range(batch.size):
+                yield tuple(tensor[i] for tensor in tensors)
 
 
 @dataclass(frozen=True, repr=False)
@@ -349,24 +344,6 @@ def estimate_row_bytes(
         est_total_bytes = sum(est_rs[key].data_bytes for key in (*dims, *attrs))
         est_row_bytes = est_total_bytes / (stop_offset - start_offset)
     return int(est_row_bytes)
-
-
-def normalize_buffer_size(buffer_size: int, batch_size: int, array_size: int) -> int:
-    """
-    Normalize `buffer_size` to the largest multiple of `batch_size` that is lower than
-    or equal to `buffer_size`.
-
-    There are two exceptions that the normalized buffer size may be larger than `buffer_size`:
-    - If `buffer_size < batch_size`, normalize it to `batch_size`.
-    - If `buffer_size >= array_size`, normalize it to `ceil(array_size / batch_size) * batch_size`.
-    """
-    if buffer_size < batch_size:
-        num_batches = 1
-    elif buffer_size < array_size:
-        num_batches = buffer_size // batch_size
-    else:
-        num_batches = ceil(array_size / batch_size)
-    return num_batches * batch_size
 
 
 def get_max_buffer_size(
