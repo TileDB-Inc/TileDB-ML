@@ -28,7 +28,7 @@ tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 @pytest.mark.parametrize("num_rows", [107])
 class TestTensorflowTileDBDataset:
     @parametrize_for_dataset()
-    def test_generator(
+    def test_dataset(
         self,
         tmpdir,
         num_rows,
@@ -48,35 +48,33 @@ class TestTensorflowTileDBDataset:
             y_data=rand_array(num_rows, *y_shape, sparse=y_sparse),
             x_sparse=x_sparse,
             y_sparse=y_sparse,
-            batch_size=batch_size,
             num_attrs=num_attrs,
             pass_attrs=pass_attrs,
-            buffer_bytes=buffer_bytes,
-            shuffle=shuffle,
-        ) as dataset_kwargs:
-            dataset = TensorflowTileDBDataset(**dataset_kwargs)
+        ) as kwargs:
+            dataset = TensorflowTileDBDataset(
+                buffer_bytes=buffer_bytes,
+                batch_size=batch_size,
+                shuffle=shuffle,
+                **kwargs,
+            )
             assert isinstance(dataset, tf.data.Dataset)
-            # Test the generator twice: once with the public api (TensorflowTileDBDataset)
-            # and once with calling tensor_generator directly. Although the former calls
-            # the latter internally, it is not reported as covered by the coverage report
-            # due to https://github.com/tensorflow/tensorflow/issues/33759
-            generators = [
-                dataset,
-                tensor_generator(
-                    sparse_tensor_generator_cls=TensorflowSparseTileDBTensorGenerator,
-                    **dataset_kwargs,
-                ),
-            ]
-            for generator in generators:
-                validate_tensor_generator(
-                    generator,
-                    x_sparse=x_sparse,
-                    y_sparse=y_sparse,
-                    x_shape=x_shape,
-                    y_shape=y_shape,
-                    batch_size=batch_size,
-                    num_attrs=num_attrs,
-                )
+            validate_tensor_generator(
+                dataset, num_attrs, x_sparse, y_sparse, x_shape, y_shape, batch_size
+            )
+
+            # Although TensorflowTileDBDataset calls tensor_generator internally, due to
+            # https://github.com/tensorflow/tensorflow/issues/33759 it is not reported as
+            # covered so test it explicitly. Note that tensor_generator does not take
+            # batch_size parameter.
+            generator = tensor_generator(
+                buffer_bytes=buffer_bytes,
+                shuffle=shuffle,
+                sparse_tensor_generator_cls=TensorflowSparseTileDBTensorGenerator,
+                **kwargs,
+            )
+            validate_tensor_generator(
+                generator, num_attrs, x_sparse, y_sparse, x_shape, y_shape
+            )
 
     @parametrize_for_dataset()
     def test_unequal_num_rows(
@@ -100,14 +98,16 @@ class TestTensorflowTileDBDataset:
             y_data=rand_array(num_rows, *y_shape, sparse=y_sparse),
             x_sparse=x_sparse,
             y_sparse=y_sparse,
-            batch_size=batch_size,
             num_attrs=num_attrs,
             pass_attrs=pass_attrs,
-            buffer_bytes=buffer_bytes,
-            shuffle=shuffle,
-        ) as dataset_kwargs:
+        ) as kwargs:
             with pytest.raises(ValueError) as ex:
-                TensorflowTileDBDataset(**dataset_kwargs)
+                TensorflowTileDBDataset(
+                    buffer_bytes=buffer_bytes,
+                    batch_size=batch_size,
+                    shuffle=shuffle,
+                    **kwargs,
+                )
             assert "X and Y arrays must have the same number of rows" in str(ex.value)
 
     @parametrize_for_dataset(x_sparse=[True], shuffle=[False])
@@ -132,13 +132,15 @@ class TestTensorflowTileDBDataset:
             y_data=rand_array(num_rows, *y_shape, sparse=y_sparse),
             x_sparse=x_sparse,
             y_sparse=y_sparse,
-            batch_size=batch_size,
             num_attrs=num_attrs,
             pass_attrs=pass_attrs,
-            buffer_bytes=buffer_bytes,
-            shuffle=shuffle,
-        ) as dataset_kwargs:
-            dataset = TensorflowTileDBDataset(**dataset_kwargs)
+        ) as kwargs:
+            dataset = TensorflowTileDBDataset(
+                buffer_bytes=buffer_bytes,
+                batch_size=batch_size,
+                shuffle=shuffle,
+                **kwargs,
+            )
             generated_x_data = np.concatenate(
                 [
                     tf.sparse.to_dense(tf.sparse.reorder(tensors[0]))
