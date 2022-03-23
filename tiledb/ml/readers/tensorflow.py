@@ -8,12 +8,7 @@ import tensorflow as tf
 
 import tiledb
 
-from ._batch_utils import (
-    DenseTileDBTensorGenerator,
-    SparseTileDBTensorGenerator,
-    get_attr_names,
-    tensor_generator,
-)
+from ._batch_utils import SparseTileDBTensorGenerator, get_attr_names, tensor_generator
 
 # TODO: We have to track the following issues:
 # - https://github.com/tensorflow/tensorflow/issues/47532
@@ -49,8 +44,6 @@ def TensorflowTileDBDataset(
     return tf.data.Dataset.from_generator(
         partial(
             tensor_generator,
-            dense_tensor_generator_cls=TensorflowDenseTileDBTensorGenerator,
-            sparse_tensor_generator_cls=TensorflowSparseTileDBTensorGenerator,
             x_array=x_array,
             y_array=y_array,
             batch_size=batch_size,
@@ -58,6 +51,7 @@ def TensorflowTileDBDataset(
             shuffle=shuffle,
             x_attrs=x_attrs,
             y_attrs=y_attrs,
+            sparse_tensor_generator_cls=TensorflowSparseTileDBTensorGenerator,
         ),
         output_signature=(
             *_iter_tensor_specs(x_array.schema, x_attrs),
@@ -72,12 +66,6 @@ def _iter_tensor_specs(
     cls = tf.SparseTensorSpec if schema.sparse else tf.TensorSpec
     for attr in attrs or get_attr_names(schema):
         yield cls(shape=(None, *schema.shape[1:]), dtype=schema.attr(attr).dtype)
-
-
-class TensorflowDenseTileDBTensorGenerator(DenseTileDBTensorGenerator[tf.Tensor]):
-    @staticmethod
-    def _tensor_from_numpy(data: np.ndarray) -> tf.Tensor:
-        return tf.convert_to_tensor(data)
 
 
 class TensorflowSparseTileDBTensorGenerator(

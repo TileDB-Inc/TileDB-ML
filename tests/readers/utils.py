@@ -167,6 +167,8 @@ def _validate_tensor(tensor, batch_size, expected_sparse, expected_shape):
 
 
 def _is_sparse_tensor(tensor):
+    if isinstance(tensor, np.ndarray):
+        return False
     if isinstance(tensor, torch.Tensor):
         return tensor.is_sparse
     if isinstance(tensor, tf.SparseTensor):

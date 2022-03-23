@@ -8,11 +8,7 @@ import torch
 
 import tiledb
 
-from ._batch_utils import (
-    DenseTileDBTensorGenerator,
-    SparseTileDBTensorGenerator,
-    tensor_generator,
-)
+from ._batch_utils import SparseTileDBTensorGenerator, tensor_generator
 
 
 class PyTorchTileDBDataLoader(torch.utils.data.DataLoader):
@@ -64,8 +60,6 @@ class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Sequence[torch.Tenso
 
         self._rows = rows
         self._generator_kwargs = dict(
-            dense_tensor_generator_cls=PyTorchDenseTileDBTensorGenerator,
-            sparse_tensor_generator_cls=PyTorchSparseTileDBTensorGenerator,
             x_array=x_array,
             y_array=y_array,
             batch_size=batch_size,
@@ -73,6 +67,7 @@ class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Sequence[torch.Tenso
             shuffle=shuffle,
             x_attrs=x_attrs,
             y_attrs=y_attrs,
+            sparse_tensor_generator_cls=PyTorchSparseTileDBTensorGenerator,
         )
 
     def __iter__(self) -> Iterator[Sequence[torch.Tensor]]:
@@ -89,12 +84,6 @@ class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Sequence[torch.Tenso
             stop_offset = min(start_offset + per_worker, self._rows)
             kwargs.update(start_offset=start_offset, stop_offset=stop_offset)
         return tensor_generator(**kwargs)
-
-
-class PyTorchDenseTileDBTensorGenerator(DenseTileDBTensorGenerator[torch.Tensor]):
-    @staticmethod
-    def _tensor_from_numpy(data: np.ndarray) -> torch.Tensor:
-        return torch.from_numpy(data)
 
 
 class PyTorchSparseTileDBTensorGenerator(SparseTileDBTensorGenerator[torch.Tensor]):
