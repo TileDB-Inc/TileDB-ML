@@ -80,7 +80,8 @@ class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Sequence[torch.Tenso
             start_offset = worker_info.id * per_worker
             stop_offset = min(start_offset + per_worker, self._rows)
             kwargs.update(start_offset=start_offset, stop_offset=stop_offset)
-        return tensor_generator(**kwargs)
+        for batch_tensors in tensor_generator(**kwargs):
+            yield from zip(*batch_tensors)
 
 
 class PyTorchSparseTileDBTensorGenerator(SparseTileDBTensorGenerator[torch.Tensor]):

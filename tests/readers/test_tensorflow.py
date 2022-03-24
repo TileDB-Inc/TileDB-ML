@@ -64,16 +64,16 @@ class TestTensorflowTileDBDataset:
 
             # Although TensorflowTileDBDataset calls tensor_generator internally, due to
             # https://github.com/tensorflow/tensorflow/issues/33759 it is not reported as
-            # covered so test it explicitly. Note that tensor_generator does not take
-            # batch_size parameter.
+            # covered so test it explicitly.
             generator = tensor_generator(
                 buffer_bytes=buffer_bytes,
                 shuffle=shuffle,
                 sparse_tensor_generator_cls=TensorflowSparseTileDBTensorGenerator,
                 **kwargs,
             )
+            # tensor_generator does not take batch_size parameter, so pass batch_size=num_rows
             validate_tensor_generator(
-                generator, num_attrs, x_sparse, y_sparse, x_shape, y_shape
+                generator, num_attrs, x_sparse, y_sparse, x_shape, y_shape, num_rows
             )
 
     @parametrize_for_dataset()

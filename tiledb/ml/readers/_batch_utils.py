@@ -213,9 +213,7 @@ def tensor_generator(
 
             x_tensors = x_gen.iter_tensors(batch.x_buffer_slice)
             y_tensors = y_gen.iter_tensors(batch.y_buffer_slice)
-            tensors = (*x_tensors, *y_tensors)
-            assert (tensor.shape[0] == batch.size for tensor in tensors)
-            yield from zip(*tensors)
+            yield (*x_tensors, *y_tensors)
 
 
 @dataclass(frozen=True, repr=False)

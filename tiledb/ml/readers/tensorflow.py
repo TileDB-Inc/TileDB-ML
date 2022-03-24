@@ -41,22 +41,26 @@ def TensorflowTileDBDataset(
     if rows != y_array.shape[0]:
         raise ValueError("X and Y arrays must have the same number of rows")
 
-    return tf.data.Dataset.from_generator(
-        partial(
-            tensor_generator,
-            x_array=x_array,
-            y_array=y_array,
-            buffer_bytes=buffer_bytes,
-            shuffle=shuffle,
-            x_attrs=x_attrs,
-            y_attrs=y_attrs,
-            sparse_tensor_generator_cls=TensorflowSparseTileDBTensorGenerator,
-        ),
-        output_signature=(
-            *_iter_tensor_specs(x_array.schema, x_attrs),
-            *_iter_tensor_specs(y_array.schema, y_attrs),
-        ),
-    ).batch(batch_size)
+    return (
+        tf.data.Dataset.from_generator(
+            partial(
+                tensor_generator,
+                x_array=x_array,
+                y_array=y_array,
+                buffer_bytes=buffer_bytes,
+                shuffle=shuffle,
+                x_attrs=x_attrs,
+                y_attrs=y_attrs,
+                sparse_tensor_generator_cls=TensorflowSparseTileDBTensorGenerator,
+            ),
+            output_signature=(
+                *_iter_tensor_specs(x_array.schema, x_attrs),
+                *_iter_tensor_specs(y_array.schema, y_attrs),
+            ),
+        )
+        .unbatch()
+        .batch(batch_size)
+    )
 
 
 def _iter_tensor_specs(
@@ -64,7 +68,7 @@ def _iter_tensor_specs(
 ) -> Iterator[Union[tf.TensorSpec, tf.SparseTensorSpec]]:
     cls = tf.SparseTensorSpec if schema.sparse else tf.TensorSpec
     for attr in attrs or get_attr_names(schema):
-        yield cls(shape=schema.shape[1:], dtype=schema.attr(attr).dtype)
+        yield cls(shape=(None, *schema.shape[1:]), dtype=schema.attr(attr).dtype)
 
 
 class TensorflowSparseTileDBTensorGenerator(
@@ -77,23 +81,8 @@ class TensorflowSparseTileDBTensorGenerator(
         dense_shape: Sequence[int],
         dtype: np.dtype,
     ) -> tf.SparseTensor:
-        return IterableSparseTensor(
+        return tf.SparseTensor(
             indices=tf.constant(coords, dtype=tf.int64),
             values=tf.constant(data, dtype=dtype),
             dense_shape=dense_shape,
         )
-
-
-class IterableSparseTensor(tf.SparseTensor):
-    def __iter__(self) -> Iterator[tf.SparseTensor]:
-        # start: 1-D array represents the start of the row slice
-        start = np.zeros(len(self.shape), dtype=self.indices.dtype.as_numpy_dtype)
-        # size: 1-D array represents the size of the row slice
-        size = np.asarray(self.shape)
-        size[0] = 1
-        row_shape = self.shape[1:]
-        for i in range(self.shape[0]):
-            start[0] = i
-            row = tf.sparse.slice(self, start, size)
-            # row has the same shape with self; drop the first dimension
-            yield tf.sparse.reshape(row, row_shape)
