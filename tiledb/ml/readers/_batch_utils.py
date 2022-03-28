@@ -37,18 +37,6 @@ class TileDBTensorGenerator(ABC, Generic[Tensor]):
         """
 
     @abstractmethod
-    def shuffle_buffer(self, buffer_slice: slice, row_idxs: np.ndarray) -> None:
-        """
-        Shuffle a slice of the current buffer.
-
-        Must be called after `read_buffer`.
-
-        :param buffer_slice: Slice of the current buffer to shuffle.
-        :param row_idxs: Shuffled indices; a shuffled version of
-            `np.arange(0, buffer_slice.stop - buffer_slice.start)`
-        """
-
-    @abstractmethod
     def iter_tensors(self, buffer_slice: slice) -> Iterator[Tensor]:
         """
         Return an iterator of tensors for the given slice, one tensor per attribute
@@ -62,10 +50,6 @@ class TileDBTensorGenerator(ABC, Generic[Tensor]):
 class TileDBNumpyGenerator(TileDBTensorGenerator[np.ndarray]):
     def read_buffer(self, array_slice: slice) -> None:
         self._buf_arrays = tuple(self._query[array_slice].values())
-
-    def shuffle_buffer(self, buffer_slice: slice, row_idxs: np.ndarray) -> None:
-        for buf_array in self._buf_arrays:
-            buf_array[buffer_slice] = buf_array[buffer_slice.start + row_idxs]
 
     def iter_tensors(self, buffer_slice: slice) -> Iterator[np.ndarray]:
         for buf_array in self._buf_arrays:
@@ -105,10 +89,6 @@ class SparseTileDBTensorGenerator(TileDBTensorGenerator[Tensor]):
             for data in buffer.values()
         )
 
-    def shuffle_buffer(self, buffer_slice: slice, row_idxs: np.ndarray) -> None:
-        for buf_csr in self._buf_csrs:
-            buf_csr[buffer_slice] = buf_csr[buffer_slice.start + row_idxs]
-
     def iter_tensors(self, buffer_slice: slice) -> Iterator[Tensor]:
         for buf_csr, dtype in zip(self._buf_csrs, self._attr_dtypes):
             batch_csr = buf_csr[buffer_slice]
@@ -137,7 +117,6 @@ def tensor_generator(
     x_array: tiledb.Array,
     y_array: tiledb.Array,
     buffer_bytes: Optional[int] = None,
-    shuffle: bool = False,
     x_attrs: Sequence[str] = (),
     y_attrs: Sequence[str] = (),
     start_offset: int = 0,
@@ -159,7 +138,6 @@ def tensor_generator(
     :param y_array: TileDB array of the labels.
     :param buffer_bytes: Maximum size (in bytes) of memory to allocate for reading from
         each array (default=`tiledb.default_ctx().config()["sm.memory_budget"]`).
-    :param shuffle: True for shuffling rows.
     :param x_attrs: Attribute names of x_array; defaults to all x_array attributes.
     :param y_attrs: Attribute names of y_array; defaults to all y_array attributes
     :param start_offset: Start row offset; defaults to 0.
@@ -204,12 +182,6 @@ def tensor_generator(
                 x_gen.read_buffer(batch.x_read_slice)
             elif batch.y_read_slice:
                 y_gen.read_buffer(batch.y_read_slice)
-
-            if shuffle:
-                row_idxs = np.arange(batch.size)
-                np.random.shuffle(row_idxs)
-                x_gen.shuffle_buffer(batch.x_buffer_slice, row_idxs)
-                y_gen.shuffle_buffer(batch.y_buffer_slice, row_idxs)
 
             x_tensors = x_gen.iter_tensors(batch.x_buffer_slice)
             y_tensors = y_gen.iter_tensors(batch.y_buffer_slice)

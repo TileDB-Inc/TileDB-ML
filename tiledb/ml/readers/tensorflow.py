@@ -48,7 +48,6 @@ def TensorflowTileDBDataset(
                 x_array=x_array,
                 y_array=y_array,
                 buffer_bytes=buffer_bytes,
-                shuffle=shuffle,
                 x_attrs=x_attrs,
                 y_attrs=y_attrs,
                 sparse_tensor_generator_cls=TensorflowSparseTileDBTensorGenerator,

@@ -67,7 +67,6 @@ class TestTensorflowTileDBDataset:
             # covered so test it explicitly.
             generator = tensor_generator(
                 buffer_bytes=buffer_bytes,
-                shuffle=shuffle,
                 sparse_tensor_generator_cls=TensorflowSparseTileDBTensorGenerator,
                 **kwargs,
             )
