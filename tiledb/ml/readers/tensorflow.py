@@ -21,7 +21,7 @@ def TensorflowTileDBDataset(
     y_array: tiledb.Array,
     batch_size: int,
     buffer_bytes: Optional[int] = None,
-    shuffle: bool = False,
+    shuffle_buffer_size: int = 0,
     x_attrs: Sequence[str] = (),
     y_attrs: Sequence[str] = (),
 ) -> tf.data.Dataset:
@@ -32,7 +32,7 @@ def TensorflowTileDBDataset(
     :param batch_size: Size of each batch.
     :param buffer_bytes: Maximum size (in bytes) of memory to allocate for reading from
         each array (default=`tiledb.default_ctx().config()["sm.memory_budget"]`).
-    :param shuffle: True for shuffling rows.
+    :param shuffle_buffer_size: Number of elements from which this dataset will sample.
     :param x_attrs: Attribute names of x_array.
     :param y_attrs: Attribute names of y_array.
     """
