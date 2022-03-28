@@ -11,25 +11,35 @@ import tiledb
 from ._batch_utils import SparseTileDBTensorGenerator, tensor_generator
 
 
-class PyTorchTileDBDataLoader(torch.utils.data.DataLoader):
-    def __init__(
-        self,
-        x_array: tiledb.Array,
-        y_array: tiledb.Array,
-        batch_size: int,
-        buffer_bytes: Optional[int] = None,
-        shuffle_buffer_size: int = 0,
-        x_attrs: Sequence[str] = (),
-        y_attrs: Sequence[str] = (),
-        num_workers: int = 0,
-    ):
-        dataset = PyTorchTileDBDataset(x_array, y_array, buffer_bytes, x_attrs, y_attrs)
-        super().__init__(dataset, batch_size=batch_size, num_workers=num_workers)
+def PyTorchTileDBDataLoader(
+    x_array: tiledb.Array,
+    y_array: tiledb.Array,
+    batch_size: int,
+    buffer_bytes: Optional[int] = None,
+    shuffle_buffer_size: int = 0,
+    x_attrs: Sequence[str] = (),
+    y_attrs: Sequence[str] = (),
+    num_workers: int = 0,
+) -> torch.utils.data.DataLoader:
+    """Return a DataLoader for loading data from TileDB arrays.
+
+    :param x_array: TileDB array of the features.
+    :param y_array: TileDB array of the labels.
+    :param batch_size: Size of each batch.
+    :param buffer_bytes: Maximum size (in bytes) of memory to allocate for reading
+        from each array (default=`tiledb.default_ctx().config()["sm.memory_budget"]`).
+    :param shuffle_buffer_size: Number of elements from which this dataset will sample.
+    :param x_attrs: Attribute names of x_array.
+    :param y_attrs: Attribute names of y_array.
+    :param num_workers: how many subprocesses to use for data loading
+    """
+    dataset = PyTorchTileDBDataset(x_array, y_array, buffer_bytes, x_attrs, y_attrs)
+    return torch.utils.data.DataLoader(
+        dataset, batch_size=batch_size, num_workers=num_workers
+    )
 
 
 class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Sequence[torch.Tensor]]):
-    """Loads data from TileDB to the PyTorch Dataloader API."""
-
     def __init__(
         self,
         x_array: tiledb.Array,
@@ -38,15 +48,6 @@ class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Sequence[torch.Tenso
         x_attrs: Sequence[str] = (),
         y_attrs: Sequence[str] = (),
     ):
-        """Return an IterableDataset for loading data from TileDB arrays.
-
-        :param x_array: TileDB array of the features.
-        :param y_array: TileDB array of the labels.
-        :param buffer_bytes: Maximum size (in bytes) of memory to allocate for reading
-            from each array (default=`tiledb.default_ctx().config()["sm.memory_budget"]`).
-        :param x_attrs: Attribute names of x_array.
-        :param y_attrs: Attribute names of y_array.
-        """
         super().__init__()
         rows: int = x_array.shape[0]
         if rows != y_array.shape[0]:
