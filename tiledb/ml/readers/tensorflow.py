@@ -41,22 +41,25 @@ def TensorflowTileDBDataset(
     if rows != y_array.shape[0]:
         raise ValueError("X and Y arrays must have the same number of rows")
 
-    return tf.data.Dataset.from_generator(
-        partial(
-            tensor_generator,
-            x_array=x_array,
-            y_array=y_array,
-            batch_size=batch_size,
-            buffer_bytes=buffer_bytes,
-            shuffle=shuffle,
-            x_attrs=x_attrs,
-            y_attrs=y_attrs,
-            sparse_tensor_generator_cls=TensorflowSparseTileDBTensorGenerator,
-        ),
-        output_signature=(
-            *_iter_tensor_specs(x_array.schema, x_attrs),
-            *_iter_tensor_specs(y_array.schema, y_attrs),
-        ),
+    return (
+        tf.data.Dataset.from_generator(
+            partial(
+                tensor_generator,
+                x_array=x_array,
+                y_array=y_array,
+                buffer_bytes=buffer_bytes,
+                shuffle=shuffle,
+                x_attrs=x_attrs,
+                y_attrs=y_attrs,
+                sparse_tensor_generator_cls=TensorflowSparseTileDBTensorGenerator,
+            ),
+            output_signature=(
+                *_iter_tensor_specs(x_array.schema, x_attrs),
+                *_iter_tensor_specs(y_array.schema, y_attrs),
+            ),
+        )
+        .unbatch()
+        .batch(batch_size)
     )
 
 

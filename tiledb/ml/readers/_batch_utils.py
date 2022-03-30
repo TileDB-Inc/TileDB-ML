@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from abc import ABC, abstractmethod
 from concurrent import futures
 from dataclasses import dataclass
@@ -137,7 +136,6 @@ SparseTensor = TypeVar("SparseTensor")
 def tensor_generator(
     x_array: tiledb.Array,
     y_array: tiledb.Array,
-    batch_size: int,
     buffer_bytes: Optional[int] = None,
     shuffle: bool = False,
     x_attrs: Sequence[str] = (),
@@ -159,7 +157,6 @@ def tensor_generator(
 
     :param x_array: TileDB array of the features.
     :param y_array: TileDB array of the labels.
-    :param batch_size: Size of each batch.
     :param buffer_bytes: Maximum size (in bytes) of memory to allocate for reading from
         each array (default=`tiledb.default_ctx().config()["sm.memory_budget"]`).
     :param shuffle: True for shuffling rows.
@@ -174,35 +171,28 @@ def tensor_generator(
         stop_offset = x_array.shape[0]
 
     def get_buffer_size_generator(
-        label: str, array: tiledb.Array, attrs: Sequence[str]
+        array: tiledb.Array, attrs: Sequence[str]
     ) -> Union[
         Tuple[int, TileDBTensorGenerator[DenseTensor]],
         Tuple[int, TileDBTensorGenerator[SparseTensor]],
     ]:
         if array.schema.sparse:
-            if buffer_bytes is not None:
-                row_bytes = estimate_row_bytes(array, attrs, start_offset, stop_offset)
-                buffer_size = buffer_bytes // row_bytes
-            else:
-                # TODO: implement get_max_buffer_size() for sparse arrays
-                buffer_size = batch_size
+            # TODO: implement get_max_buffer_size() for sparse arrays
+            row_bytes = estimate_row_bytes(array, attrs, start_offset, stop_offset)
+            buffer_size = (buffer_bytes or 100 * 1024**2) // row_bytes
         else:
             buffer_size = get_max_buffer_size(array.schema, attrs, buffer_bytes)
-        buffer_size = normalize_buffer_size(
-            buffer_size, batch_size, stop_offset - start_offset
-        )
-        logging.info("%s: buffer size = %d", label, buffer_size)
+        # clip the buffer size between 1 and total number of rows
+        buffer_size = max(1, min(buffer_size, stop_offset - start_offset))
         if array.schema.sparse:
             return buffer_size, sparse_tensor_generator_cls(array, attrs)
         else:
             return buffer_size, dense_tensor_generator_cls(array, attrs)
 
-    x_buffer_size, x_gen = get_buffer_size_generator("x", x_array, x_attrs)
-    y_buffer_size, y_gen = get_buffer_size_generator("y", y_array, y_attrs)
+    x_buf_size, x_gen = get_buffer_size_generator(x_array, x_attrs)
+    y_buf_size, y_gen = get_buffer_size_generator(y_array, y_attrs)
     with futures.ThreadPoolExecutor(max_workers=2) as executor:
-        for batch in iter_batches(
-            batch_size, x_buffer_size, y_buffer_size, start_offset, stop_offset, shuffle
-        ):
+        for batch in iter_batches(x_buf_size, y_buf_size, start_offset, stop_offset):
             if batch.x_read_slice and batch.y_read_slice:
                 futures.wait(
                     (
@@ -215,11 +205,11 @@ def tensor_generator(
             elif batch.y_read_slice:
                 y_gen.read_buffer(batch.y_read_slice)
 
-            if batch.shuffling:
-                row_idxs = np.arange(batch.shuffling.size)
+            if shuffle:
+                row_idxs = np.arange(batch.size)
                 np.random.shuffle(row_idxs)
-                x_gen.shuffle_buffer(batch.shuffling.x_buffer_slice, row_idxs)
-                y_gen.shuffle_buffer(batch.shuffling.y_buffer_slice, row_idxs)
+                x_gen.shuffle_buffer(batch.x_buffer_slice, row_idxs)
+                y_gen.shuffle_buffer(batch.y_buffer_slice, row_idxs)
 
             x_tensors = x_gen.iter_tensors(batch.x_buffer_slice)
             y_tensors = y_gen.iter_tensors(batch.y_buffer_slice)
@@ -227,76 +217,50 @@ def tensor_generator(
 
 
 @dataclass(frozen=True, repr=False)
-class Shuffling:
-    size: int
-    x_buffer_slice: slice
-    y_buffer_slice: slice
-
-    def __repr__(self) -> str:
-        x, y = self.x_buffer_slice, self.y_buffer_slice
-        return f"Shuffling(x[{x.start}:{x.stop}], y[{y.start}:{y.stop}])"
-
-
-@dataclass(frozen=True, repr=False)
 class Batch:
+    size: int
     x_read_slice: Optional[slice]
     y_read_slice: Optional[slice]
-    shuffling: Optional[Shuffling]
     x_buffer_slice: slice
     y_buffer_slice: slice
 
     def __repr__(self) -> str:
         x, y = self.x_buffer_slice, self.y_buffer_slice
-        s = f"Batch(x[{x.start}:{x.stop}], y[{y.start}:{y.stop}]"
+        s = f"Batch({self.size}, x[{x.start}:{x.stop}], y[{y.start}:{y.stop}]"
         if self.x_read_slice:
             s += f", x_read[{self.x_read_slice.start}:{self.x_read_slice.stop}]"
         if self.y_read_slice:
             s += f", y_read[{self.y_read_slice.start}:{self.y_read_slice.stop}]"
-        if self.shuffling:
-            s += f", {self.shuffling}"
         return s + ")"
 
 
 def iter_batches(
-    batch_size: int,
     x_buffer_size: int,
     y_buffer_size: int,
     start_offset: int,
     stop_offset: int,
-    shuffle: bool,
 ) -> Iterator[Batch]:
     """
     Generate `Batch` instances describing each batch.
 
     Each yielded `Batch` instance describes:
-    - The slice to read from the x array into x buffer (if the current x buffer is consumed).
-    - The slice to read from the y array into y buffer (if the current y buffer is consumed).
-    - The shuffling to apply to x and y buffers (if there is new x and/or y buffer).
-      - How many buffer rows to shuffle.
-      - The slice of the x buffer to shuffle.
-      - The slice of the y buffer to shuffle.
+    - Its size
+    - The slice to read from the x array (if the current x buffer is consumed).
+    - The slice to read from the y array (if the current y buffer is consumed).
     - The batch slice to read from the x buffer.
     - The batch slice to read from the y buffer.
 
-    :param batch_size: (Max) size of each batch.
     :param x_buffer_size: (Max) size of the x buffer.
     :param y_buffer_size: (Max) size of the y buffer.
     :param start_offset: Start row offset.
     :param stop_offset: Stop row offset.
-    :param shuffle: True for shuffling rows.
     """
-    assert (
-        x_buffer_size % batch_size == 0
-    ), "x_buffer_size must be a multiple of batch_size"
-    assert (
-        y_buffer_size % batch_size == 0
-    ), "y_buffer_size must be a multiple of batch_size"
-
-    x_buf_offset = x_buffer_size
-    y_buf_offset = y_buffer_size
     x_read_slices = iter_slices(start_offset, stop_offset, x_buffer_size)
     y_read_slices = iter_slices(start_offset, stop_offset, y_buffer_size)
-    for batch_slice in iter_slices(start_offset, stop_offset, batch_size):
+    x_buf_offset = x_buffer_size
+    y_buf_offset = y_buffer_size
+    offset = start_offset
+    while offset < stop_offset:
         if x_buf_offset == x_buffer_size:
             x_read_slice = next(x_read_slices)
             x_read_size = x_read_slice.stop - x_read_slice.start
@@ -311,28 +275,19 @@ def iter_batches(
         else:
             y_read_slice = None
 
-        if shuffle and (x_read_slice or y_read_slice):
-            shuffling_size = min(x_read_size - x_buf_offset, y_read_size - y_buf_offset)
-            shuffling = Shuffling(
-                shuffling_size,
-                slice(x_buf_offset, x_buf_offset + shuffling_size),
-                slice(y_buf_offset, y_buf_offset + shuffling_size),
-            )
-        else:
-            shuffling = None
-
-        batch_slice_size = batch_slice.stop - batch_slice.start
-        x_next_buf_offset = x_buf_offset + batch_slice_size
-        y_next_buf_offset = y_buf_offset + batch_slice_size
+        buffer_size = min(x_read_size - x_buf_offset, y_read_size - y_buf_offset)
+        x_next_buf_offset = x_buf_offset + buffer_size
+        y_next_buf_offset = y_buf_offset + buffer_size
         yield Batch(
+            buffer_size,
             x_read_slice,
             y_read_slice,
-            shuffling,
             slice(x_buf_offset, x_next_buf_offset),
             slice(y_buf_offset, y_next_buf_offset),
         )
         x_buf_offset = x_next_buf_offset
         y_buf_offset = y_next_buf_offset
+        offset += buffer_size
 
 
 def iter_slices(start: int, stop: int, step: int) -> Iterator[slice]:
@@ -386,24 +341,6 @@ def estimate_row_bytes(
         est_total_bytes = sum(est_rs[key].data_bytes for key in (*dims, *attrs))
         est_row_bytes = est_total_bytes / (stop_offset - start_offset)
     return int(est_row_bytes)
-
-
-def normalize_buffer_size(buffer_size: int, batch_size: int, array_size: int) -> int:
-    """
-    Normalize `buffer_size` to the largest multiple of `batch_size` that is lower than
-    or equal to `buffer_size`.
-
-    There are two exceptions that the normalized buffer size may be larger than `buffer_size`:
-    - If `buffer_size < batch_size`, normalize it to `batch_size`.
-    - If `buffer_size >= array_size`, normalize it to `ceil(array_size / batch_size) * batch_size`.
-    """
-    if buffer_size < batch_size:
-        num_batches = 1
-    elif buffer_size < array_size:
-        num_batches = buffer_size // batch_size
-    else:
-        num_batches = ceil(array_size / batch_size)
-    return num_batches * batch_size
 
 
 def get_max_buffer_size(

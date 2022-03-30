@@ -37,22 +37,15 @@ class TestPyTorchTileDBDataset:
             y_data=rand_array(num_rows, *y_shape, sparse=y_sparse),
             x_sparse=x_sparse,
             y_sparse=y_sparse,
-            batch_size=batch_size,
             num_attrs=num_attrs,
             pass_attrs=pass_attrs,
-            buffer_bytes=buffer_bytes,
-            shuffle=shuffle,
-        ) as dataset_kwargs:
-            dataset = PyTorchTileDBDataset(**dataset_kwargs)
+        ) as kwargs:
+            dataset = PyTorchTileDBDataset(
+                buffer_bytes=buffer_bytes, shuffle=shuffle, **kwargs
+            )
             assert isinstance(dataset, torch.utils.data.IterableDataset)
             validate_tensor_generator(
-                dataset,
-                x_sparse=x_sparse,
-                y_sparse=y_sparse,
-                x_shape=x_shape,
-                y_shape=y_shape,
-                batch_size=batch_size,
-                num_attrs=num_attrs,
+                dataset, num_attrs, x_sparse, y_sparse, x_shape, y_shape
             )
 
     @parametrize_for_dataset()
@@ -81,14 +74,21 @@ class TestPyTorchTileDBDataset:
             y_data=rand_array(num_rows, *y_shape, sparse=y_sparse),
             x_sparse=x_sparse,
             y_sparse=y_sparse,
-            batch_size=batch_size,
             num_attrs=num_attrs,
             pass_attrs=pass_attrs,
-            buffer_bytes=buffer_bytes,
-            shuffle=shuffle,
         ) as kwargs:
-            dataloader = PyTorchTileDBDataLoader(num_workers=num_workers, **kwargs)
+            dataloader = PyTorchTileDBDataLoader(
+                num_workers=num_workers,
+                buffer_bytes=buffer_bytes,
+                batch_size=batch_size,
+                shuffle=shuffle,
+                **kwargs
+            )
             assert isinstance(dataloader, torch.utils.data.DataLoader)
+            validate_tensor_generator(
+                dataloader, num_attrs, x_sparse, y_sparse, x_shape, y_shape, batch_size
+            )
+
             unique_x_tensors = []
             unique_y_tensors = []
             for batchindx, data in enumerate(dataloader):
@@ -111,10 +111,12 @@ class TestPyTorchTileDBDataset:
                 assert len(unique_y_tensors) - 1 == batchindx
 
     @parametrize_for_dataset()
+    @pytest.mark.parametrize("num_workers", [0, 2])
     def test_unequal_num_rows(
         self,
         tmpdir,
         num_rows,
+        num_workers,
         x_sparse,
         y_sparse,
         x_shape,
@@ -132,14 +134,17 @@ class TestPyTorchTileDBDataset:
             y_data=rand_array(num_rows, *y_shape, sparse=y_sparse),
             x_sparse=x_sparse,
             y_sparse=y_sparse,
-            batch_size=batch_size,
             num_attrs=num_attrs,
             pass_attrs=pass_attrs,
-            buffer_bytes=buffer_bytes,
-            shuffle=shuffle,
-        ) as dataset_kwargs:
+        ) as kwargs:
             with pytest.raises(ValueError) as ex:
-                PyTorchTileDBDataset(**dataset_kwargs)
+                PyTorchTileDBDataLoader(
+                    num_workers=num_workers,
+                    buffer_bytes=buffer_bytes,
+                    batch_size=batch_size,
+                    shuffle=shuffle,
+                    **kwargs
+                )
             assert "X and Y arrays must have the same number of rows" in str(ex.value)
 
     @parametrize_for_dataset(x_sparse=[True], shuffle=[False])
@@ -164,14 +169,16 @@ class TestPyTorchTileDBDataset:
             y_data=rand_array(num_rows, *y_shape, sparse=y_sparse),
             x_sparse=x_sparse,
             y_sparse=y_sparse,
-            batch_size=batch_size,
             num_attrs=num_attrs,
             pass_attrs=pass_attrs,
-            buffer_bytes=buffer_bytes,
-            shuffle=shuffle,
-        ) as dataset_kwargs:
-            dataset = PyTorchTileDBDataset(**dataset_kwargs)
+        ) as kwargs:
+            dataloader = PyTorchTileDBDataLoader(
+                buffer_bytes=buffer_bytes,
+                batch_size=batch_size,
+                shuffle=shuffle,
+                **kwargs
+            )
             generated_x_data = np.concatenate(
-                [tensors[0].to_dense().numpy() for tensors in dataset]
+                [tensors[0].to_dense().numpy() for tensors in dataloader]
             )
             np.testing.assert_array_almost_equal(generated_x_data, x_data)
