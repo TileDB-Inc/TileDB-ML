@@ -3,14 +3,14 @@
 import itertools as it
 import math
 import random
-from typing import Iterable, Iterator, Optional, Sequence, TypeVar
+from typing import Any, Callable, Iterable, Iterator, Optional, Sequence, TypeVar
 
 import numpy as np
 import torch
 
 import tiledb
 
-from ._batch_utils import SparseTileDBTensorGenerator, tensor_generator
+from ._batch_utils import SparseTileDBTensorGenerator, get_attr_names, tensor_generator
 
 
 def PyTorchTileDBDataLoader(
@@ -35,11 +35,25 @@ def PyTorchTileDBDataLoader(
     :param y_attrs: Attribute names of y_array.
     :param num_workers: how many subprocesses to use for data loading
     """
-    dataset = PyTorchTileDBDataset(
-        x_array, y_array, buffer_bytes, shuffle_buffer_size, x_attrs, y_attrs
-    )
+    x_schema = x_array.schema
+    y_schema = y_array.schema
     return torch.utils.data.DataLoader(
-        dataset, batch_size=batch_size, num_workers=num_workers
+        dataset=PyTorchTileDBDataset(
+            x_array, y_array, buffer_bytes, shuffle_buffer_size, x_attrs, y_attrs
+        ),
+        batch_size=batch_size,
+        num_workers=num_workers,
+        collate_fn=CompositeCollator(
+            (
+                np_arrays_collate
+                if not is_sparse
+                else torch.utils.data.dataloader.default_collate
+            )
+            for is_sparse in it.chain(
+                it.repeat(x_schema.sparse, len(x_attrs or get_attr_names(x_schema))),
+                it.repeat(y_schema.sparse, len(y_attrs or get_attr_names(y_schema))),
+            )
+        ),
     )
 
 
@@ -91,6 +105,30 @@ class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Sequence[torch.Tenso
         if self._shuffle_buffer_size > 0:
             rows = iter_shuffled(rows, self._shuffle_buffer_size)
         return rows
+
+
+class CompositeCollator:
+    """
+    A callable for collating "rows" of data into Tensors.
+
+    Each data "column" is collated to a torch.Tensor by a different collator function.
+    Finally, the collated columns are returned as a sequence of torch.Tensors.
+    """
+
+    def __init__(self, collators: Iterable[Callable[[Sequence[Any]], torch.Tensor]]):
+        self._collators = tuple(collators)
+
+    def __call__(self, rows: Sequence[Sequence[Any]]) -> Sequence[torch.Tensor]:
+        columns = list(zip(*rows))
+        assert len(columns) == len(self._collators)
+        return [collator(column) for collator, column in zip(self._collators, columns)]
+
+
+def np_arrays_collate(arrays: Sequence[np.ndarray]) -> torch.Tensor:
+    # Specialized version of default_collate for collating Numpy arrays
+    # Faster than `torch.as_tensor(arrays)` (https://github.com/pytorch/pytorch/pull/51731)
+    # and `torch.stack([torch.as_tensor(array) for array in arrays]])`
+    return torch.as_tensor(np.stack(arrays))
 
 
 T = TypeVar("T")
