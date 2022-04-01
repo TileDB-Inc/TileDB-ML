@@ -10,8 +10,8 @@ import torch
 
 import tiledb
 
-from ._batch_utils import SparseTileDBTensorGenerator, tensor_generator
 from ._buffer_utils import get_attr_names, get_buffer_size
+from ._tensor_gen import SparseTileDBTensorGenerator, tensor_generator
 
 
 def PyTorchTileDBDataLoader(
