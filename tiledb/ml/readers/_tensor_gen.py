@@ -49,7 +49,7 @@ class TileDBNumpyGenerator(TileDBTensorGenerator[np.ndarray]):
             yield buf_array[buffer_slice]
 
 
-class SparseTileDBTensorGenerator(TileDBTensorGenerator[Tensor]):
+class TileDBSparseTensorGenerator(TileDBTensorGenerator[Tensor]):
     def __init__(self, array: tiledb.Array, attrs: Sequence[str]) -> None:
         schema = array.schema
         if schema.ndim != 2:
@@ -96,8 +96,8 @@ class SparseTileDBTensorGenerator(TileDBTensorGenerator[Tensor]):
         """Convert a scipy.sparse.coo_matrix to a Tensor"""
 
 
-DenseTensor = TypeVar("DenseTensor")
-SparseTensor = TypeVar("SparseTensor")
+DT = TypeVar("DT")
+ST = TypeVar("ST")
 
 
 def tensor_generator(
@@ -109,13 +109,9 @@ def tensor_generator(
     y_attrs: Sequence[str],
     start_offset: int = 0,
     stop_offset: int = 0,
-    dense_tensor_generator_cls: Type[
-        TileDBTensorGenerator[DenseTensor]
-    ] = TileDBNumpyGenerator,
-    sparse_tensor_generator_cls: Type[
-        TileDBTensorGenerator[SparseTensor]
-    ] = SparseTileDBTensorGenerator,
-) -> Iterator[Sequence[Union[DenseTensor, SparseTensor]]]:
+    dense_generator_cls: Type[TileDBTensorGenerator[DT]] = TileDBNumpyGenerator,
+    sparse_generator_cls: Type[TileDBTensorGenerator[ST]] = TileDBSparseTensorGenerator,
+) -> Iterator[Sequence[Union[DT, ST]]]:
     """
     Generator for batches of tensors.
 
@@ -130,20 +126,19 @@ def tensor_generator(
     :param y_attrs: Attribute names of y_array.
     :param start_offset: Start row offset; defaults to 0.
     :param stop_offset: Stop row offset; defaults to number of rows.
-    :param dense_tensor_generator_cls: Dense tensor generator type.
-    :param sparse_tensor_generator_cls: Sparse tensor generator type.
+    :param dense_generator_cls: Dense tensor generator type.
+    :param sparse_generator_cls: Sparse tensor generator type.
     """
-
-    def get_buffer_size_generator(
-        array: tiledb.Array, attrs: Sequence[str]
-    ) -> Union[TileDBTensorGenerator[DenseTensor], TileDBTensorGenerator[SparseTensor]]:
-        if array.schema.sparse:
-            return sparse_tensor_generator_cls(array, attrs)
-        else:
-            return dense_tensor_generator_cls(array, attrs)
-
-    x_gen = get_buffer_size_generator(x_array, x_attrs)
-    y_gen = get_buffer_size_generator(y_array, y_attrs)
+    x_gen: Union[TileDBTensorGenerator[DT], TileDBTensorGenerator[ST]] = (
+        sparse_generator_cls(x_array, x_attrs)
+        if x_array.schema.sparse
+        else dense_generator_cls(x_array, x_attrs)
+    )
+    y_gen: Union[TileDBTensorGenerator[DT], TileDBTensorGenerator[ST]] = (
+        sparse_generator_cls(y_array, y_attrs)
+        if y_array.schema.sparse
+        else dense_generator_cls(y_array, y_attrs)
+    )
     if not stop_offset:
         stop_offset = x_array.shape[0]
     for batch in iter_batches(x_buffer_size, y_buffer_size, start_offset, stop_offset):

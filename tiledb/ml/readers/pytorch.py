@@ -11,7 +11,7 @@ import torch
 import tiledb
 
 from ._buffer_utils import get_attr_names, get_buffer_size
-from ._tensor_gen import SparseTileDBTensorGenerator, tensor_generator
+from ._tensor_gen import TileDBSparseTensorGenerator, tensor_generator
 
 
 def PyTorchTileDBDataLoader(
@@ -92,7 +92,7 @@ class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Sequence[torch.Tenso
             y_buffer_size=get_buffer_size(y_array, y_attrs, buffer_bytes),
             x_attrs=x_attrs,
             y_attrs=y_attrs,
-            sparse_tensor_generator_cls=PyTorchSparseTileDBTensorGenerator,
+            sparse_generator_cls=PyTorchSparseTensorGenerator,
         )
 
     def __iter__(self) -> Iterator[Sequence[torch.Tensor]]:
@@ -166,7 +166,7 @@ def iter_shuffled(iterable: Iterable[T], buffer_size: int) -> Iterator[T]:
         yield buffer.pop()
 
 
-class PyTorchSparseTileDBTensorGenerator(SparseTileDBTensorGenerator[torch.Tensor]):
+class PyTorchSparseTensorGenerator(TileDBSparseTensorGenerator[torch.Tensor]):
     @staticmethod
     def _tensor_from_coo(
         data: np.ndarray,

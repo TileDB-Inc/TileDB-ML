@@ -9,7 +9,7 @@ import tensorflow as tf
 import tiledb
 
 from ._buffer_utils import get_attr_names, get_buffer_size
-from ._tensor_gen import SparseTileDBTensorGenerator, tensor_generator
+from ._tensor_gen import TileDBSparseTensorGenerator, tensor_generator
 
 # TODO: We have to track the following issues:
 # - https://github.com/tensorflow/tensorflow/issues/47532
@@ -56,7 +56,7 @@ def TensorflowTileDBDataset(
             y_buffer_size=get_buffer_size(y_array, y_attrs, buffer_bytes),
             x_attrs=x_attrs,
             y_attrs=y_attrs,
-            sparse_tensor_generator_cls=TensorflowSparseTileDBTensorGenerator,
+            sparse_generator_cls=TensorflowSparseTensorGenerator,
         ),
         output_signature=(
             *_iter_tensor_specs(x_array.schema, x_attrs),
@@ -77,9 +77,7 @@ def _iter_tensor_specs(
         yield cls(shape=(None, *schema.shape[1:]), dtype=schema.attr(attr).dtype)
 
 
-class TensorflowSparseTileDBTensorGenerator(
-    SparseTileDBTensorGenerator[tf.SparseTensor]
-):
+class TensorflowSparseTensorGenerator(TileDBSparseTensorGenerator[tf.SparseTensor]):
     @staticmethod
     def _tensor_from_coo(
         data: np.ndarray,
