@@ -8,7 +8,8 @@ import tensorflow as tf
 
 import tiledb
 
-from ._batch_utils import SparseTileDBTensorGenerator, get_attr_names, tensor_generator
+from ._batch_utils import SparseTileDBTensorGenerator, tensor_generator
+from ._buffer_utils import get_attr_names, get_buffer_size
 
 # TODO: We have to track the following issues:
 # - https://github.com/tensorflow/tensorflow/issues/47532
@@ -41,12 +42,18 @@ def TensorflowTileDBDataset(
     if rows != y_array.shape[0]:
         raise ValueError("X and Y arrays must have the same number of rows")
 
+    if not x_attrs:
+        x_attrs = get_attr_names(x_array.schema)
+    if not y_attrs:
+        y_attrs = get_attr_names(y_array.schema)
+
     dataset = tf.data.Dataset.from_generator(
         partial(
             tensor_generator,
             x_array=x_array,
             y_array=y_array,
-            buffer_bytes=buffer_bytes,
+            x_buffer_size=get_buffer_size(x_array, x_attrs, buffer_bytes),
+            y_buffer_size=get_buffer_size(y_array, y_attrs, buffer_bytes),
             x_attrs=x_attrs,
             y_attrs=y_attrs,
             sparse_tensor_generator_cls=TensorflowSparseTileDBTensorGenerator,
@@ -66,7 +73,7 @@ def _iter_tensor_specs(
     schema: tiledb.ArraySchema, attrs: Sequence[str]
 ) -> Iterator[Union[tf.TensorSpec, tf.SparseTensorSpec]]:
     cls = tf.SparseTensorSpec if schema.sparse else tf.TensorSpec
-    for attr in attrs or get_attr_names(schema):
+    for attr in attrs:
         yield cls(shape=(None, *schema.shape[1:]), dtype=schema.attr(attr).dtype)
 
 

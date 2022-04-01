@@ -10,7 +10,8 @@ import torch
 
 import tiledb
 
-from ._batch_utils import SparseTileDBTensorGenerator, get_attr_names, tensor_generator
+from ._batch_utils import SparseTileDBTensorGenerator, tensor_generator
+from ._buffer_utils import get_attr_names, get_buffer_size
 
 
 def PyTorchTileDBDataLoader(
@@ -37,6 +38,11 @@ def PyTorchTileDBDataLoader(
     """
     x_schema = x_array.schema
     y_schema = y_array.schema
+    if not x_attrs:
+        x_attrs = get_attr_names(x_schema)
+    if not y_attrs:
+        y_attrs = get_attr_names(y_schema)
+
     return torch.utils.data.DataLoader(
         dataset=PyTorchTileDBDataset(
             x_array, y_array, buffer_bytes, shuffle_buffer_size, x_attrs, y_attrs
@@ -50,8 +56,8 @@ def PyTorchTileDBDataLoader(
                 else torch.utils.data.dataloader.default_collate
             )
             for is_sparse in it.chain(
-                it.repeat(x_schema.sparse, len(x_attrs or get_attr_names(x_schema))),
-                it.repeat(y_schema.sparse, len(y_attrs or get_attr_names(y_schema))),
+                it.repeat(x_schema.sparse, len(x_attrs)),
+                it.repeat(y_schema.sparse, len(y_attrs)),
             )
         ),
     )
@@ -72,12 +78,18 @@ class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Sequence[torch.Tenso
         if rows != y_array.shape[0]:
             raise ValueError("X and Y arrays must have the same number of rows")
 
+        if not x_attrs:
+            x_attrs = get_attr_names(x_array.schema)
+        if not y_attrs:
+            y_attrs = get_attr_names(y_array.schema)
+
         self._rows = rows
         self._shuffle_buffer_size = shuffle_buffer_size
         self._generator_kwargs = dict(
             x_array=x_array,
             y_array=y_array,
-            buffer_bytes=buffer_bytes,
+            x_buffer_size=get_buffer_size(x_array, x_attrs, buffer_bytes),
+            y_buffer_size=get_buffer_size(y_array, y_attrs, buffer_bytes),
             x_attrs=x_attrs,
             y_attrs=y_attrs,
             sparse_tensor_generator_cls=PyTorchSparseTileDBTensorGenerator,
