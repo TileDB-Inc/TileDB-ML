@@ -1,16 +1,10 @@
 """Tests for TileDB integration with Tensorflow Data API."""
 
-import os
-
 import numpy as np
 import pytest
 import tensorflow as tf
 
-from tiledb.ml.readers._batch_utils import tensor_generator
-from tiledb.ml.readers.tensorflow import (
-    TensorflowSparseTileDBTensorGenerator,
-    TensorflowTileDBDataset,
-)
+from tiledb.ml.readers.tensorflow import TensorflowTileDBDataset
 
 from .utils import (
     ingest_in_tiledb,
@@ -18,11 +12,6 @@ from .utils import (
     rand_array,
     validate_tensor_generator,
 )
-
-# Suppress all Tensorflow messages
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-
-tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
 
 @pytest.mark.parametrize("num_rows", [107])
@@ -60,19 +49,6 @@ class TestTensorflowTileDBDataset:
             assert isinstance(dataset, tf.data.Dataset)
             validate_tensor_generator(
                 dataset, num_attrs, x_sparse, y_sparse, x_shape, y_shape, batch_size
-            )
-
-            # Although TensorflowTileDBDataset calls tensor_generator internally, due to
-            # https://github.com/tensorflow/tensorflow/issues/33759 it is not reported as
-            # covered so test it explicitly.
-            generator = tensor_generator(
-                buffer_bytes=buffer_bytes,
-                sparse_tensor_generator_cls=TensorflowSparseTileDBTensorGenerator,
-                **kwargs,
-            )
-            # tensor_generator does not take batch_size parameter, so pass batch_size=num_rows
-            validate_tensor_generator(
-                generator, num_attrs, x_sparse, y_sparse, x_shape, y_shape, num_rows
             )
 
     @parametrize_for_dataset()
