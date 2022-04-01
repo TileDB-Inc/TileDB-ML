@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from concurrent import futures
 from dataclasses import dataclass
 from math import ceil
 from typing import Generic, Iterator, Optional, Sequence, Tuple, Type, TypeVar, Union
@@ -169,23 +168,14 @@ def tensor_generator(
 
     x_buf_size, x_gen = get_buffer_size_generator(x_array, x_attrs)
     y_buf_size, y_gen = get_buffer_size_generator(y_array, y_attrs)
-    with futures.ThreadPoolExecutor(max_workers=2) as executor:
-        for batch in iter_batches(x_buf_size, y_buf_size, start_offset, stop_offset):
-            if batch.x_read_slice and batch.y_read_slice:
-                futures.wait(
-                    (
-                        executor.submit(x_gen.read_buffer, batch.x_read_slice),
-                        executor.submit(y_gen.read_buffer, batch.y_read_slice),
-                    )
-                )
-            elif batch.x_read_slice:
-                x_gen.read_buffer(batch.x_read_slice)
-            elif batch.y_read_slice:
-                y_gen.read_buffer(batch.y_read_slice)
-
-            x_tensors = x_gen.iter_tensors(batch.x_buffer_slice)
-            y_tensors = y_gen.iter_tensors(batch.y_buffer_slice)
-            yield (*x_tensors, *y_tensors)
+    for batch in iter_batches(x_buf_size, y_buf_size, start_offset, stop_offset):
+        if batch.x_read_slice:
+            x_gen.read_buffer(batch.x_read_slice)
+        if batch.y_read_slice:
+            y_gen.read_buffer(batch.y_read_slice)
+        x_tensors = x_gen.iter_tensors(batch.x_buffer_slice)
+        y_tensors = y_gen.iter_tensors(batch.y_buffer_slice)
+        yield (*x_tensors, *y_tensors)
 
 
 @dataclass(frozen=True, repr=False)
