@@ -22,13 +22,6 @@ def parametrize_for_dataset(
     buffer_bytes=(1024, None),
     shuffle_buffer_size=(0, 16),
 ):
-    def is_valid_combination(t):
-        x_sparse_, y_sparse_, x_shape_, y_shape_, *_ = t
-        # sparse not supported with multi-dimensional arrays
-        if x_sparse_ and len(x_shape_) > 1 or y_sparse_ and len(y_shape_) > 1:
-            return False
-        return True
-
     argnames = [
         "x_sparse",
         "y_sparse",
@@ -40,19 +33,16 @@ def parametrize_for_dataset(
         "batch_size",
         "shuffle_buffer_size",
     ]
-    argvalues = filter(
-        is_valid_combination,
-        it.product(
-            x_sparse,
-            y_sparse,
-            x_shape,
-            y_shape,
-            num_attrs,
-            pass_attrs,
-            buffer_bytes,
-            batch_size,
-            shuffle_buffer_size,
-        ),
+    argvalues = it.product(
+        x_sparse,
+        y_sparse,
+        x_shape,
+        y_shape,
+        num_attrs,
+        pass_attrs,
+        buffer_bytes,
+        batch_size,
+        shuffle_buffer_size,
     )
     return pytest.mark.parametrize(argnames, argvalues)
 
