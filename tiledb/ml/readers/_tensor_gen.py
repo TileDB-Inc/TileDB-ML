@@ -11,7 +11,7 @@ from ._batch_utils import iter_batches
 Tensor = TypeVar("Tensor")
 
 
-class TileDBTensorGenerator(ABC, Generic[Tensor]):
+class TileDBNumpyGenerator:
     """Base class for generating tensors read from a TileDB array."""
 
     def __init__(self, array: tiledb.Array, attrs: Sequence[str]) -> None:
@@ -21,16 +21,15 @@ class TileDBTensorGenerator(ABC, Generic[Tensor]):
         """
         self._query = array.query(attrs=attrs)
 
-    @abstractmethod
     def read_buffer(self, array_slice: slice) -> None:
         """
         Read an array slice and save it as the current buffer.
 
         :param array_slice: Requested array slice.
         """
+        self._buf_arrays = tuple(self._query[array_slice].values())
 
-    @abstractmethod
-    def iter_tensors(self, buffer_slice: slice) -> Iterator[Tensor]:
+    def iter_tensors(self, buffer_slice: slice) -> Iterator[np.ndarray]:
         """
         Return an iterator of tensors for the given slice, one tensor per attribute
 
@@ -38,17 +37,10 @@ class TileDBTensorGenerator(ABC, Generic[Tensor]):
 
         :param buffer_slice: Slice of the current buffer to convert to tensors.
         """
-
-
-class TileDBNumpyGenerator(TileDBTensorGenerator[np.ndarray]):
-    def read_buffer(self, array_slice: slice) -> None:
-        self._buf_arrays = tuple(self._query[array_slice].values())
-
-    def iter_tensors(self, buffer_slice: slice) -> Iterator[np.ndarray]:
         return (buf_array[buffer_slice] for buf_array in self._buf_arrays)
 
 
-class TileDBSparseTensorGenerator(TileDBTensorGenerator[Tensor]):
+class TileDBSparseTensorGenerator(TileDBNumpyGenerator, ABC, Generic[Tensor]):
     def __init__(self, array: tiledb.Array, attrs: Sequence[str]) -> None:
         self._dims = tuple(array.domain.dim(i).name for i in range(array.ndim))
         self._row_shape = array.shape[1:]
@@ -67,19 +59,12 @@ class TileDBSparseTensorGenerator(TileDBTensorGenerator[Tensor]):
         )
 
     def iter_tensors(self, buffer_slice: slice) -> Iterator[Tensor]:
-        return map(
-            self._tensor_from_coo,
-            (buf_array[buffer_slice] for buf_array in self._buf_arrays),
-        )
+        return map(self._tensor_from_coo, super().iter_tensors(buffer_slice))
 
     @staticmethod
     @abstractmethod
     def _tensor_from_coo(coo: sparse.COO) -> Tensor:
         """Convert a sparse.COO to a Tensor"""
-
-
-DT = TypeVar("DT")
-ST = TypeVar("ST")
 
 
 def tensor_generator(
@@ -89,11 +74,10 @@ def tensor_generator(
     y_buffer_size: int,
     x_attrs: Sequence[str],
     y_attrs: Sequence[str],
+    sparse_generator_cls: Type[TileDBSparseTensorGenerator[Tensor]],
     start_offset: int = 0,
     stop_offset: int = 0,
-    dense_generator_cls: Type[TileDBTensorGenerator[DT]] = TileDBNumpyGenerator,
-    sparse_generator_cls: Type[TileDBTensorGenerator[ST]] = TileDBSparseTensorGenerator,
-) -> Iterator[Sequence[Union[DT, ST]]]:
+) -> Iterator[Sequence[Union[np.ndarray, Tensor]]]:
     """
     Generator for batches of tensors.
 
@@ -108,18 +92,17 @@ def tensor_generator(
     :param y_attrs: Attribute names of y_array.
     :param start_offset: Start row offset; defaults to 0.
     :param stop_offset: Stop row offset; defaults to number of rows.
-    :param dense_generator_cls: Dense tensor generator type.
     :param sparse_generator_cls: Sparse tensor generator type.
     """
-    x_gen: Union[TileDBTensorGenerator[DT], TileDBTensorGenerator[ST]] = (
+    x_gen: Union[TileDBNumpyGenerator, TileDBSparseTensorGenerator[Tensor]] = (
         sparse_generator_cls(x_array, x_attrs)
         if x_array.schema.sparse
-        else dense_generator_cls(x_array, x_attrs)
+        else TileDBNumpyGenerator(x_array, x_attrs)
     )
-    y_gen: Union[TileDBTensorGenerator[DT], TileDBTensorGenerator[ST]] = (
+    y_gen: Union[TileDBNumpyGenerator, TileDBSparseTensorGenerator[Tensor]] = (
         sparse_generator_cls(y_array, y_attrs)
         if y_array.schema.sparse
-        else dense_generator_cls(y_array, y_attrs)
+        else TileDBNumpyGenerator(y_array, y_attrs)
     )
     if not stop_offset:
         stop_offset = x_array.shape[0]
