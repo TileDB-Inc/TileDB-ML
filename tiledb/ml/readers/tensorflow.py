@@ -3,7 +3,7 @@
 from functools import partial
 from typing import Iterator, Optional, Sequence, Union
 
-import numpy as np
+import sparse
 import tensorflow as tf
 
 import tiledb
@@ -79,14 +79,5 @@ def _iter_tensor_specs(
 
 class TensorflowSparseTensorGenerator(TileDBSparseTensorGenerator[tf.SparseTensor]):
     @staticmethod
-    def _tensor_from_coo(
-        data: np.ndarray,
-        coords: np.ndarray,
-        dense_shape: Sequence[int],
-        dtype: np.dtype,
-    ) -> tf.SparseTensor:
-        return tf.SparseTensor(
-            indices=tf.constant(coords, dtype=tf.int64),
-            values=tf.constant(data, dtype=dtype),
-            dense_shape=dense_shape,
-        )
+    def _tensor_from_coo(coo: sparse.COO) -> tf.SparseTensor:
+        return tf.SparseTensor(coo.coords.T, coo.data, coo.shape)
