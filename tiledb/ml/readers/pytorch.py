@@ -6,6 +6,7 @@ import random
 from typing import Any, Callable, Iterable, Iterator, Optional, Sequence, TypeVar
 
 import numpy as np
+import sparse
 import torch
 
 import tiledb
@@ -168,12 +169,5 @@ def iter_shuffled(iterable: Iterable[T], buffer_size: int) -> Iterator[T]:
 
 class PyTorchSparseTensorGenerator(TileDBSparseTensorGenerator[torch.Tensor]):
     @staticmethod
-    def _tensor_from_coo(
-        data: np.ndarray,
-        coords: np.ndarray,
-        dense_shape: Sequence[int],
-        dtype: np.dtype,
-    ) -> torch.Tensor:
-        return torch.sparse_coo_tensor(
-            torch.tensor(coords).t(), data, dense_shape, requires_grad=False
-        )
+    def _tensor_from_coo(coo: sparse.COO) -> torch.Tensor:
+        return torch.sparse_coo_tensor(coo.coords, coo.data, coo.shape)
