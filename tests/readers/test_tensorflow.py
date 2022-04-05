@@ -38,9 +38,9 @@ class TestTensorflowTileDBDataset:
         y_shape,
         num_attrs,
         pass_attrs,
-        batch_size,
         buffer_bytes,
-        shuffle,
+        batch_size,
+        shuffle_buffer_size,
     ):
         with ingest_in_tiledb(
             tmpdir,
@@ -54,7 +54,7 @@ class TestTensorflowTileDBDataset:
             dataset = TensorflowTileDBDataset(
                 buffer_bytes=buffer_bytes,
                 batch_size=batch_size,
-                shuffle=shuffle,
+                shuffle_buffer_size=shuffle_buffer_size,
                 **kwargs,
             )
             assert isinstance(dataset, tf.data.Dataset)
@@ -67,7 +67,6 @@ class TestTensorflowTileDBDataset:
             # covered so test it explicitly.
             generator = tensor_generator(
                 buffer_bytes=buffer_bytes,
-                shuffle=shuffle,
                 sparse_tensor_generator_cls=TensorflowSparseTileDBTensorGenerator,
                 **kwargs,
             )
@@ -87,9 +86,9 @@ class TestTensorflowTileDBDataset:
         y_shape,
         num_attrs,
         pass_attrs,
-        batch_size,
         buffer_bytes,
-        shuffle,
+        batch_size,
+        shuffle_buffer_size,
     ):
         with ingest_in_tiledb(
             tmpdir,
@@ -105,12 +104,12 @@ class TestTensorflowTileDBDataset:
                 TensorflowTileDBDataset(
                     buffer_bytes=buffer_bytes,
                     batch_size=batch_size,
-                    shuffle=shuffle,
+                    shuffle_buffer_size=shuffle_buffer_size,
                     **kwargs,
                 )
             assert "X and Y arrays must have the same number of rows" in str(ex.value)
 
-    @parametrize_for_dataset(x_sparse=[True], shuffle=[False])
+    @parametrize_for_dataset(x_sparse=[True], shuffle_buffer_size=[0])
     def test_sparse_read_order(
         self,
         tmpdir,
@@ -121,9 +120,9 @@ class TestTensorflowTileDBDataset:
         y_shape,
         num_attrs,
         pass_attrs,
-        batch_size,
         buffer_bytes,
-        shuffle,
+        batch_size,
+        shuffle_buffer_size,
     ):
         x_data = rand_array(num_rows, *x_shape, sparse=x_sparse)
         with ingest_in_tiledb(
@@ -138,7 +137,7 @@ class TestTensorflowTileDBDataset:
             dataset = TensorflowTileDBDataset(
                 buffer_bytes=buffer_bytes,
                 batch_size=batch_size,
-                shuffle=shuffle,
+                shuffle_buffer_size=shuffle_buffer_size,
                 **kwargs,
             )
             generated_x_data = np.concatenate(

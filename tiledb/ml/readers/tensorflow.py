@@ -21,7 +21,7 @@ def TensorflowTileDBDataset(
     y_array: tiledb.Array,
     batch_size: int,
     buffer_bytes: Optional[int] = None,
-    shuffle: bool = False,
+    shuffle_buffer_size: int = 0,
     x_attrs: Sequence[str] = (),
     y_attrs: Sequence[str] = (),
 ) -> tf.data.Dataset:
@@ -32,7 +32,7 @@ def TensorflowTileDBDataset(
     :param batch_size: Size of each batch.
     :param buffer_bytes: Maximum size (in bytes) of memory to allocate for reading from
         each array (default=`tiledb.default_ctx().config()["sm.memory_budget"]`).
-    :param shuffle: True for shuffling rows.
+    :param shuffle_buffer_size: Number of elements from which this dataset will sample.
     :param x_attrs: Attribute names of x_array.
     :param y_attrs: Attribute names of y_array.
     """
@@ -41,26 +41,25 @@ def TensorflowTileDBDataset(
     if rows != y_array.shape[0]:
         raise ValueError("X and Y arrays must have the same number of rows")
 
-    return (
-        tf.data.Dataset.from_generator(
-            partial(
-                tensor_generator,
-                x_array=x_array,
-                y_array=y_array,
-                buffer_bytes=buffer_bytes,
-                shuffle=shuffle,
-                x_attrs=x_attrs,
-                y_attrs=y_attrs,
-                sparse_tensor_generator_cls=TensorflowSparseTileDBTensorGenerator,
-            ),
-            output_signature=(
-                *_iter_tensor_specs(x_array.schema, x_attrs),
-                *_iter_tensor_specs(y_array.schema, y_attrs),
-            ),
-        )
-        .unbatch()
-        .batch(batch_size)
+    dataset = tf.data.Dataset.from_generator(
+        partial(
+            tensor_generator,
+            x_array=x_array,
+            y_array=y_array,
+            buffer_bytes=buffer_bytes,
+            x_attrs=x_attrs,
+            y_attrs=y_attrs,
+            sparse_tensor_generator_cls=TensorflowSparseTileDBTensorGenerator,
+        ),
+        output_signature=(
+            *_iter_tensor_specs(x_array.schema, x_attrs),
+            *_iter_tensor_specs(y_array.schema, y_attrs),
+        ),
     )
+    dataset = dataset.unbatch()
+    if shuffle_buffer_size > 0:
+        dataset = dataset.shuffle(shuffle_buffer_size)
+    return dataset.batch(batch_size)
 
 
 def _iter_tensor_specs(

@@ -27,9 +27,9 @@ class TestPyTorchTileDBDataset:
         y_shape,
         num_attrs,
         pass_attrs,
-        batch_size,
         buffer_bytes,
-        shuffle,
+        batch_size,
+        shuffle_buffer_size,
     ):
         with ingest_in_tiledb(
             tmpdir,
@@ -40,9 +40,7 @@ class TestPyTorchTileDBDataset:
             num_attrs=num_attrs,
             pass_attrs=pass_attrs,
         ) as kwargs:
-            dataset = PyTorchTileDBDataset(
-                buffer_bytes=buffer_bytes, shuffle=shuffle, **kwargs
-            )
+            dataset = PyTorchTileDBDataset(buffer_bytes=buffer_bytes, **kwargs)
             assert isinstance(dataset, torch.utils.data.IterableDataset)
             validate_tensor_generator(
                 dataset, num_attrs, x_sparse, y_sparse, x_shape, y_shape
@@ -61,9 +59,9 @@ class TestPyTorchTileDBDataset:
         y_shape,
         num_attrs,
         pass_attrs,
-        batch_size,
         buffer_bytes,
-        shuffle,
+        batch_size,
+        shuffle_buffer_size,
     ):
         if num_workers and (x_sparse or y_sparse):
             pytest.skip("multiple workers not supported with sparse arrays")
@@ -81,7 +79,7 @@ class TestPyTorchTileDBDataset:
                 num_workers=num_workers,
                 buffer_bytes=buffer_bytes,
                 batch_size=batch_size,
-                shuffle=shuffle,
+                shuffle_buffer_size=shuffle_buffer_size,
                 **kwargs
             )
             assert isinstance(dataloader, torch.utils.data.DataLoader)
@@ -123,9 +121,9 @@ class TestPyTorchTileDBDataset:
         y_shape,
         num_attrs,
         pass_attrs,
-        batch_size,
         buffer_bytes,
-        shuffle,
+        batch_size,
+        shuffle_buffer_size,
     ):
         with ingest_in_tiledb(
             tmpdir,
@@ -142,12 +140,12 @@ class TestPyTorchTileDBDataset:
                     num_workers=num_workers,
                     buffer_bytes=buffer_bytes,
                     batch_size=batch_size,
-                    shuffle=shuffle,
+                    shuffle_buffer_size=shuffle_buffer_size,
                     **kwargs
                 )
             assert "X and Y arrays must have the same number of rows" in str(ex.value)
 
-    @parametrize_for_dataset(x_sparse=[True], shuffle=[False])
+    @parametrize_for_dataset(x_sparse=[True], shuffle_buffer_size=[0])
     def test_sparse_read_order(
         self,
         tmpdir,
@@ -158,9 +156,9 @@ class TestPyTorchTileDBDataset:
         y_shape,
         num_attrs,
         pass_attrs,
-        batch_size,
         buffer_bytes,
-        shuffle,
+        batch_size,
+        shuffle_buffer_size,
     ):
         x_data = rand_array(num_rows, *x_shape, sparse=x_sparse)
         with ingest_in_tiledb(
@@ -175,7 +173,7 @@ class TestPyTorchTileDBDataset:
             dataloader = PyTorchTileDBDataLoader(
                 buffer_bytes=buffer_bytes,
                 batch_size=batch_size,
-                shuffle=shuffle,
+                shuffle_buffer_size=shuffle_buffer_size,
                 **kwargs
             )
             generated_x_data = np.concatenate(
