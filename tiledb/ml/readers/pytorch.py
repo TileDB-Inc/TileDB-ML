@@ -18,9 +18,11 @@ from ._tensor_gen import TileDBSparseTensorGenerator, tensor_generator
 def PyTorchTileDBDataLoader(
     x_array: tiledb.Array,
     y_array: tiledb.Array,
+    *,
     batch_size: int,
     buffer_bytes: Optional[int] = None,
     shuffle_buffer_size: int = 0,
+    prefetch: int = 2,
     x_attrs: Sequence[str] = (),
     y_attrs: Sequence[str] = (),
     num_workers: int = 0,
@@ -32,6 +34,8 @@ def PyTorchTileDBDataLoader(
     :param batch_size: Size of each batch.
     :param buffer_bytes: Maximum size (in bytes) of memory to allocate for reading
         from each array (default=`tiledb.default_ctx().config()["sm.memory_budget"]`).
+    :param prefetch: Number of samples loaded in advance by each worker. Not applicable
+        (and should not be given) when `num_workers` is 0.
     :param shuffle_buffer_size: Number of elements from which this dataset will sample.
     :param x_attrs: Attribute names of x_array.
     :param y_attrs: Attribute names of y_array.
@@ -49,6 +53,7 @@ def PyTorchTileDBDataLoader(
             x_array, y_array, buffer_bytes, shuffle_buffer_size, x_attrs, y_attrs
         ),
         batch_size=batch_size,
+        prefetch_factor=prefetch,
         num_workers=num_workers,
         collate_fn=CompositeCollator(
             (
