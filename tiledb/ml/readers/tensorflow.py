@@ -20,9 +20,11 @@ from ._tensor_gen import TileDBSparseTensorGenerator, tensor_generator
 def TensorflowTileDBDataset(
     x_array: tiledb.Array,
     y_array: tiledb.Array,
+    *,
     batch_size: int,
     buffer_bytes: Optional[int] = None,
     shuffle_buffer_size: int = 0,
+    prefetch: int = tf.data.AUTOTUNE,
     x_attrs: Sequence[str] = (),
     y_attrs: Sequence[str] = (),
 ) -> tf.data.Dataset:
@@ -34,6 +36,8 @@ def TensorflowTileDBDataset(
     :param buffer_bytes: Maximum size (in bytes) of memory to allocate for reading from
         each array (default=`tiledb.default_ctx().config()["sm.memory_budget"]`).
     :param shuffle_buffer_size: Number of elements from which this dataset will sample.
+    :param prefetch: Maximum number of batches that will be buffered when prefetching.
+        By default, the buffer size is dynamically tuned.
     :param x_attrs: Attribute names of x_array.
     :param y_attrs: Attribute names of y_array.
     """
@@ -66,7 +70,7 @@ def TensorflowTileDBDataset(
     dataset = dataset.unbatch()
     if shuffle_buffer_size > 0:
         dataset = dataset.shuffle(shuffle_buffer_size)
-    return dataset.batch(batch_size)
+    return dataset.batch(batch_size).prefetch(prefetch)
 
 
 def _iter_tensor_specs(
