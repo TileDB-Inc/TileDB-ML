@@ -14,13 +14,13 @@ from .utils import (
 )
 
 
-@pytest.mark.parametrize("num_rows", [107])
 class TestTensorflowTileDBDataset:
     @parametrize_for_dataset()
     def test_dataset(
         self,
         tmpdir,
         num_rows,
+        num_workers,
         x_sparse,
         y_sparse,
         x_shape,
@@ -44,6 +44,7 @@ class TestTensorflowTileDBDataset:
                 buffer_bytes=buffer_bytes,
                 batch_size=batch_size,
                 shuffle_buffer_size=shuffle_buffer_size,
+                num_workers=num_workers,
                 **kwargs,
             )
             assert isinstance(dataset, tf.data.Dataset)
@@ -56,6 +57,7 @@ class TestTensorflowTileDBDataset:
         self,
         tmpdir,
         num_rows,
+        num_workers,
         x_sparse,
         y_sparse,
         x_shape,
@@ -81,15 +83,17 @@ class TestTensorflowTileDBDataset:
                     buffer_bytes=buffer_bytes,
                     batch_size=batch_size,
                     shuffle_buffer_size=shuffle_buffer_size,
+                    num_workers=num_workers,
                     **kwargs,
                 )
             assert "X and Y arrays must have the same number of rows" in str(ex.value)
 
-    @parametrize_for_dataset(x_sparse=[True], shuffle_buffer_size=[0])
+    @parametrize_for_dataset(x_sparse=[True], shuffle_buffer_size=[0], num_workers=[0])
     def test_sparse_read_order(
         self,
         tmpdir,
         num_rows,
+        num_workers,
         x_sparse,
         y_sparse,
         x_shape,
@@ -114,6 +118,7 @@ class TestTensorflowTileDBDataset:
                 buffer_bytes=buffer_bytes,
                 batch_size=batch_size,
                 shuffle_buffer_size=shuffle_buffer_size,
+                num_workers=num_workers,
                 **kwargs,
             )
             generated_x_data = np.concatenate(

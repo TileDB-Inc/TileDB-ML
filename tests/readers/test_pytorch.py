@@ -14,13 +14,13 @@ from .utils import (
 )
 
 
-@pytest.mark.parametrize("num_rows", [107])
 class TestPyTorchTileDBDataset:
-    @parametrize_for_dataset()
+    @parametrize_for_dataset(batch_size=[0], shuffle_buffer_size=[0], num_workers=[0])
     def test_dataset(
         self,
         tmpdir,
         num_rows,
+        num_workers,
         x_sparse,
         y_sparse,
         x_shape,
@@ -47,7 +47,6 @@ class TestPyTorchTileDBDataset:
             )
 
     @parametrize_for_dataset()
-    @pytest.mark.parametrize("num_workers", [0, 2])
     def test_dataloader(
         self,
         tmpdir,
@@ -109,7 +108,6 @@ class TestPyTorchTileDBDataset:
                 assert len(unique_y_tensors) - 1 == batchindx
 
     @parametrize_for_dataset()
-    @pytest.mark.parametrize("num_workers", [0, 2])
     def test_unequal_num_rows(
         self,
         tmpdir,
@@ -145,11 +143,12 @@ class TestPyTorchTileDBDataset:
                 )
             assert "X and Y arrays must have the same number of rows" in str(ex.value)
 
-    @parametrize_for_dataset(x_sparse=[True], shuffle_buffer_size=[0])
+    @parametrize_for_dataset(x_sparse=[True], shuffle_buffer_size=[0], num_workers=[0])
     def test_sparse_read_order(
         self,
         tmpdir,
         num_rows,
+        num_workers,
         x_sparse,
         y_sparse,
         x_shape,
@@ -174,6 +173,7 @@ class TestPyTorchTileDBDataset:
                 buffer_bytes=buffer_bytes,
                 batch_size=batch_size,
                 shuffle_buffer_size=shuffle_buffer_size,
+                num_workers=num_workers,
                 **kwargs
             )
             generated_x_data = np.concatenate(

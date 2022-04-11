@@ -39,7 +39,9 @@ def PyTorchTileDBDataLoader(
     :param shuffle_buffer_size: Number of elements from which this dataset will sample.
     :param x_attrs: Attribute names of x_array.
     :param y_attrs: Attribute names of y_array.
-    :param num_workers: how many subprocesses to use for data loading
+    :param num_workers: how many subprocesses to use for data loading. 0 means that the
+        data will be loaded in the main process. Note: yielded batches may be shuffled
+        even if `shuffle_buffer_size` is zero when `num_workers` > 1.
     """
     x_schema = x_array.schema
     y_schema = y_array.schema
