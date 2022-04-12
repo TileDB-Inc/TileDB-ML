@@ -3,7 +3,7 @@
 import itertools as it
 import math
 import random
-from typing import Any, Callable, Iterable, Iterator, Optional, Sequence, TypeVar
+from typing import Any, Callable, Iterable, Iterator, Optional, Sequence, TypeVar, Union
 
 import numpy as np
 import sparse
@@ -12,7 +12,17 @@ import torch
 import tiledb
 
 from ._buffer_utils import get_attr_names, get_buffer_size
-from ._tensor_gen import TileDBSparseTensorGenerator, tensor_generator
+from ._tensor_gen import TileDBNumpyGenerator, TileDBSparseTensorGenerator
+
+
+class PyTorchSparseTensorGenerator(TileDBSparseTensorGenerator[torch.Tensor]):
+    @staticmethod
+    def _tensor_from_coo(coo: sparse.COO) -> torch.Tensor:
+        return torch.sparse_coo_tensor(coo.coords, coo.data, coo.shape)
+
+
+Tensor = Union[np.ndarray, torch.Tensor]
+TensorGenerator = Union[TileDBNumpyGenerator, PyTorchSparseTensorGenerator]
 
 
 def PyTorchTileDBDataLoader(
@@ -71,7 +81,7 @@ def PyTorchTileDBDataLoader(
     )
 
 
-class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Sequence[torch.Tensor]]):
+class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Sequence[Tensor]]):
     def __init__(
         self,
         x_array: tiledb.Array,
@@ -91,36 +101,49 @@ class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Sequence[torch.Tenso
         if not y_attrs:
             y_attrs = get_attr_names(y_array.schema)
 
+        self._x_gen: TensorGenerator = (
+            PyTorchSparseTensorGenerator(x_array, x_attrs)
+            if x_array.schema.sparse
+            else TileDBNumpyGenerator(x_array, x_attrs)
+        )
+        self._y_gen: TensorGenerator = (
+            PyTorchSparseTensorGenerator(y_array, y_attrs)
+            if y_array.schema.sparse
+            else TileDBNumpyGenerator(y_array, y_attrs)
+        )
+        self._x_buffer_size = get_buffer_size(x_array, x_attrs, buffer_bytes)
+        self._y_buffer_size = get_buffer_size(y_array, y_attrs, buffer_bytes)
         self._rows = rows
         self._shuffle_buffer_size = shuffle_buffer_size
-        self._generator_kwargs = dict(
-            x_array=x_array,
-            y_array=y_array,
-            x_buffer_size=get_buffer_size(x_array, x_attrs, buffer_bytes),
-            y_buffer_size=get_buffer_size(y_array, y_attrs, buffer_bytes),
-            x_attrs=x_attrs,
-            y_attrs=y_attrs,
-            sparse_generator_cls=PyTorchSparseTensorGenerator,
-        )
 
-    def __iter__(self) -> Iterator[Sequence[torch.Tensor]]:
-        kwargs = self._generator_kwargs
+    def __iter__(self) -> Iterator[Sequence[Tensor]]:
         worker_info = torch.utils.data.get_worker_info()
         if worker_info is not None:
-            for array_key in "x_array", "y_array":
-                if isinstance(kwargs[array_key], tiledb.SparseArray):
+            for gen in self._x_gen, self._y_gen:
+                if isinstance(gen, TileDBSparseTensorGenerator):
                     raise NotImplementedError(
                         "https://github.com/pytorch/pytorch/issues/20248"
                     )
             per_worker = int(math.ceil(self._rows / worker_info.num_workers))
-            start_offset = worker_info.id * per_worker
-            stop_offset = min(start_offset + per_worker, self._rows)
-            kwargs = dict(start_offset=start_offset, stop_offset=stop_offset, **kwargs)
+            start = worker_info.id * per_worker
+            stop = min(start + per_worker, self._rows)
+        else:
+            start = 0
+            stop = self._rows
 
-        rows: Iterator[Sequence[torch.Tensor]] = (
-            row
-            for batch_tensors in tensor_generator(**kwargs)
-            for row in zip(*batch_tensors)
+        def iter_rows(
+            gen: TensorGenerator, buffer_size: int
+        ) -> Iterator[Sequence[Tensor]]:
+            for batch_tensors in gen.iter_tensors(buffer_size, start, stop):
+                for row in zip(*batch_tensors):
+                    yield row
+
+        rows: Iterator[Sequence[Tensor]] = (
+            (*x_row, *y_row)
+            for x_row, y_row in zip(
+                iter_rows(self._x_gen, self._x_buffer_size),
+                iter_rows(self._y_gen, self._y_buffer_size),
+            )
         )
         if self._shuffle_buffer_size > 0:
             rows = iter_shuffled(rows, self._shuffle_buffer_size)
@@ -172,9 +195,3 @@ def iter_shuffled(iterable: Iterable[T], buffer_size: int) -> Iterator[T]:
     random.shuffle(buffer)
     while buffer:
         yield buffer.pop()
-
-
-class PyTorchSparseTensorGenerator(TileDBSparseTensorGenerator[torch.Tensor]):
-    @staticmethod
-    def _tensor_from_coo(coo: sparse.COO) -> torch.Tensor:
-        return torch.sparse_coo_tensor(coo.coords, coo.data, coo.shape)
