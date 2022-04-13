@@ -1,5 +1,4 @@
-from abc import ABC, abstractmethod
-from typing import Generic, Iterator, Sequence, TypeVar
+from typing import Iterator, Sequence
 
 import numpy as np
 import sparse
@@ -7,8 +6,6 @@ import sparse
 import tiledb
 
 from ._batch_utils import iter_slices
-
-Tensor = TypeVar("Tensor")
 
 
 class TileDBNumpyGenerator:
@@ -40,8 +37,8 @@ class TileDBNumpyGenerator:
             yield tuple(query[read_slice].values())
 
 
-class TileDBSparseTensorGenerator(ABC, Generic[Tensor]):
-    """Generator of sparse tensors read from a TileDB array."""
+class TileDBSparseCOOGenerator:
+    """Generator of sparse.COO tensors read from a TileDB array."""
 
     def __init__(self, array: tiledb.Array, attrs: Sequence[str]) -> None:
         self._array = array
@@ -51,7 +48,7 @@ class TileDBSparseTensorGenerator(ABC, Generic[Tensor]):
 
     def iter_tensors(
         self, buffer_size: int, start_offset: int, stop_offset: int
-    ) -> Iterator[Sequence[Tensor]]:
+    ) -> Iterator[Sequence[sparse.COO]]:
         """
         Generate batches of tensors.
 
@@ -71,12 +68,4 @@ class TileDBSparseTensorGenerator(ABC, Generic[Tensor]):
             if start:
                 coords[0] -= start
             shape = (read_slice.stop - start, *self._row_shape)
-            yield tuple(
-                self._tensor_from_coo(sparse.COO(coords, data, shape))
-                for data in buffer.values()
-            )
-
-    @staticmethod
-    @abstractmethod
-    def _tensor_from_coo(coo: sparse.COO) -> Tensor:
-        """Convert a sparse.COO to a Tensor"""
+            yield tuple(sparse.COO(coords, data, shape) for data in buffer.values())

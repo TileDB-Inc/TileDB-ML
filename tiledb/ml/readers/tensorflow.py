@@ -2,22 +2,25 @@
 
 import math
 import operator
-from typing import Optional, Sequence, Tuple, Union
+from typing import Iterator, Optional, Sequence, Tuple, Union
 
-import sparse
 import tensorflow as tf
 
 import tiledb
 
 from ._batch_utils import iter_slices
 from ._buffer_utils import get_attr_names, get_buffer_size
-from ._tensor_gen import TileDBNumpyGenerator, TileDBSparseTensorGenerator
+from ._tensor_gen import TileDBNumpyGenerator, TileDBSparseCOOGenerator
 
 
-class TensorflowSparseTensorGenerator(TileDBSparseTensorGenerator[tf.SparseTensor]):
-    @staticmethod
-    def _tensor_from_coo(coo: sparse.COO) -> tf.SparseTensor:
-        return tf.SparseTensor(coo.coords.T, coo.data, coo.shape)
+class TensorflowSparseTensorGenerator(TileDBSparseCOOGenerator):
+    def iter_tensors(
+        self, buffer_size: int, start_offset: int, stop_offset: int
+    ) -> Iterator[Sequence[tf.SparseTensor]]:
+        return (
+            tuple(tf.SparseTensor(coo.coords.T, coo.data, coo.shape) for coo in coos)
+            for coos in super().iter_tensors(buffer_size, start_offset, stop_offset)
+        )
 
 
 def TensorflowTileDBDataset(

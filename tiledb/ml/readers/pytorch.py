@@ -6,19 +6,23 @@ import random
 from typing import Any, Callable, Iterable, Iterator, Optional, Sequence, TypeVar, Union
 
 import numpy as np
-import sparse
 import torch
 
 import tiledb
 
 from ._buffer_utils import get_attr_names, get_buffer_size
-from ._tensor_gen import TileDBNumpyGenerator, TileDBSparseTensorGenerator
+from ._tensor_gen import TileDBNumpyGenerator, TileDBSparseCOOGenerator
 
 
-class PyTorchSparseTensorGenerator(TileDBSparseTensorGenerator[torch.Tensor]):
-    @staticmethod
-    def _tensor_from_coo(coo: sparse.COO) -> torch.Tensor:
-        return torch.sparse_coo_tensor(coo.coords, coo.data, coo.shape)
+class PyTorchSparseTensorGenerator(TileDBSparseCOOGenerator):
+    def iter_tensors(
+        self, buffer_size: int, start_offset: int, stop_offset: int
+    ) -> Iterator[Sequence[torch.Tensor]]:
+        sparse_coo_tensor = torch.sparse_coo_tensor
+        return (
+            tuple(sparse_coo_tensor(coo.coords, coo.data, coo.shape) for coo in coos)
+            for coos in super().iter_tensors(buffer_size, start_offset, stop_offset)
+        )
 
 
 Tensor = Union[np.ndarray, torch.Tensor]
@@ -120,7 +124,7 @@ class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Sequence[Tensor]]):
         worker_info = torch.utils.data.get_worker_info()
         if worker_info is not None:
             for gen in self._x_gen, self._y_gen:
-                if isinstance(gen, TileDBSparseTensorGenerator):
+                if isinstance(gen, TileDBSparseCOOGenerator):
                     raise NotImplementedError(
                         "https://github.com/pytorch/pytorch/issues/20248"
                     )
