@@ -1,20 +1,17 @@
 """Functionality for loading data from TileDB arrays to the Tensorflow Data API."""
 
-from functools import partial
-from typing import Iterator, Optional, Sequence, Union
+import math
+from typing import Iterator, Optional, Sequence, Tuple, Union
 
+import numpy as np
 import sparse
 import tensorflow as tf
 
 import tiledb
 
+from ._batch_utils import iter_slices
 from ._buffer_utils import get_attr_names, get_buffer_size
 from ._tensor_gen import TileDBSparseTensorGenerator, tensor_generator
-
-# TODO: We have to track the following issues:
-# - https://github.com/tensorflow/tensorflow/issues/47532
-# - https://github.com/tensorflow/tensorflow/issues/47931
-# - https://github.com/tensorflow/tensorflow/issues/44565
 
 
 def TensorflowTileDBDataset(
@@ -27,6 +24,7 @@ def TensorflowTileDBDataset(
     prefetch: int = tf.data.AUTOTUNE,
     x_attrs: Sequence[str] = (),
     y_attrs: Sequence[str] = (),
+    num_workers: int = 0,
 ) -> tf.data.Dataset:
     """Return a tf.data.Dataset for loading data from TileDB arrays.
 
@@ -40,6 +38,9 @@ def TensorflowTileDBDataset(
         By default, the buffer size is dynamically tuned.
     :param x_attrs: Attribute names of x_array.
     :param y_attrs: Attribute names of y_array.
+    :param num_workers: If greater than zero, create a threadpool of `num_workers` threads
+        used to fetch inputs asynchronously and in parallel. Note: yielded batches may
+        be shuffled even if `shuffle_buffer_size` is zero when `num_workers` > 1.
     """
     # Check that x_array and y_array have the same number of rows
     rows: int = x_array.shape[0]
@@ -51,23 +52,50 @@ def TensorflowTileDBDataset(
     if not y_attrs:
         y_attrs = get_attr_names(y_array.schema)
 
-    dataset = tf.data.Dataset.from_generator(
-        partial(
-            tensor_generator,
+    x_buffer_size = get_buffer_size(x_array, x_attrs, buffer_bytes)
+    y_buffer_size = get_buffer_size(y_array, y_attrs, buffer_bytes)
+    output_signature = (
+        *_iter_tensor_specs(x_array.schema, x_attrs),
+        *_iter_tensor_specs(y_array.schema, y_attrs),
+    )
+
+    def iter_tensor_tuples(
+        start_offset: int, stop_offset: int
+    ) -> Iterator[Sequence[Union[np.ndarray, tf.SparseTensor]]]:
+        return tensor_generator(
             x_array=x_array,
             y_array=y_array,
-            x_buffer_size=get_buffer_size(x_array, x_attrs, buffer_bytes),
-            y_buffer_size=get_buffer_size(y_array, y_attrs, buffer_bytes),
+            x_buffer_size=x_buffer_size,
+            y_buffer_size=y_buffer_size,
             x_attrs=x_attrs,
             y_attrs=y_attrs,
             sparse_generator_cls=TensorflowSparseTensorGenerator,
-        ),
-        output_signature=(
-            *_iter_tensor_specs(x_array.schema, x_attrs),
-            *_iter_tensor_specs(y_array.schema, y_attrs),
-        ),
-    )
-    dataset = dataset.unbatch()
+            start_offset=start_offset,
+            stop_offset=stop_offset,
+        )
+
+    def bounded_dataset(bounds: Union[Tuple[int, int], tf.Tensor]) -> tf.data.Dataset:
+        return (
+            tf.data.Dataset.from_generator(
+                iter_tensor_tuples,
+                args=(bounds[0], bounds[1]),
+                output_signature=output_signature,
+            )
+            .unbatch()
+            .prefetch(prefetch)
+        )
+
+    if num_workers:
+        per_worker = int(math.ceil(rows / num_workers))
+        offsets = [(s.start, s.stop) for s in iter_slices(0, rows, per_worker)]
+        offsets_tensor = tf.convert_to_tensor(offsets, dtype=tf.int64)
+        offsets_dataset = tf.data.Dataset.from_tensor_slices(offsets_tensor)
+        dataset = offsets_dataset.interleave(
+            bounded_dataset, num_parallel_calls=num_workers, deterministic=False
+        )
+    else:
+        dataset = bounded_dataset((0, rows))
+
     if shuffle_buffer_size > 0:
         dataset = dataset.shuffle(shuffle_buffer_size)
     return dataset.batch(batch_size).prefetch(prefetch)

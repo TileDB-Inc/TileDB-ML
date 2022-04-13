@@ -12,6 +12,8 @@ import tiledb
 
 
 def parametrize_for_dataset(
+    num_rows=(107,),
+    num_workers=(0, 2),
     x_sparse=(True, False),
     y_sparse=(True, False),
     x_shape=((10,), (10, 3)),
@@ -23,6 +25,8 @@ def parametrize_for_dataset(
     shuffle_buffer_size=(0, 16),
 ):
     argnames = [
+        "num_rows",
+        "num_workers",
         "x_sparse",
         "y_sparse",
         "x_shape",
@@ -34,6 +38,8 @@ def parametrize_for_dataset(
         "shuffle_buffer_size",
     ]
     argvalues = it.product(
+        num_rows,
+        num_workers,
         x_sparse,
         y_sparse,
         x_shape,
