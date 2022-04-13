@@ -6,6 +6,7 @@ import random
 from typing import Any, Callable, Iterable, Iterator, Optional, Sequence, TypeVar, Union
 
 import numpy as np
+import sparse
 import torch
 
 import tiledb
@@ -13,20 +14,8 @@ import tiledb
 from ._buffer_utils import get_attr_names, get_buffer_size
 from ._tensor_gen import TileDBNumpyGenerator, TileDBSparseCOOGenerator
 
-
-class PyTorchSparseTensorGenerator(TileDBSparseCOOGenerator):
-    def iter_tensors(
-        self, buffer_size: int, start_offset: int, stop_offset: int
-    ) -> Iterator[Sequence[torch.Tensor]]:
-        sparse_coo_tensor = torch.sparse_coo_tensor
-        return (
-            tuple(sparse_coo_tensor(coo.coords, coo.data, coo.shape) for coo in coos)
-            for coos in super().iter_tensors(buffer_size, start_offset, stop_offset)
-        )
-
-
 Tensor = Union[np.ndarray, torch.Tensor]
-TensorGenerator = Union[TileDBNumpyGenerator, PyTorchSparseTensorGenerator]
+TensorGenerator = Union[TileDBNumpyGenerator, TileDBSparseCOOGenerator]
 
 
 def PyTorchTileDBDataLoader(
@@ -72,11 +61,7 @@ def PyTorchTileDBDataLoader(
         prefetch_factor=prefetch,
         num_workers=num_workers,
         collate_fn=CompositeCollator(
-            (
-                np_arrays_collate
-                if not is_sparse
-                else torch.utils.data.dataloader.default_collate
-            )
+            ndarray_collate if not is_sparse else sparse_coo_collate
             for is_sparse in it.chain(
                 it.repeat(x_schema.sparse, len(x_attrs)),
                 it.repeat(y_schema.sparse, len(y_attrs)),
@@ -106,12 +91,12 @@ class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Sequence[Tensor]]):
             y_attrs = get_attr_names(y_array.schema)
 
         self._x_gen: TensorGenerator = (
-            PyTorchSparseTensorGenerator(x_array, x_attrs)
+            TileDBSparseCOOGenerator(x_array, x_attrs)
             if x_array.schema.sparse
             else TileDBNumpyGenerator(x_array, x_attrs)
         )
         self._y_gen: TensorGenerator = (
-            PyTorchSparseTensorGenerator(y_array, y_attrs)
+            TileDBSparseCOOGenerator(y_array, y_attrs)
             if y_array.schema.sparse
             else TileDBNumpyGenerator(y_array, y_attrs)
         )
@@ -166,16 +151,21 @@ class CompositeCollator:
         self._collators = tuple(collators)
 
     def __call__(self, rows: Sequence[Sequence[Any]]) -> Sequence[torch.Tensor]:
-        columns = list(zip(*rows))
+        columns = tuple(zip(*rows))
         assert len(columns) == len(self._collators)
         return [collator(column) for collator, column in zip(self._collators, columns)]
 
 
-def np_arrays_collate(arrays: Sequence[np.ndarray]) -> torch.Tensor:
+def ndarray_collate(arrays: Sequence[np.ndarray]) -> torch.Tensor:
     # Specialized version of default_collate for collating Numpy arrays
     # Faster than `torch.as_tensor(arrays)` (https://github.com/pytorch/pytorch/pull/51731)
     # and `torch.stack([torch.as_tensor(array) for array in arrays]])`
     return torch.as_tensor(np.stack(arrays))
+
+
+def sparse_coo_collate(arrays: Sequence[sparse.COO]) -> torch.Tensor:
+    stacked = sparse.stack(arrays)
+    return torch.sparse_coo_tensor(stacked.coords, stacked.data, stacked.shape)
 
 
 T = TypeVar("T")

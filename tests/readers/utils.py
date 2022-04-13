@@ -5,6 +5,7 @@ from contextlib import contextmanager
 
 import numpy as np
 import pytest
+import sparse
 import tensorflow as tf
 import torch
 
@@ -149,16 +150,14 @@ def _validate_tensor(tensor, expected_sparse, expected_shape, batch_size=None):
         # num_rows may be less than batch_size
         assert num_rows <= batch_size, (num_rows, batch_size)
     assert tuple(row_shape) == expected_shape
-    assert _is_sparse_tensor(tensor) == expected_sparse
+    assert _is_sparse(tensor) == expected_sparse
 
 
-def _is_sparse_tensor(tensor):
-    if isinstance(tensor, np.ndarray):
-        return False
+def _is_sparse(tensor):
     if isinstance(tensor, torch.Tensor):
         return tensor.is_sparse
-    if isinstance(tensor, tf.SparseTensor):
+    if isinstance(tensor, (sparse.SparseArray, tf.SparseTensor)):
         return True
-    if isinstance(tensor, tf.Tensor):
+    if isinstance(tensor, (np.ndarray, tf.Tensor)):
         return False
     assert False, f"Unknown tensor type: {type(tensor)}"
