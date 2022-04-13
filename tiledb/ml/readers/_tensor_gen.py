@@ -5,7 +5,11 @@ import sparse
 
 import tiledb
 
-from ._batch_utils import iter_slices
+
+def iter_slices(start: int, stop: int, step: int) -> Iterator[slice]:
+    offsets = range(start, stop, step)
+    yield from map(slice, offsets, offsets[1:])
+    yield slice(offsets[-1], stop)
 
 
 class TileDBNumpyGenerator:

@@ -8,9 +8,8 @@ import tensorflow as tf
 
 import tiledb
 
-from ._batch_utils import iter_slices
 from ._buffer_utils import get_attr_names, get_buffer_size
-from ._tensor_gen import TileDBNumpyGenerator, TileDBSparseCOOGenerator
+from ._tensor_gen import TileDBNumpyGenerator, TileDBSparseCOOGenerator, iter_slices
 
 
 class TensorflowSparseTensorGenerator(TileDBSparseCOOGenerator):
