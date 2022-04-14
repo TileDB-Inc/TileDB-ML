@@ -1,3 +1,5 @@
+from importlib.metadata import PackageNotFoundError, version
+
 import setuptools
 
 setuptools.setup(
@@ -7,3 +9,9 @@ setuptools.setup(
         "write_to": "tiledb/ml/version.py",
     }
 )
+
+try:
+    __version__ = version("package-name")
+except PackageNotFoundError:
+    # package is not installed
+    pass
