@@ -1,4 +1,5 @@
 import setuptools
+from pkg_resources import DistributionNotFound, get_distribution  # type: ignore
 
 setuptools.setup(
     use_scm_version={
@@ -7,3 +8,9 @@ setuptools.setup(
         "write_to": "tiledb/ml/version.py",
     }
 )
+
+try:
+    __version__ = get_distribution("tiledb-ml").version
+except DistributionNotFound:
+    # package is not installed
+    pass
