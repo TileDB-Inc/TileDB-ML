@@ -1,17 +1,25 @@
 """Functionality for loading data from TileDB arrays to the Tensorflow Data API."""
 
 import math
+import operator
 from typing import Iterator, Optional, Sequence, Tuple, Union
 
-import numpy as np
-import sparse
 import tensorflow as tf
 
 import tiledb
 
-from ._batch_utils import iter_slices
 from ._buffer_utils import get_attr_names, get_buffer_size
-from ._tensor_gen import TileDBSparseTensorGenerator, tensor_generator
+from ._tensor_gen import TileDBNumpyGenerator, TileDBSparseCOOGenerator, iter_slices
+
+
+class TensorflowSparseTensorGenerator(TileDBSparseCOOGenerator):
+    def iter_tensors(
+        self, buffer_size: int, start_offset: int, stop_offset: int
+    ) -> Iterator[Sequence[tf.SparseTensor]]:
+        return (
+            tuple(tf.SparseTensor(coo.coords.T, coo.data, coo.shape) for coo in coos)
+            for coos in super().iter_tensors(buffer_size, start_offset, stop_offset)
+        )
 
 
 def TensorflowTileDBDataset(
@@ -52,38 +60,32 @@ def TensorflowTileDBDataset(
     if not y_attrs:
         y_attrs = get_attr_names(y_array.schema)
 
+    x_gen: Union[TileDBNumpyGenerator, TensorflowSparseTensorGenerator] = (
+        TensorflowSparseTensorGenerator(x_array, x_attrs)
+        if x_array.schema.sparse
+        else TileDBNumpyGenerator(x_array, x_attrs)
+    )
+    y_gen: Union[TileDBNumpyGenerator, TensorflowSparseTensorGenerator] = (
+        TensorflowSparseTensorGenerator(y_array, y_attrs)
+        if y_array.schema.sparse
+        else TileDBNumpyGenerator(y_array, y_attrs)
+    )
     x_buffer_size = get_buffer_size(x_array, x_attrs, buffer_bytes)
     y_buffer_size = get_buffer_size(y_array, y_attrs, buffer_bytes)
-    output_signature = (
-        *_iter_tensor_specs(x_array.schema, x_attrs),
-        *_iter_tensor_specs(y_array.schema, y_attrs),
-    )
-
-    def iter_tensor_tuples(
-        start_offset: int, stop_offset: int
-    ) -> Iterator[Sequence[Union[np.ndarray, tf.SparseTensor]]]:
-        return tensor_generator(
-            x_array=x_array,
-            y_array=y_array,
-            x_buffer_size=x_buffer_size,
-            y_buffer_size=y_buffer_size,
-            x_attrs=x_attrs,
-            y_attrs=y_attrs,
-            sparse_generator_cls=TensorflowSparseTensorGenerator,
-            start_offset=start_offset,
-            stop_offset=stop_offset,
-        )
 
     def bounded_dataset(bounds: Union[Tuple[int, int], tf.Tensor]) -> tf.data.Dataset:
-        return (
-            tf.data.Dataset.from_generator(
-                iter_tensor_tuples,
-                args=(bounds[0], bounds[1]),
-                output_signature=output_signature,
-            )
-            .unbatch()
-            .prefetch(prefetch)
+        x_dataset = tf.data.Dataset.from_generator(
+            x_gen.iter_tensors,
+            args=(x_buffer_size, bounds[0], bounds[1]),
+            output_signature=_get_tensor_specs(x_array.schema, x_attrs),
         )
+        y_dataset = tf.data.Dataset.from_generator(
+            y_gen.iter_tensors,
+            args=(y_buffer_size, bounds[0], bounds[1]),
+            output_signature=_get_tensor_specs(y_array.schema, y_attrs),
+        )
+        zipped_dataset = tf.data.Dataset.zip((x_dataset.unbatch(), y_dataset.unbatch()))
+        return zipped_dataset.map(operator.add)
 
     if num_workers:
         per_worker = int(math.ceil(rows / num_workers))
@@ -101,15 +103,11 @@ def TensorflowTileDBDataset(
     return dataset.batch(batch_size).prefetch(prefetch)
 
 
-def _iter_tensor_specs(
+def _get_tensor_specs(
     schema: tiledb.ArraySchema, attrs: Sequence[str]
-) -> Iterator[Union[tf.TensorSpec, tf.SparseTensorSpec]]:
+) -> Sequence[Union[tf.TensorSpec, tf.SparseTensorSpec]]:
     cls = tf.SparseTensorSpec if schema.sparse else tf.TensorSpec
-    for attr in attrs:
-        yield cls(shape=(None, *schema.shape[1:]), dtype=schema.attr(attr).dtype)
-
-
-class TensorflowSparseTensorGenerator(TileDBSparseTensorGenerator[tf.SparseTensor]):
-    @staticmethod
-    def _tensor_from_coo(coo: sparse.COO) -> tf.SparseTensor:
-        return tf.SparseTensor(coo.coords.T, coo.data, coo.shape)
+    return tuple(
+        cls(shape=(None, *schema.shape[1:]), dtype=schema.attr(attr).dtype)
+        for attr in attrs
+    )
