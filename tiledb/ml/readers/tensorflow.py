@@ -2,24 +2,15 @@
 
 import math
 import operator
-from typing import Iterator, Optional, Sequence, Tuple, Union
+from typing import Optional, Sequence, Tuple, Union
 
+import sparse
 import tensorflow as tf
 
 import tiledb
 
 from ._buffer_utils import get_attr_names, get_buffer_size
-from ._tensor_gen import TileDBNumpyGenerator, TileDBSparseCOOGenerator, iter_slices
-
-
-class TensorflowSparseTensorGenerator(TileDBSparseCOOGenerator):
-    def iter_tensors(
-        self, buffer_size: int, start_offset: int, stop_offset: int
-    ) -> Iterator[Sequence[tf.SparseTensor]]:
-        return (
-            tuple(tf.SparseTensor(coo.coords.T, coo.data, coo.shape) for coo in coos)
-            for coos in super().iter_tensors(buffer_size, start_offset, stop_offset)
-        )
+from ._tensor_gen import TileDBNumpyGenerator, TileDBSparseGenerator, iter_slices
 
 
 def TensorflowTileDBDataset(
@@ -60,16 +51,8 @@ def TensorflowTileDBDataset(
     if not y_attrs:
         y_attrs = get_attr_names(y_array.schema)
 
-    x_gen: Union[TileDBNumpyGenerator, TensorflowSparseTensorGenerator] = (
-        TensorflowSparseTensorGenerator(x_array, x_attrs)
-        if x_array.schema.sparse
-        else TileDBNumpyGenerator(x_array, x_attrs)
-    )
-    y_gen: Union[TileDBNumpyGenerator, TensorflowSparseTensorGenerator] = (
-        TensorflowSparseTensorGenerator(y_array, y_attrs)
-        if y_array.schema.sparse
-        else TileDBNumpyGenerator(y_array, y_attrs)
-    )
+    x_gen = _get_tensor_generator(x_array, x_attrs)
+    y_gen = _get_tensor_generator(y_array, y_attrs)
     x_buffer_size = get_buffer_size(x_array, x_attrs, buffer_bytes)
     y_buffer_size = get_buffer_size(y_array, y_attrs, buffer_bytes)
 
@@ -111,3 +94,16 @@ def _get_tensor_specs(
         cls(shape=(None, *schema.shape[1:]), dtype=schema.attr(attr).dtype)
         for attr in attrs
     )
+
+
+def _get_tensor_generator(
+    array: tiledb.Array, attrs: Sequence[str]
+) -> Union[TileDBNumpyGenerator, TileDBSparseGenerator[tf.SparseTensor]]:
+    if not array.schema.sparse:
+        return TileDBNumpyGenerator(array, attrs)
+    else:
+        return TileDBSparseGenerator(array, attrs, _coo_to_sparse_tensor)
+
+
+def _coo_to_sparse_tensor(coo: sparse.COO) -> tf.SparseTensor:
+    return tf.SparseTensor(coo.coords.T, coo.data, coo.shape)
