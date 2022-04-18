@@ -1,4 +1,4 @@
-from typing import Iterator, Sequence
+from typing import Callable, Generic, Iterator, Sequence, TypeVar
 
 import numpy as np
 import sparse
@@ -41,18 +41,27 @@ class TileDBNumpyGenerator:
             yield tuple(query[read_slice].values())
 
 
-class TileDBSparseCOOGenerator:
+T = TypeVar("T")
+
+
+class TileDBSparseGenerator(Generic[T]):
     """Generator of sparse.COO tensors read from a TileDB array."""
 
-    def __init__(self, array: tiledb.Array, attrs: Sequence[str]) -> None:
+    def __init__(
+        self,
+        array: tiledb.Array,
+        attrs: Sequence[str],
+        from_coo: Callable[[sparse.COO], T],
+    ) -> None:
         self._array = array
         self._attrs = attrs
+        self._from_coo = from_coo
         self._dims = tuple(array.domain.dim(i).name for i in range(array.ndim))
         self._row_shape = array.shape[1:]
 
     def iter_tensors(
         self, buffer_size: int, start_offset: int, stop_offset: int
-    ) -> Iterator[Sequence[sparse.COO]]:
+    ) -> Iterator[Sequence[T]]:
         """
         Generate batches of tensors.
 
@@ -64,6 +73,7 @@ class TileDBSparseCOOGenerator:
         :param stop_offset: Stop row offset; defaults to number of rows.
         """
         query = self._array.query(attrs=self._attrs)
+        from_coo = self._from_coo
         for read_slice in iter_slices(start_offset, stop_offset, buffer_size):
             buffer = query[read_slice]
             coords = [buffer.pop(dim) for dim in self._dims]
@@ -72,4 +82,5 @@ class TileDBSparseCOOGenerator:
             if start:
                 coords[0] -= start
             shape = (read_slice.stop - start, *self._row_shape)
-            yield tuple(sparse.COO(coords, data, shape) for data in buffer.values())
+            coos = (sparse.COO(coords, data, shape) for data in buffer.values())
+            yield tuple(map(from_coo, coos))

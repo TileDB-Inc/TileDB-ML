@@ -2,20 +2,22 @@
 
 import itertools as it
 import math
+import operator
 import random
 from typing import Any, Callable, Iterable, Iterator, Optional, Sequence, TypeVar, Union
 
 import numpy as np
+import scipy.sparse
 import sparse
 import torch
 
 import tiledb
 
 from ._buffer_utils import get_attr_names, get_buffer_size
-from ._tensor_gen import TileDBNumpyGenerator, TileDBSparseCOOGenerator
+from ._tensor_gen import TileDBNumpyGenerator, TileDBSparseGenerator
 
-Tensor = Union[np.ndarray, torch.Tensor]
-TensorGenerator = Union[TileDBNumpyGenerator, TileDBSparseCOOGenerator]
+TensorSequence = Sequence[Union[np.ndarray, sparse.COO, scipy.sparse.csr_matrix]]
+TensorGenerator = Union[TileDBNumpyGenerator, TileDBSparseGenerator]
 
 
 def PyTorchTileDBDataLoader(
@@ -60,17 +62,16 @@ def PyTorchTileDBDataLoader(
         batch_size=batch_size,
         prefetch_factor=prefetch,
         num_workers=num_workers,
-        collate_fn=CompositeCollator(
-            ndarray_collate if not is_sparse else sparse_coo_collate
-            for is_sparse in it.chain(
-                it.repeat(x_schema.sparse, len(x_attrs)),
-                it.repeat(y_schema.sparse, len(y_attrs)),
+        collate_fn=_CompositeCollator(
+            it.chain(
+                it.repeat(_get_tensor_collator(x_array), len(x_attrs)),
+                it.repeat(_get_tensor_collator(y_array), len(y_attrs)),
             )
         ),
     )
 
 
-class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Sequence[Tensor]]):
+class PyTorchTileDBDataset(torch.utils.data.IterableDataset[TensorSequence]):
     def __init__(
         self,
         x_array: tiledb.Array,
@@ -90,26 +91,18 @@ class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Sequence[Tensor]]):
         if not y_attrs:
             y_attrs = get_attr_names(y_array.schema)
 
-        self._x_gen: TensorGenerator = (
-            TileDBSparseCOOGenerator(x_array, x_attrs)
-            if x_array.schema.sparse
-            else TileDBNumpyGenerator(x_array, x_attrs)
-        )
-        self._y_gen: TensorGenerator = (
-            TileDBSparseCOOGenerator(y_array, y_attrs)
-            if y_array.schema.sparse
-            else TileDBNumpyGenerator(y_array, y_attrs)
-        )
+        self._x_gen = _get_tensor_generator(x_array, x_attrs)
+        self._y_gen = _get_tensor_generator(y_array, y_attrs)
         self._x_buffer_size = get_buffer_size(x_array, x_attrs, buffer_bytes)
         self._y_buffer_size = get_buffer_size(y_array, y_attrs, buffer_bytes)
         self._rows = rows
         self._shuffle_buffer_size = shuffle_buffer_size
 
-    def __iter__(self) -> Iterator[Sequence[Tensor]]:
+    def __iter__(self) -> Iterator[TensorSequence]:
         worker_info = torch.utils.data.get_worker_info()
         if worker_info is not None:
             for gen in self._x_gen, self._y_gen:
-                if isinstance(gen, TileDBSparseCOOGenerator):
+                if isinstance(gen, TileDBSparseGenerator):
                     raise NotImplementedError(
                         "https://github.com/pytorch/pytorch/issues/20248"
                     )
@@ -122,12 +115,12 @@ class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Sequence[Tensor]]):
 
         def iter_rows(
             gen: TensorGenerator, buffer_size: int
-        ) -> Iterator[Sequence[Tensor]]:
+        ) -> Iterator[TensorSequence]:
             for batch_tensors in gen.iter_tensors(buffer_size, start, stop):
                 for row in zip(*batch_tensors):
                     yield row
 
-        rows: Iterator[Sequence[Tensor]] = (
+        rows: Iterator[TensorSequence] = (
             (*x_row, *y_row)
             for x_row, y_row in zip(
                 iter_rows(self._x_gen, self._x_buffer_size),
@@ -135,11 +128,31 @@ class PyTorchTileDBDataset(torch.utils.data.IterableDataset[Sequence[Tensor]]):
             )
         )
         if self._shuffle_buffer_size > 0:
-            rows = iter_shuffled(rows, self._shuffle_buffer_size)
+            rows = _iter_shuffled(rows, self._shuffle_buffer_size)
         return rows
 
 
-class CompositeCollator:
+def _get_tensor_generator(array: tiledb.Array, attrs: Sequence[str]) -> TensorGenerator:
+    if not array.schema.sparse:
+        return TileDBNumpyGenerator(array, attrs)
+    elif array.ndim == 2:
+        return TileDBSparseGenerator(array, attrs, operator.methodcaller("tocsr"))
+    else:
+        return TileDBSparseGenerator(array, attrs, lambda x: x)
+
+
+def _get_tensor_collator(
+    array: tiledb.Array,
+) -> Callable[[TensorSequence], torch.Tensor]:
+    if not array.schema.sparse:
+        return _ndarray_collate
+    elif array.ndim == 2:
+        return _sparse_csr_collate
+    else:
+        return _sparse_coo_collate
+
+
+class _CompositeCollator:
     """
     A callable for collating "rows" of data into Tensors.
 
@@ -156,22 +169,28 @@ class CompositeCollator:
         return [collator(column) for collator, column in zip(self._collators, columns)]
 
 
-def ndarray_collate(arrays: Sequence[np.ndarray]) -> torch.Tensor:
+def _ndarray_collate(arrays: Sequence[np.ndarray]) -> torch.Tensor:
     # Specialized version of default_collate for collating Numpy arrays
     # Faster than `torch.as_tensor(arrays)` (https://github.com/pytorch/pytorch/pull/51731)
     # and `torch.stack([torch.as_tensor(array) for array in arrays]])`
-    return torch.as_tensor(np.stack(arrays))
+    return torch.from_numpy(np.stack(arrays))
 
 
-def sparse_coo_collate(arrays: Sequence[sparse.COO]) -> torch.Tensor:
+def _sparse_coo_collate(arrays: Sequence[sparse.COO]) -> torch.Tensor:
     stacked = sparse.stack(arrays)
     return torch.sparse_coo_tensor(stacked.coords, stacked.data, stacked.shape)
 
 
-T = TypeVar("T")
+def _sparse_csr_collate(arrays: Sequence[scipy.sparse.csr_matrix]) -> torch.Tensor:
+    stacked = scipy.sparse.vstack(arrays).tocoo()
+    coords = np.stack((stacked.row, stacked.col))
+    return torch.sparse_coo_tensor(coords, stacked.data, stacked.shape)
 
 
-def iter_shuffled(iterable: Iterable[T], buffer_size: int) -> Iterator[T]:
+_T = TypeVar("_T")
+
+
+def _iter_shuffled(iterable: Iterable[_T], buffer_size: int) -> Iterator[_T]:
     """
     Shuffle the given iterable with a buffer.
 
