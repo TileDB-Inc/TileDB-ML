@@ -160,7 +160,7 @@ def _validate_tensor(tensor, expected_sparse, expected_shape, batch_size=None):
 
 def _is_sparse(tensor):
     if isinstance(tensor, torch.Tensor):
-        return tensor.is_sparse
+        return tensor.layout in (torch.sparse_coo, torch.sparse_csr)
     if isinstance(tensor, (scipy.sparse.spmatrix, sparse.SparseArray, tf.SparseTensor)):
         return True
     if isinstance(tensor, (np.ndarray, tf.Tensor)):

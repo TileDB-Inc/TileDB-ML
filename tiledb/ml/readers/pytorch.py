@@ -11,6 +11,14 @@ import scipy.sparse
 import sparse
 import torch
 
+try:
+    # torch >= 1.10
+    sparse_csr_tensor = torch.sparse_csr_tensor
+except AttributeError:
+    # torch < 1.10
+    sparse_csr_tensor = torch._sparse_csr_tensor
+
+
 import tiledb
 
 from ._buffer_utils import get_attr_names, get_buffer_size
@@ -31,6 +39,7 @@ def PyTorchTileDBDataLoader(
     x_attrs: Sequence[str] = (),
     y_attrs: Sequence[str] = (),
     num_workers: int = 0,
+    csr: bool = True,
 ) -> torch.utils.data.DataLoader:
     """Return a DataLoader for loading data from TileDB arrays.
 
@@ -39,14 +48,15 @@ def PyTorchTileDBDataLoader(
     :param batch_size: Size of each batch.
     :param buffer_bytes: Maximum size (in bytes) of memory to allocate for reading
         from each array (default=`tiledb.default_ctx().config()["sm.memory_budget"]`).
+    :param shuffle_buffer_size: Number of elements from which this dataset will sample.
     :param prefetch: Number of samples loaded in advance by each worker. Not applicable
         (and should not be given) when `num_workers` is 0.
-    :param shuffle_buffer_size: Number of elements from which this dataset will sample.
     :param x_attrs: Attribute names of x_array.
     :param y_attrs: Attribute names of y_array.
     :param num_workers: how many subprocesses to use for data loading. 0 means that the
         data will be loaded in the main process. Note: yielded batches may be shuffled
         even if `shuffle_buffer_size` is zero when `num_workers` > 1.
+    :param csr: For sparse 2D arrays, whether to return CSR tensors instead of COO.
     """
     x_schema = x_array.schema
     y_schema = y_array.schema
@@ -64,8 +74,8 @@ def PyTorchTileDBDataLoader(
         num_workers=num_workers,
         collate_fn=_CompositeCollator(
             it.chain(
-                it.repeat(_get_tensor_collator(x_array), len(x_attrs)),
-                it.repeat(_get_tensor_collator(y_array), len(y_attrs)),
+                it.repeat(_get_tensor_collator(x_array, csr), len(x_attrs)),
+                it.repeat(_get_tensor_collator(y_array, csr), len(y_attrs)),
             )
         ),
     )
@@ -142,14 +152,16 @@ def _get_tensor_generator(array: tiledb.Array, attrs: Sequence[str]) -> TensorGe
 
 
 def _get_tensor_collator(
-    array: tiledb.Array,
+    array: tiledb.Array, csr: bool
 ) -> Callable[[TensorSequence], torch.Tensor]:
     if not array.schema.sparse:
         return _ndarray_collate
-    elif array.ndim == 2:
-        return _sparse_csr_collate
-    else:
+    elif array.ndim != 2:
         return _sparse_coo_collate
+    elif csr:
+        return _csr_collate
+    else:
+        return _csr_to_coo_collate
 
 
 class _CompositeCollator:
@@ -170,6 +182,7 @@ class _CompositeCollator:
 
 
 def _ndarray_collate(arrays: Sequence[np.ndarray]) -> torch.Tensor:
+    """Collate multiple Numpy arrays to a torch.Tensor with strided layout."""
     # Specialized version of default_collate for collating Numpy arrays
     # Faster than `torch.as_tensor(arrays)` (https://github.com/pytorch/pytorch/pull/51731)
     # and `torch.stack([torch.as_tensor(array) for array in arrays]])`
@@ -177,14 +190,27 @@ def _ndarray_collate(arrays: Sequence[np.ndarray]) -> torch.Tensor:
 
 
 def _sparse_coo_collate(arrays: Sequence[sparse.COO]) -> torch.Tensor:
+    """Collate multiple sparse.COO arrays to a torch.Tensor with sparse_coo layout."""
     stacked = sparse.stack(arrays)
     return torch.sparse_coo_tensor(stacked.coords, stacked.data, stacked.shape)
 
 
-def _sparse_csr_collate(arrays: Sequence[scipy.sparse.csr_matrix]) -> torch.Tensor:
+def _csr_to_coo_collate(arrays: Sequence[scipy.sparse.csr_matrix]) -> torch.Tensor:
+    """Collate multiple Scipy CSR matrices to a torch.Tensor with sparse_coo layout."""
     stacked = scipy.sparse.vstack(arrays).tocoo()
     coords = np.stack((stacked.row, stacked.col))
     return torch.sparse_coo_tensor(coords, stacked.data, stacked.shape)
+
+
+def _csr_collate(arrays: Sequence[scipy.sparse.csr_matrix]) -> torch.Tensor:
+    """Collate multiple Scipy CSR matrices to a torch.Tensor with sparse_csr layout."""
+    stacked = scipy.sparse.vstack(arrays)
+    return sparse_csr_tensor(
+        torch.from_numpy(stacked.indptr),
+        torch.from_numpy(stacked.indices),
+        stacked.data,
+        stacked.shape,
+    )
 
 
 _T = TypeVar("_T")
