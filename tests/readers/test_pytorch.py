@@ -144,6 +144,7 @@ class TestPyTorchTileDBDataset:
             assert "X and Y arrays must have the same number of rows" in str(ex.value)
 
     @parametrize_for_dataset(x_sparse=[True], shuffle_buffer_size=[0], num_workers=[0])
+    @pytest.mark.parametrize("csr", [True, False])
     def test_sparse_read_order(
         self,
         tmpdir,
@@ -158,6 +159,7 @@ class TestPyTorchTileDBDataset:
         buffer_bytes,
         batch_size,
         shuffle_buffer_size,
+        csr,
     ):
         x_data = rand_array(num_rows, *x_shape, sparse=x_sparse)
         with ingest_in_tiledb(
@@ -174,6 +176,7 @@ class TestPyTorchTileDBDataset:
                 batch_size=batch_size,
                 shuffle_buffer_size=shuffle_buffer_size,
                 num_workers=num_workers,
+                csr=csr,
                 **kwargs
             )
             generated_x_data = np.concatenate(
