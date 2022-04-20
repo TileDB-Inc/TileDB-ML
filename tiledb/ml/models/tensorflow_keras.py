@@ -4,13 +4,16 @@ import contextlib
 import io
 import json
 import logging
+import os
 import pickle
+from collections import defaultdict
 from operator import attrgetter
-from typing import Any, List, Mapping, Optional, Tuple
+from typing import Any, DefaultDict, List, Mapping, Optional, Tuple
 
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.keras import backend, optimizer_v1
+from tensorflow.python.keras.callbacks import TensorBoard as TensorBoard
 from tensorflow.python.keras.engine.functional import Functional
 from tensorflow.python.keras.models import Sequential
 from tensorflow.python.keras.saving import model_config as model_config_lib
@@ -45,6 +48,7 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
         update: bool = False,
         meta: Optional[Meta] = None,
         include_optimizer: bool = False,
+        include_callbacks: Optional[tf.keras.callbacks.CallbackList] = None,
     ) -> None:
         """
         Save a Tensorflow model as a TileDB array.
@@ -64,6 +68,28 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
         optimizer_weights = self._serialize_optimizer_weights(
             include_optimizer=include_optimizer
         )
+        event_files = []
+        if include_callbacks:
+            for cb in include_callbacks:
+                if isinstance(cb, TensorBoard):
+                    if os.path.exists(cb.log_dir):
+                        for file in os.listdir(f"{cb.log_dir}/train"):
+                            if "tfevents" not in file:
+                                continue
+                            with open(f"{cb.log_dir}/train/{file}", "rb") as f:
+                                data = f.read()
+                                event_files.append(
+                                    pickle.dumps(data, protocol=pickle.HIGHEST_PROTOCOL)
+                                )
+
+        tb_meta: DefaultDict[str, Any] = defaultdict(tuple)
+        print(len(event_files))
+        tb_meta["TensorBoard"] = tuple(event_files)
+        # print(tb_meta)
+        # if meta:
+        #     meta |= tb_meta if include_callbacks else {}
+        # else:
+        #     meta = tb_meta if include_callbacks else None
 
         # Create TileDB model array
         if not update:
