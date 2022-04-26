@@ -1,16 +1,21 @@
 """Functionality for loading data from TileDB arrays to the Tensorflow Data API."""
 
 import math
-import operator
 from typing import Optional, Sequence, Tuple, Union
 
+import numpy as np
 import sparse
 import tensorflow as tf
 
 import tiledb
 
 from ._buffer_utils import get_attr_names, get_buffer_size
-from ._tensor_gen import TileDBNumpyGenerator, TileDBSparseGenerator, iter_slices
+from ._tensor_gen import (
+    TileDBNumpyGenerator,
+    TileDBSparseGenerator,
+    TileDBTensorGenerator,
+    iter_slices,
+)
 
 
 def TensorflowTileDBDataset(
@@ -67,8 +72,7 @@ def TensorflowTileDBDataset(
             args=(y_buffer_size, bounds[0], bounds[1]),
             output_signature=_get_tensor_specs(y_array.schema, y_attrs),
         )
-        zipped_dataset = tf.data.Dataset.zip((x_dataset.unbatch(), y_dataset.unbatch()))
-        return zipped_dataset.map(operator.add)
+        return tf.data.Dataset.zip((x_dataset.unbatch(), y_dataset.unbatch()))
 
     if num_workers:
         per_worker = int(math.ceil(rows / num_workers))
@@ -86,19 +90,23 @@ def TensorflowTileDBDataset(
     return dataset.batch(batch_size).prefetch(prefetch)
 
 
+TensorSpec = Union[tf.TensorSpec, tf.SparseTensorSpec]
+
+
 def _get_tensor_specs(
     schema: tiledb.ArraySchema, attrs: Sequence[str]
-) -> Sequence[Union[tf.TensorSpec, tf.SparseTensorSpec]]:
+) -> Union[TensorSpec, Sequence[TensorSpec]]:
     cls = tf.SparseTensorSpec if schema.sparse else tf.TensorSpec
-    return tuple(
+    specs = (
         cls(shape=(None, *schema.shape[1:]), dtype=schema.attr(attr).dtype)
         for attr in attrs
     )
+    return tuple(specs) if len(attrs) > 1 else next(specs)
 
 
 def _get_tensor_generator(
     array: tiledb.Array, attrs: Sequence[str]
-) -> Union[TileDBNumpyGenerator, TileDBSparseGenerator[tf.SparseTensor]]:
+) -> TileDBTensorGenerator[Union[np.ndarray, tf.SparseTensor]]:
     if not array.schema.sparse:
         return TileDBNumpyGenerator(array, attrs)
     else:

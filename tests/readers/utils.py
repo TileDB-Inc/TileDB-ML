@@ -133,14 +133,11 @@ def rand_array(num_rows: int, *row_shape: int, sparse: bool = False) -> np.ndarr
 def validate_tensor_generator(
     generator, num_attrs, x_sparse, y_sparse, x_shape, y_shape, batch_size=None
 ):
-    for tensors in generator:
-        assert len(tensors) == 2 * num_attrs
-        # the first num_attrs tensors are the features (x)
-        for tensor in tensors[:num_attrs]:
-            _validate_tensor(tensor, x_sparse, x_shape, batch_size)
-        # the last num_attrs tensors are the labels (y)
-        for tensor in tensors[num_attrs:]:
-            _validate_tensor(tensor, y_sparse, y_shape, batch_size)
+    for x_tensors, y_tensors in generator:
+        for x_tensor in x_tensors if num_attrs > 1 else [x_tensors]:
+            _validate_tensor(x_tensor, x_sparse, x_shape, batch_size)
+        for y_tensor in y_tensors if num_attrs > 1 else [y_tensors]:
+            _validate_tensor(y_tensor, y_sparse, y_shape, batch_size)
 
 
 def _validate_tensor(tensor, expected_sparse, expected_shape, batch_size=None):
