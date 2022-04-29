@@ -69,24 +69,18 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
             include_optimizer=include_optimizer
         )
 
-        event_files: DefaultDict[str, bytes] = defaultdict(bytes)
         if include_callbacks:
             for cb in include_callbacks:
                 if isinstance(cb, TensorBoard):
-                    if os.path.exists(cb.log_dir):
-                        for file in os.listdir(f"{cb.log_dir}/train"):
-                            if "tfevents" not in file:
-                                continue
-                            with open(f"{cb.log_dir}/train/{file}", "rb") as f:
-                                data = f.read()
-                                event_files[f"{cb.log_dir}/train/{file}"] = data
+                    event_files = self._get_tensorboard_files(cb.log_dir)
 
         tb_meta: DefaultDict[str, bytes] = defaultdict(bytes)
         tb_meta["TENSORBOARD"] = pickle.dumps(event_files, protocol=4)
 
+        # Updates the meta dictionary with tensorboard metadata if existed
         if include_callbacks:
             if meta:
-                meta.update(tb_meta)
+                meta = {**meta, **tb_meta}
             else:
                 meta = tb_meta
 
@@ -416,3 +410,19 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
                 )
             var_value_tuples.extend(zip(weight_vars, read_weight_values))
         backend.batch_set_value(var_value_tuples)
+
+    def _get_tensorboard_files(self, log_dir: str) -> Mapping[str, bytes]:
+        """
+        This function accepts a Path log directory, evaluates path existense and returns a dictionary of TB log event files
+        :param log_dir: The directory that Tensorboard callback uses to store its files
+        :return DefaultDict: The DefaultDict[str, bytes] where key is the event file name and values are bytes of file data
+        """
+        event_files: DefaultDict[str, bytes] = defaultdict(bytes)
+        if os.path.exists(log_dir):
+            for file in os.listdir(f"{log_dir}/train"):
+                if "tfevents" not in file:
+                    continue
+                with open(f"{log_dir}/train/{file}", "rb") as f:
+                    data = f.read()
+                    event_files[f"{log_dir}/train/{file}"] = data
+        return event_files

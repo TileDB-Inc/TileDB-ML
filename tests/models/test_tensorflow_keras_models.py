@@ -2,6 +2,7 @@
 
 import io
 import os
+import pickle
 import platform
 
 import numpy as np
@@ -529,3 +530,31 @@ class TestTensorflowKerasModelCloud:
         assert "Please avoid using file property key names as metadata keys!" in str(
             ex.value
         )
+
+    def test_tensorboard_callback_meta(self, tmpdir, mocker):
+        model = keras.models.Sequential()
+        model.add(keras.layers.Flatten(input_shape=(10, 10)))
+        tiledb_array = os.path.join(tmpdir, "model_array")
+        tiledb_obj = TensorflowKerasTileDBModel(uri=tiledb_array, model=model)
+
+        cb = [tf.keras.callbacks.TensorBoard(log_dir=tmpdir)]
+
+        mocker.patch(
+            "tiledb.ml.models.tensorflow_keras.TensorflowKerasTileDBModel._get_tensorboard_files",
+            return_value={
+                "event_file_name_1": b"test_bytes_1",
+                "event_file_name_2": b"test_bytes_2",
+            },
+        )
+
+        tiledb_obj.save(include_callbacks=cb)
+        with tiledb.open(tiledb_array) as A:
+            assert len(pickle.loads(A.meta["TENSORBOARD"])) == 2
+            assert (
+                "event_file_name_1"
+                and "event_file_name_2" in pickle.loads(A.meta["TENSORBOARD"]).keys()
+            )
+            assert (
+                b"test_bytes_1"
+                and b"test_bytes_2" in pickle.loads(A.meta["TENSORBOARD"]).values()
+            )
