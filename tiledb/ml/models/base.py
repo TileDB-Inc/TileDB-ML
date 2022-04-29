@@ -4,14 +4,14 @@ import platform
 import time
 from abc import ABC, abstractmethod
 from enum import Enum, unique
-from typing import Any, DefaultDict, Generic, Optional, Tuple, TypeVar
+from typing import Any, Generic, Mapping, Optional, Tuple, TypeVar
 
 import tiledb
 
 from ._cloud_utils import get_cloud_uri
 
 Model = TypeVar("Model")
-Meta = DefaultDict[str, Any]
+Meta = Mapping[str, Any]
 Timestamp = Tuple[int, int]
 
 
