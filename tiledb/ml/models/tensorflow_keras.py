@@ -68,7 +68,8 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
         optimizer_weights = self._serialize_optimizer_weights(
             include_optimizer=include_optimizer
         )
-        event_files = []
+
+        event_files: DefaultDict[str, bytes] = defaultdict(bytes)
         if include_callbacks:
             for cb in include_callbacks:
                 if isinstance(cb, TensorBoard):
@@ -78,18 +79,16 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
                                 continue
                             with open(f"{cb.log_dir}/train/{file}", "rb") as f:
                                 data = f.read()
-                                event_files.append(
-                                    pickle.dumps(data, protocol=pickle.HIGHEST_PROTOCOL)
-                                )
+                                event_files[f"{cb.log_dir}/train/{file}"] = data
 
-        tb_meta: DefaultDict[str, Any] = defaultdict(tuple)
-        print(len(event_files))
-        tb_meta["TensorBoard"] = tuple(event_files)
-        # print(tb_meta)
-        # if meta:
-        #     meta |= tb_meta if include_callbacks else {}
-        # else:
-        #     meta = tb_meta if include_callbacks else None
+        tb_meta: DefaultDict[str, bytes] = defaultdict(bytes)
+        tb_meta["TENSORBOARD"] = pickle.dumps(event_files, protocol=4)
+
+        if include_callbacks:
+            if meta:
+                meta.update(tb_meta)
+            else:
+                meta = tb_meta
 
         # Create TileDB model array
         if not update:
