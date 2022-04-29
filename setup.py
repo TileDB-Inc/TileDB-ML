@@ -1,6 +1,6 @@
 import setuptools
 
-tensorflow = ["tensorflow>=2.4.1"]
+tensorflow = ["tensorflow>=2.4.1,<2.6"]
 pytorch = ["torch>=1.8.1"]
 sklearn = ["scikit-learn>=1.0"]
 cloud = ["tiledb-cloud"]

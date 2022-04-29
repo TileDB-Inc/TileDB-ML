@@ -14,8 +14,11 @@ jobs:
         ml-deps:
           - "scikit-learn=1.0 pytorch=1.8.1 tensorflow=2.4.3 numpy=1.19"
           - "scikit-learn=1.0 pytorch=1.9.1 tensorflow=2.4.1 numpy=1.19"
-          - "scikit-learn=1.0 pytorch=1.10  tensorflow=2.6.2=cpu*"
-          - "scikit-learn=1.0 pytorch=1.11  tensorflow=2.7.0=cpu*"
+          - "scikit-learn=1.0 pytorch=1.10 tensorflow=2.4.1 numpy=1.19"
+          - "scikit-learn=1.0 pytorch=1.11 tensorflow=2.4.1 numpy=1.19"
+          # remove the previous two lines and uncomment the next two after 2.6+ support
+          # - "scikit-learn=1.0 pytorch=1.10  tensorflow=2.6.2=cpu*"
+          # - "scikit-learn=1.0 pytorch=1.11  tensorflow=2.7.0=cpu*"
     env:
       run_coverage: ${{ github.ref == 'refs/heads/master' }}
 
