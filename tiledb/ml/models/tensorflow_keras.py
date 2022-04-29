@@ -77,7 +77,7 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
                     tb_meta["TENSORBOARD"] = pickle.dumps(event_files, protocol=4)
                     # Updates the meta dictionary with tensorboard metadata if existed
                     if meta:
-                        meta = {**meta, **tb_meta}
+                        meta.update(tb_meta)
                     else:
                         meta = tb_meta
 
