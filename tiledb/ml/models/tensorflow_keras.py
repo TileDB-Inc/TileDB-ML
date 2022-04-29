@@ -72,17 +72,14 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
         if include_callbacks:
             for cb in include_callbacks:
                 if isinstance(cb, TensorBoard):
+                    tb_meta: DefaultDict[str, bytes] = defaultdict(bytes)
                     event_files = self._get_tensorboard_files(cb.log_dir)
-
-        tb_meta: DefaultDict[str, bytes] = defaultdict(bytes)
-        tb_meta["TENSORBOARD"] = pickle.dumps(event_files, protocol=4)
-
-        # Updates the meta dictionary with tensorboard metadata if existed
-        if include_callbacks:
-            if meta:
-                meta = {**meta, **tb_meta}
-            else:
-                meta = tb_meta
+                    tb_meta["TENSORBOARD"] = pickle.dumps(event_files, protocol=4)
+                    # Updates the meta dictionary with tensorboard metadata if existed
+                    if meta:
+                        meta = {**meta, **tb_meta}
+                    else:
+                        meta = tb_meta
 
         # Create TileDB model array
         if not update:
