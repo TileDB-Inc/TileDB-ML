@@ -123,8 +123,10 @@ class TestTensorflowTileDBDataset:
             )
             generated_x_data = np.concatenate(
                 [
-                    tf.sparse.to_dense(tf.sparse.reorder(tensors[0]))
-                    for tensors in dataset
+                    tf.sparse.to_dense(
+                        tf.sparse.reorder(x_tensors if num_attrs == 1 else x_tensors[0])
+                    )
+                    for x_tensors, y_tensors in dataset
                 ]
             )
             np.testing.assert_array_almost_equal(generated_x_data, x_data)

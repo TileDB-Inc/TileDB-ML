@@ -4,7 +4,16 @@ import itertools as it
 import math
 import operator
 import random
-from typing import Any, Callable, Iterable, Iterator, Optional, Sequence, TypeVar, Union
+from typing import (
+    Callable,
+    Iterable,
+    Iterator,
+    Optional,
+    Sequence,
+    Tuple,
+    TypeVar,
+    Union,
+)
 
 import numpy as np
 import scipy.sparse
@@ -22,10 +31,15 @@ except AttributeError:
 import tiledb
 
 from ._buffer_utils import get_attr_names, get_buffer_size
-from ._tensor_gen import TileDBNumpyGenerator, TileDBSparseGenerator
+from ._tensor_gen import (
+    TileDBNumpyGenerator,
+    TileDBSparseGenerator,
+    TileDBTensorGenerator,
+)
 
-TensorSequence = Sequence[Union[np.ndarray, sparse.COO, scipy.sparse.csr_matrix]]
-TensorGenerator = Union[TileDBNumpyGenerator, TileDBSparseGenerator]
+TensorLike = Union[np.ndarray, sparse.COO, scipy.sparse.csr_matrix]
+TensorLikeOrSequence = Union[TensorLike, Sequence[TensorLike]]
+XY = Tuple[TensorLikeOrSequence, TensorLikeOrSequence]
 
 
 def PyTorchTileDBDataLoader(
@@ -58,12 +72,10 @@ def PyTorchTileDBDataLoader(
         even if `shuffle_buffer_size` is zero when `num_workers` > 1.
     :param csr: For sparse 2D arrays, whether to return CSR tensors instead of COO.
     """
-    x_schema = x_array.schema
-    y_schema = y_array.schema
     if not x_attrs:
-        x_attrs = get_attr_names(x_schema)
+        x_attrs = get_attr_names(x_array.schema)
     if not y_attrs:
-        y_attrs = get_attr_names(y_schema)
+        y_attrs = get_attr_names(y_array.schema)
 
     return torch.utils.data.DataLoader(
         dataset=PyTorchTileDBDataset(
@@ -73,15 +85,13 @@ def PyTorchTileDBDataLoader(
         prefetch_factor=prefetch,
         num_workers=num_workers,
         collate_fn=_CompositeCollator(
-            it.chain(
-                it.repeat(_get_tensor_collator(x_array, csr), len(x_attrs)),
-                it.repeat(_get_tensor_collator(y_array, csr), len(y_attrs)),
-            )
+            _get_tensor_collator(x_array, csr, len(x_attrs)),
+            _get_tensor_collator(y_array, csr, len(y_attrs)),
         ),
     )
 
 
-class PyTorchTileDBDataset(torch.utils.data.IterableDataset[TensorSequence]):
+class PyTorchTileDBDataset(torch.utils.data.IterableDataset[XY]):
     def __init__(
         self,
         x_array: tiledb.Array,
@@ -108,7 +118,7 @@ class PyTorchTileDBDataset(torch.utils.data.IterableDataset[TensorSequence]):
         self._rows = rows
         self._shuffle_buffer_size = shuffle_buffer_size
 
-    def __iter__(self) -> Iterator[TensorSequence]:
+    def __iter__(self) -> Iterator[XY]:
         worker_info = torch.utils.data.get_worker_info()
         if worker_info is not None:
             for gen in self._x_gen, self._y_gen:
@@ -124,25 +134,26 @@ class PyTorchTileDBDataset(torch.utils.data.IterableDataset[TensorSequence]):
             stop = self._rows
 
         def iter_rows(
-            gen: TensorGenerator, buffer_size: int
-        ) -> Iterator[TensorSequence]:
-            for batch_tensors in gen.iter_tensors(buffer_size, start, stop):
-                for row in zip(*batch_tensors):
-                    yield row
+            gen: TileDBTensorGenerator[TensorLike], buffer_size: int
+        ) -> Iterator[TensorLikeOrSequence]:
+            iter_tensors = gen.iter_tensors(buffer_size, start, stop)
+            if gen.single_attr:
+                return (row for tensor in iter_tensors for row in tensor)
+            else:
+                return (row for tensors in iter_tensors for row in zip(*tensors))
 
-        rows: Iterator[TensorSequence] = (
-            (*x_row, *y_row)
-            for x_row, y_row in zip(
-                iter_rows(self._x_gen, self._x_buffer_size),
-                iter_rows(self._y_gen, self._y_buffer_size),
-            )
+        rows: Iterator[XY] = zip(
+            iter_rows(self._x_gen, self._x_buffer_size),
+            iter_rows(self._y_gen, self._y_buffer_size),
         )
         if self._shuffle_buffer_size > 0:
             rows = _iter_shuffled(rows, self._shuffle_buffer_size)
         return rows
 
 
-def _get_tensor_generator(array: tiledb.Array, attrs: Sequence[str]) -> TensorGenerator:
+def _get_tensor_generator(
+    array: tiledb.Array, attrs: Sequence[str]
+) -> TileDBTensorGenerator[TensorLike]:
     if not array.schema.sparse:
         return TileDBNumpyGenerator(array, attrs)
     elif array.ndim == 2:
@@ -151,34 +162,23 @@ def _get_tensor_generator(array: tiledb.Array, attrs: Sequence[str]) -> TensorGe
         return TileDBSparseGenerator(array, attrs, lambda x: x)
 
 
-def _get_tensor_collator(
-    array: tiledb.Array, csr: bool
-) -> Callable[[TensorSequence], torch.Tensor]:
-    if not array.schema.sparse:
-        return _ndarray_collate
-    elif array.ndim != 2:
-        return _sparse_coo_collate
-    elif csr:
-        return _csr_collate
-    else:
-        return _csr_to_coo_collate
+_SingleCollator = Callable[[Sequence[TensorLike]], torch.Tensor]
 
 
 class _CompositeCollator:
     """
-    A callable for collating "rows" of data into Tensors.
-
-    Each data "column" is collated to a torch.Tensor by a different collator function.
-    Finally, the collated columns are returned as a sequence of torch.Tensors.
+    A callable for collating "rows" of data by a separate collator for each "column".
+    Returns the collated columns collected into a tuple.
     """
 
-    def __init__(self, collators: Iterable[Callable[[Sequence[Any]], torch.Tensor]]):
-        self._collators = tuple(collators)
+    def __init__(self, *collators: _SingleCollator):
+        self._collators = collators
 
-    def __call__(self, rows: Sequence[Sequence[Any]]) -> Sequence[torch.Tensor]:
+    def __call__(self, rows: Sequence[Sequence[TensorLike]]) -> Sequence[torch.Tensor]:
         columns = tuple(zip(*rows))
-        assert len(columns) == len(self._collators)
-        return [collator(column) for collator, column in zip(self._collators, columns)]
+        collators = self._collators
+        assert len(columns) == len(collators)
+        return tuple(collator(column) for collator, column in zip(collators, columns))
 
 
 def _ndarray_collate(arrays: Sequence[np.ndarray]) -> torch.Tensor:
@@ -211,6 +211,24 @@ def _csr_collate(arrays: Sequence[scipy.sparse.csr_matrix]) -> torch.Tensor:
         stacked.data,
         stacked.shape,
     )
+
+
+def _get_tensor_collator(
+    array: tiledb.Array, csr: bool, num_attrs: int
+) -> Union[_SingleCollator, _CompositeCollator]:
+    if not array.schema.sparse:
+        collator = _ndarray_collate
+    elif array.ndim != 2:
+        collator = _sparse_coo_collate
+    elif csr:
+        collator = _csr_collate
+    else:
+        collator = _csr_to_coo_collate
+
+    if num_attrs == 1:
+        return collator
+    else:
+        return _CompositeCollator(*it.repeat(collator, num_attrs))
 
 
 _T = TypeVar("_T")

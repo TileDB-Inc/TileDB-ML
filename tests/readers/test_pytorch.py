@@ -88,24 +88,23 @@ class TestPyTorchTileDBDataset:
 
             unique_x_tensors = []
             unique_y_tensors = []
-            for batchindx, data in enumerate(dataloader):
-                for attr in range(num_attrs):
-                    # Keep unique X tensors
-                    x_tensor = data[attr]
+            for i, (x_tensors, y_tensors) in enumerate(dataloader):
+                # Keep unique X tensors
+                for x_tensor in x_tensors if num_attrs > 1 else [x_tensors]:
                     if x_sparse:
                         x_tensor = x_tensor.to_dense()
                     if not any(torch.equal(x_tensor, t) for t in unique_x_tensors):
                         unique_x_tensors.append(x_tensor)
 
-                    # Keep unique Y tensors
-                    y_tensor = data[attr + num_attrs]
+                # Keep unique Y tensors
+                for y_tensor in y_tensors if num_attrs > 1 else [y_tensors]:
                     if y_sparse:
                         y_tensor = y_tensor.to_dense()
                     if not any(torch.equal(y_tensor, t) for t in unique_y_tensors):
                         unique_y_tensors.append(y_tensor)
 
-                assert len(unique_x_tensors) - 1 == batchindx
-                assert len(unique_y_tensors) - 1 == batchindx
+                assert len(unique_x_tensors) - 1 == i
+                assert len(unique_y_tensors) - 1 == i
 
     @parametrize_for_dataset()
     def test_unequal_num_rows(
@@ -180,6 +179,9 @@ class TestPyTorchTileDBDataset:
                 **kwargs
             )
             generated_x_data = np.concatenate(
-                [tensors[0].to_dense().numpy() for tensors in dataloader]
+                [
+                    (x_tensors if num_attrs == 1 else x_tensors[0]).to_dense().numpy()
+                    for x_tensors, y_tensors in dataloader
+                ]
             )
             np.testing.assert_array_almost_equal(generated_x_data, x_data)
