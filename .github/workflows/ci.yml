@@ -12,37 +12,38 @@ jobs:
       fail-fast: false
       matrix:
         ml-deps:
-          - "scikit-learn=1.0 pytorch=1.8.1 tensorflow=2.4.3 numpy=1.19"
-          - "scikit-learn=1.0 pytorch=1.9.1 tensorflow=2.4.1 numpy=1.19"
-          - "scikit-learn=1.0 pytorch=1.10 tensorflow=2.4.1 numpy=1.19"
-          - "scikit-learn=1.0 pytorch=1.11 tensorflow=2.4.1 numpy=1.19"
+          - "torch==1.8.1+cpu tensorflow-cpu==2.4.4"
+          - "torch==1.9.1+cpu tensorflow-cpu==2.5.3"
+          - "torch==1.10.2+cpu tensorflow-cpu==2.4.4"
+          - "torch==1.11.0+cpu tensorflow-cpu==2.4.4"
           # remove the previous two lines and uncomment the next two after 2.6+ support
-          # - "scikit-learn=1.0 pytorch=1.10  tensorflow=2.6.2=cpu*"
-          # - "scikit-learn=1.0 pytorch=1.11  tensorflow=2.7.0=cpu*"
+          # - "torch==1.10.2+cpu tensorflow-cpu==2.6.3"
+          # - "torch==1.11.0+cpu tensorflow-cpu==2.7.1"
+
     env:
       run_coverage: ${{ github.ref == 'refs/heads/master' }}
 
     steps:
     - uses: actions/checkout@v2
 
-    - name: Set up miniconda
-      uses: conda-incubator/setup-miniconda@v2
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v2
       with:
         python-version: "3.7"
-        mamba-version: "*"
-        channels: conda-forge,defaults
 
     - name: Install dependencies
-      run: mamba install pytest-mock pytest-cov ${{ matrix.ml-deps }}
-
-    - name: Install TileDB-ML
-      run: pip install -e .[cloud]
+      run: |
+        pip install --upgrade pip
+        pip install -f https://download.pytorch.org/whl/torch_stable.html \
+          pytest-mock pytest-cov scikit-learn==1.0.2 ${{ matrix.ml-deps }}
+        pip install -e .[cloud]
 
     - name: Run mypy
       run: |
-        conda activate base
-        mamba install mypy
-        mypy .
+        python -m venv mypyenv
+        mypyenv/bin/pip install mypy
+        mypyenv/bin/mypy .
+        rm -rf mypyenv
 
     - name: Run tests
       if: ${{ !fromJSON(env.run_coverage) }}
