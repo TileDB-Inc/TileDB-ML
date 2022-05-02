@@ -14,11 +14,8 @@ jobs:
         ml-deps:
           - "torch==1.8.1+cpu tensorflow-cpu==2.4.4"
           - "torch==1.9.1+cpu tensorflow-cpu==2.5.3"
-          - "torch==1.10.2+cpu tensorflow-cpu==2.4.4"
-          - "torch==1.11.0+cpu tensorflow-cpu==2.4.4"
-          # remove the previous two lines and uncomment the next two after 2.6+ support
-          # - "torch==1.10.2+cpu tensorflow-cpu==2.6.3"
-          # - "torch==1.11.0+cpu tensorflow-cpu==2.7.1"
+          - "torch==1.10.2+cpu tensorflow-cpu==2.6.3"
+          - "torch==1.11.0+cpu tensorflow-cpu==2.7.1"
 
     env:
       run_coverage: ${{ github.ref == 'refs/heads/master' }}

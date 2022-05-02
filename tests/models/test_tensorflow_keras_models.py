@@ -9,10 +9,18 @@ import shutil
 import numpy as np
 import pytest
 import tensorflow as tf
-from tensorflow.python.keras import testing_utils
 
 import tiledb
-from tiledb.ml.models.tensorflow_keras import TensorflowKerasTileDBModel
+from tiledb.ml.models.tensorflow_keras import (
+    TensorflowKerasTileDBModel,
+    tf_keras_is_keras,
+)
+
+if tf_keras_is_keras:
+    from keras import testing_utils
+else:
+    from tensorflow.python.keras import testing_utils
+
 
 # Suppress all Tensorflow messages
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"

@@ -11,9 +11,6 @@ from typing import Any, List, Mapping, Optional, Tuple
 
 import numpy as np
 import tensorflow as tf
-from tensorflow.python.keras.models import Functional, Sequential
-from tensorflow.python.keras.optimizer_v1 import TFOptimizer
-from tensorflow.python.keras.saving import hdf5_format, saved_model, saving_utils
 
 import tiledb
 
@@ -21,11 +18,27 @@ from ._cloud_utils import update_file_properties
 from ._tensorboard import load_tensorboard, save_tensorboard
 from .base import Meta, TileDBModel, Timestamp, current_milli_time
 
-# SharedObjectLoadingScope was introduced in TensorFlow 2.5
 try:
-    from tensorflow.python.keras.utils.generic_utils import SharedObjectLoadingScope
+    import keras
+
+    if keras.Model is not tf.keras.Model:
+        raise ImportError
+    tf_keras_is_keras = True
 except ImportError:
+    import tensorflow.python.keras as keras
+
+    tf_keras_is_keras = False
+
+try:
+    # SharedObjectLoadingScope was introduced in TensorFlow 2.5
+    SharedObjectLoadingScope = keras.utils.generic_utils.SharedObjectLoadingScope
+except AttributeError:
     SharedObjectLoadingScope = contextlib.nullcontext
+FunctionalOrSequential = (keras.models.Functional, keras.models.Sequential)
+TFOptimizer = keras.optimizer_v1.TFOptimizer
+get_json_type = keras.saving.saved_model.json_utils.get_json_type
+preprocess_weights_for_loading = keras.saving.hdf5_format.preprocess_weights_for_loading
+saving_utils = keras.saving.saving_utils
 
 
 class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
@@ -108,7 +121,7 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
             model_config = json.loads(model_array.meta["model_config"])
             model_class = model_config["class_name"]
 
-            if model_class != "Sequential" and model_class != "Functional":
+            if model_class not in ("Functional", "Sequential"):
                 with SharedObjectLoadingScope():
                     with tf.keras.utils.CustomObjectScope(custom_objects or {}):
                         if hasattr(model_config, "decode"):
@@ -193,7 +206,7 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
             tiledb.Dim(
                 name="model", domain=(1, 1), tile=1, dtype=np.int32, ctx=self.ctx
             )
-            if isinstance(self.model, (Functional, Sequential))
+            if isinstance(self.model, FunctionalOrSequential)
             else tiledb.Dim(
                 name="model",
                 domain=(1, len(self.model.layers)),
@@ -202,7 +215,7 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
                 ctx=self.ctx,
             ),
         )
-        if isinstance(self.model, (Functional, Sequential)):
+        if isinstance(self.model, FunctionalOrSequential):
             attrs = [
                 tiledb.Attr(
                     name="model_weights",
@@ -281,7 +294,7 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
         with tiledb.open(
             self.uri, "w", timestamp=current_milli_time(), ctx=self.ctx
         ) as tf_model_tiledb:
-            if isinstance(self.model, (Functional, Sequential)):
+            if isinstance(self.model, FunctionalOrSequential):
                 tf_model_tiledb[:] = {
                     "model_weights": np.array([serialized_weights]),
                     "optimizer_weights": np.array([serialized_optimizer_weights]),
@@ -318,7 +331,7 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
             model_metadata = saving_utils.model_metadata(self.model, include_optimizer)
             for key, value in model_metadata.items():
                 tf_model_tiledb.meta[key] = json.dumps(
-                    value, default=saved_model.json_utils.get_json_type
+                    value, default=get_json_type
                 ).encode("utf8")
 
             self.update_model_metadata(array=tf_model_tiledb, meta=meta)
@@ -387,7 +400,7 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
             read_weight_values = pickle.loads(
                 model_array_results["weight_values"].item(k)
             )
-            read_weight_values = hdf5_format.preprocess_weights_for_loading(
+            read_weight_values = preprocess_weights_for_loading(
                 layer, read_weight_values, original_keras_version, original_backend
             )
             if len(read_weight_values) != len(weight_vars):
