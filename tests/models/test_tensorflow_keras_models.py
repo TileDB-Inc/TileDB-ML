@@ -50,7 +50,7 @@ def test_load_tiledb_error_with_wrong_uri():
         tiledb_model_obj.load(compile_model=False)
 
 
-@pytest.mark.parametrize(
+loss_optimizer_metrics = pytest.mark.parametrize(
     "loss,optimizer,metrics",
     [
         (None, None, None),
@@ -63,7 +63,8 @@ def test_load_tiledb_error_with_wrong_uri():
         ),
     ],
 )
-@pytest.mark.parametrize(
+
+api = pytest.mark.parametrize(
     "api",
     [
         testing_utils.get_small_sequential_mlp,
@@ -71,7 +72,11 @@ def test_load_tiledb_error_with_wrong_uri():
         ConfigSubclassModel,
     ],
 )
+
+
 class TestTensorflowKerasModel:
+    @api
+    @loss_optimizer_metrics
     def test_save_model_to_tiledb_array(self, tmpdir, api, loss, optimizer, metrics):
         model = (
             api(num_hidden=1, num_classes=2, input_dim=3)
@@ -91,6 +96,8 @@ class TestTensorflowKerasModel:
         tiledb_model_obj.save(include_optimizer=True if optimizer else False)
         assert tiledb.array_exists(tiledb_uri)
 
+    @api
+    @loss_optimizer_metrics
     def test_save_model_to_tiledb_array_predictions(
         self, tmpdir, api, loss, optimizer, metrics
     ):
@@ -127,6 +134,8 @@ class TestTensorflowKerasModel:
         # Assert model predictions are equal
         np.testing.assert_array_equal(loaded_model.predict(data), model.predict(data))
 
+    @api
+    @loss_optimizer_metrics
     def test_save_model_to_tiledb_array_weights(
         self, tmpdir, api, loss, optimizer, metrics
     ):
@@ -177,7 +186,8 @@ class TestTensorflowKerasModel:
                 loaded_model.predict(data), model.predict(data)
             )
 
-    def test_save_load_with_dense_features(self, tmpdir, api, loss, optimizer, metrics):
+    @loss_optimizer_metrics
+    def test_save_load_with_dense_features(self, tmpdir, loss, optimizer, metrics):
         if optimizer is None:
             pytest.skip()
         cols = [
@@ -227,9 +237,8 @@ class TestTensorflowKerasModel:
             model.predict({"a": inputs_a, "b": inputs_b}),
         )
 
-    def test_save_load_with_sequence_features(
-        self, tmpdir, api, loss, optimizer, metrics
-    ):
+    @loss_optimizer_metrics
+    def test_save_load_with_sequence_features(self, tmpdir, loss, optimizer, metrics):
         if optimizer is None:
             pytest.skip()
 
@@ -297,11 +306,7 @@ class TestTensorflowKerasModel:
             model.predict({"a": inputs_a, "b": inputs_b}, steps=1),
         )
 
-    def test_functional_model_save_load_with_custom_loss_and_metric(
-        self, tmpdir, api, loss, optimizer, metrics
-    ):
-        if optimizer is None or loss != keras.losses.SparseCategoricalCrossentropy():
-            pytest.skip()
+    def test_functional_model_save_load_with_custom_loss_and_metric(self, tmpdir):
         inputs = keras.Input(shape=(4,))
         x = keras.layers.Dense(8, activation="relu")(inputs)
         outputs = keras.layers.Dense(3, activation="softmax")(x)
@@ -311,9 +316,9 @@ class TestTensorflowKerasModel:
         model.add_metric(custom_loss, aggregation="mean", name="custom_loss")
 
         model.compile(
-            loss=loss,
-            optimizer=optimizer,
-            metrics=[metrics],
+            loss=keras.losses.SparseCategoricalCrossentropy(),
+            optimizer=optimizers.gradient_descent_v2.SGD(),
+            metrics=[keras.metrics.SparseCategoricalCrossentropy()],
         )
 
         data_x = np.random.normal(size=(32, 4))
@@ -341,7 +346,7 @@ class TestTensorflowKerasModel:
             loaded_model.predict(data_x), model.predict(data_x)
         )
 
-    def test_save_load_for_rnn_layers(self, tmpdir, api, loss, optimizer, metrics):
+    def test_save_load_for_rnn_layers(self, tmpdir):
         inputs = keras.Input([10, 10], name="train_input")
         rnn_layers = [
             keras.layers.LSTMCell(size, recurrent_dropout=0, name="rnn_cell%d" % i)
@@ -364,20 +369,16 @@ class TestTensorflowKerasModel:
         # Assert model predictions are equal
         np.testing.assert_array_equal(loaded_model.predict(data), model.predict(data))
 
-    def test_sequential_model_save_load_without_input_shape(
-        self, tmpdir, api, loss, optimizer, metrics
-    ):
-        if optimizer is None or loss != keras.losses.MSE:
-            pytest.skip()
+    def test_sequential_model_save_load_without_input_shape(self, tmpdir):
         model = keras.models.Sequential()
         model.add(keras.layers.Dense(2))
         model.add(keras.layers.RepeatVector(3))
         model.add(keras.layers.TimeDistributed(keras.layers.Dense(3)))
         model.compile(
-            loss=loss,
-            optimizer=optimizer,
-            metrics=metrics,
-            weighted_metrics=metrics,
+            loss=keras.losses.MSE,
+            optimizer="rmsprop",
+            metrics=keras.metrics.categorical_accuracy,
+            weighted_metrics=keras.metrics.categorical_accuracy,
             sample_weight_mode="temporal",
         )
         data_x = np.random.random((1, 3))
@@ -394,6 +395,8 @@ class TestTensorflowKerasModel:
             loaded_model.predict(data_x), model.predict(data_x)
         )
 
+    @api
+    @loss_optimizer_metrics
     def test_preview(self, tmpdir, api, loss, optimizer, metrics):
         model = (
             api(num_hidden=1, num_classes=2, input_dim=3)
