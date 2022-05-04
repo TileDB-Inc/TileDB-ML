@@ -20,14 +20,6 @@ import scipy.sparse
 import sparse
 import torch
 
-try:
-    # torch >= 1.10
-    sparse_csr_tensor = torch.sparse_csr_tensor
-except AttributeError:
-    # torch < 1.10
-    sparse_csr_tensor = torch._sparse_csr_tensor
-
-
 import tiledb
 
 from ._buffer_utils import get_attr_names, get_buffer_size
@@ -37,6 +29,10 @@ from ._tensor_gen import (
     TileDBTensorGenerator,
 )
 
+# sparse_csr_tensor on torch>=1.10, _sparse_csr_tensor on torch=1.9
+sparse_csr_tensor = getattr(
+    torch, "sparse_csr_tensor", getattr(torch, "_sparse_csr_tensor", None)
+)
 TensorLike = Union[np.ndarray, sparse.COO, scipy.sparse.csr_matrix]
 TensorLikeOrSequence = Union[TensorLike, Sequence[TensorLike]]
 XY = Tuple[TensorLikeOrSequence, TensorLikeOrSequence]
@@ -53,7 +49,7 @@ def PyTorchTileDBDataLoader(
     x_attrs: Sequence[str] = (),
     y_attrs: Sequence[str] = (),
     num_workers: int = 0,
-    csr: bool = True,
+    csr: bool = False,
 ) -> torch.utils.data.DataLoader:
     """Return a DataLoader for loading data from TileDB arrays.
 
@@ -204,6 +200,8 @@ def _csr_to_coo_collate(arrays: Sequence[scipy.sparse.csr_matrix]) -> torch.Tens
 
 def _csr_collate(arrays: Sequence[scipy.sparse.csr_matrix]) -> torch.Tensor:
     """Collate multiple Scipy CSR matrices to a torch.Tensor with sparse_csr layout."""
+    if sparse_csr_tensor is None:
+        raise RuntimeError("CSR tensors not supported on this version of PyTorch")
     stacked = scipy.sparse.vstack(arrays)
     return sparse_csr_tensor(
         torch.from_numpy(stacked.indptr),

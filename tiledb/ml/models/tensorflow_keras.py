@@ -1,5 +1,6 @@
 """Functionality for saving and loading Tensorflow Keras models as TileDB arrays"""
 
+import contextlib
 import io
 import json
 import logging
@@ -22,6 +23,11 @@ import tiledb
 
 from ._cloud_utils import update_file_properties
 from .base import Meta, TileDBModel, Timestamp, current_milli_time
+
+# SharedObjectLoadingScope was introduced in TensorFlow 2.5
+SharedObjectLoadingScope = getattr(
+    generic_utils, "SharedObjectLoadingScope", contextlib.nullcontext
+)
 
 
 class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
@@ -97,7 +103,7 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
             model_class = model_config["class_name"]
 
             if model_class != "Sequential" and model_class != "Functional":
-                with generic_utils.SharedObjectLoadingScope():
+                with SharedObjectLoadingScope():
                     with generic_utils.CustomObjectScope(custom_objects or {}):
                         if hasattr(model_config, "decode"):
                             model_config = model_config.decode("utf-8")

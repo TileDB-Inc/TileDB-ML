@@ -4,49 +4,67 @@ on: [push]
 
 jobs:
   build:
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -l {0}
     strategy:
+      fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-latest]
-        python-version: [3.7, 3.8]
+        ml-deps:
+          - "torch==1.8.1+cpu tensorflow-cpu==2.4.4"
+          - "torch==1.9.1+cpu tensorflow-cpu==2.5.3"
+          - "torch==1.10.2+cpu tensorflow-cpu==2.4.4"
+          - "torch==1.11.0+cpu tensorflow-cpu==2.4.4"
+          # remove the previous two lines and uncomment the next two after 2.6+ support
+          # - "torch==1.10.2+cpu tensorflow-cpu==2.6.3"
+          # - "torch==1.11.0+cpu tensorflow-cpu==2.7.1"
+
     env:
-      run_coverage: ${{ github.ref == 'refs/heads/master' && matrix.os == 'ubuntu-latest' && matrix.python-version == '3.7' }}
+      run_coverage: ${{ github.ref == 'refs/heads/master' }}
 
     steps:
     - uses: actions/checkout@v2
+
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v2
       with:
-        python-version: ${{ matrix.python-version }}
+        python-version: "3.7"
 
-    - name: 'Install dependencies'
+    - name: Cache dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ matrix.ml-deps }}
+        restore-keys: ${{ runner.os }}-pip-
+
+    - name: Install dependencies
       run: |
         pip install --upgrade pip
-        pip install -e .[full]
+        pip install -f https://download.pytorch.org/whl/torch_stable.html \
+          pytest-mock pytest-cov scikit-learn==1.0.2 ${{ matrix.ml-deps }}
+        pip install -e .[cloud]
 
-    - name: 'Run mypy'
+    - name: Run mypy
       run: |
         python -m venv mypyenv
         mypyenv/bin/pip install mypy
         mypyenv/bin/mypy .
         rm -rf mypyenv
 
-    - name: 'Run tests'
+    - name: Run tests
       if: ${{ !fromJSON(env.run_coverage) }}
-      run: |
-        pip install pytest-mock
-        pytest tests/
+      run: pytest --disable-warnings tests/
 
-    - name: 'Run test coverage statistics'
+    - name: Run test coverage statistics
       id: stats
       if: ${{ fromJSON(env.run_coverage) }}
       run: |
-        pip install pytest-mock pytest-cov
-        pytest --cov-report=term-missing --cov=tiledb tests/ | tee coverage.txt
+        pytest --disable-warnings --cov-report=term-missing --cov=tiledb tests/ | tee coverage.txt
         TEST_COVERAGE="$(grep '^TOTAL' coverage.txt | awk -v N=4 '{print $N}')"
         echo "::set-output name=COVERAGE::$TEST_COVERAGE"
 
-    - name: 'Create Test Coverage Badge'
+    - name: Create Test Coverage Badge
       if: ${{ fromJSON(env.run_coverage) }}
       uses: schneegans/dynamic-badges-action@v1.1.0
       with:
