@@ -542,19 +542,20 @@ class TestTensorflowKerasModelCloud:
         mocker.patch(
             "tiledb.ml.models.tensorflow_keras.TensorflowKerasTileDBModel._get_tensorboard_files",
             return_value={
-                "event_file_name_1": b"test_bytes_1",
-                "event_file_name_2": b"test_bytes_2",
+                f"{tmpdir}/event_file_name_1": b"test_bytes_1",
+                f"{tmpdir}/event_file_name_2": b"test_bytes_2",
             },
         )
 
         tiledb_obj.save(include_callbacks=cb)
         with tiledb.open(tiledb_array) as A:
-            assert len(pickle.loads(A.meta["TENSORBOARD"])) == 2
-            assert (
-                "event_file_name_1"
-                and "event_file_name_2" in pickle.loads(A.meta["TENSORBOARD"]).keys()
-            )
-            assert (
-                b"test_bytes_1"
-                and b"test_bytes_2" in pickle.loads(A.meta["TENSORBOARD"]).values()
-            )
+            assert len(pickle.loads(A.meta["__TENSORBOARD__"])) == 2
+            assert pickle.loads(A.meta["__TENSORBOARD__"]) == {
+                f"{tmpdir}/event_file_name_1": b"test_bytes_1",
+                f"{tmpdir}/event_file_name_2": b"test_bytes_2",
+            }
+
+        # Loading the event data should create local files
+        tiledb_obj.load_tensorboard()
+        assert os.path.exists(f"{tmpdir}/event_file_name_1")
+        assert os.path.exists(f"{tmpdir}/event_file_name_2")

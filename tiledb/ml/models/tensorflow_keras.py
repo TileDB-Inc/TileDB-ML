@@ -1,14 +1,14 @@
 """Functionality for saving and loading Tensorflow Keras models as TileDB arrays"""
 
 import contextlib
+import glob
 import io
 import json
 import logging
-import os
+import os.path
 import pickle
-from collections import defaultdict
 from operator import attrgetter
-from typing import Any, DefaultDict, List, Mapping, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 import numpy as np
 import tensorflow as tf
@@ -72,12 +72,12 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
         if include_callbacks:
             for cb in include_callbacks:
                 if isinstance(cb, TensorBoard):
-                    tb_meta: DefaultDict[str, bytes] = defaultdict(bytes)
+                    tb_meta: Dict[str, bytes] = dict()
                     event_files = self._get_tensorboard_files(cb.log_dir)
-                    tb_meta["TENSORBOARD"] = pickle.dumps(event_files, protocol=4)
+                    tb_meta["__TENSORBOARD__"] = pickle.dumps(event_files, protocol=4)
                     # Updates the meta dictionary with tensorboard metadata if existed
                     if meta:
-                        meta.update(tb_meta)
+                        tb_meta.update(meta)
                     else:
                         meta = tb_meta
 
@@ -178,6 +178,20 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
                             "optimizer."
                         )
             return model
+
+    def load_tensorboard(
+        self,
+        timestamp: Optional[Timestamp] = None,
+    ) -> None:
+
+        with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
+            tb_data = pickle.loads(model_array.meta["__TENSORBOARD__"])
+            for path in tb_data.keys():
+                log_dir = os.path.dirname(path)
+                if not os.path.exists(log_dir):
+                    os.mkdir(log_dir)
+                with open(path, "wb") as f:
+                    f.write(tb_data[path])
 
     def preview(self) -> str:
         """Create a string representation of the model."""
@@ -408,18 +422,10 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
             var_value_tuples.extend(zip(weight_vars, read_weight_values))
         backend.batch_set_value(var_value_tuples)
 
-    def _get_tensorboard_files(self, log_dir: str) -> Mapping[str, bytes]:
-        """
-        This function accepts a Path log directory, evaluates path existense and returns a dictionary of TB log event files
-        :param log_dir: The directory that Tensorboard callback uses to store its files
-        :return DefaultDict: The DefaultDict[str, bytes] where key is the event file name and values are bytes of file data
-        """
-        event_files: DefaultDict[str, bytes] = defaultdict(bytes)
-        if os.path.exists(log_dir):
-            for file in os.listdir(f"{log_dir}/train"):
-                if "tfevents" not in file:
-                    continue
-                with open(f"{log_dir}/train/{file}", "rb") as f:
-                    data = f.read()
-                    event_files[f"{log_dir}/train/{file}"] = data
+    @staticmethod
+    def _get_tensorboard_files(log_dir: str) -> Mapping[str, bytes]:
+        event_files: Dict[str, bytes] = dict()
+        for path in glob.glob(f"{log_dir}/train/*tfevents*"):
+            with open(path, "rb") as f:
+                event_files[path] = f.read()
         return event_files
