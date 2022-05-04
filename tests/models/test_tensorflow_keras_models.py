@@ -559,3 +559,8 @@ class TestTensorflowKerasModelCloud:
         tiledb_obj.load_tensorboard()
         assert os.path.exists(f"{tmpdir}/event_file_name_1")
         assert os.path.exists(f"{tmpdir}/event_file_name_2")
+
+        custom_dir = os.path.join(tmpdir, "custom_log")
+        tiledb_obj.load_tensorboard(target_dir=custom_dir)
+        assert os.path.exists(f"{custom_dir}/event_file_name_1")
+        assert os.path.exists(f"{custom_dir}/event_file_name_2")

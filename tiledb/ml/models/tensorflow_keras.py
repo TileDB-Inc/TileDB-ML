@@ -181,16 +181,17 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
 
     def load_tensorboard(
         self,
+        target_dir: Optional[str] = None,
         timestamp: Optional[Timestamp] = None,
     ) -> None:
 
         with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
             tb_data = pickle.loads(model_array.meta["__TENSORBOARD__"])
             for path in tb_data.keys():
-                log_dir = os.path.dirname(path)
+                log_dir = target_dir if target_dir else os.path.dirname(path)
                 if not os.path.exists(log_dir):
                     os.mkdir(log_dir)
-                with open(path, "wb") as f:
+                with open(os.path.join(log_dir, os.path.basename(path)), "wb") as f:
                     f.write(tb_data[path])
 
     def preview(self) -> str:
