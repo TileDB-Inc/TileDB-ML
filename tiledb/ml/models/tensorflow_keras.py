@@ -1,16 +1,19 @@
 """Functionality for saving and loading Tensorflow Keras models as TileDB arrays"""
 
 import contextlib
+import glob
 import io
 import json
 import logging
+import os.path
 import pickle
 from operator import attrgetter
-from typing import Any, List, Mapping, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.keras import backend, optimizer_v1
+from tensorflow.python.keras.callbacks import TensorBoard as TensorBoard
 from tensorflow.python.keras.engine.functional import Functional
 from tensorflow.python.keras.models import Sequential
 from tensorflow.python.keras.saving import model_config as model_config_lib
@@ -45,6 +48,7 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
         update: bool = False,
         meta: Optional[Meta] = None,
         include_optimizer: bool = False,
+        include_callbacks: Optional[tf.keras.callbacks.CallbackList] = None,
     ) -> None:
         """
         Save a Tensorflow model as a TileDB array.
@@ -64,6 +68,18 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
         optimizer_weights = self._serialize_optimizer_weights(
             include_optimizer=include_optimizer
         )
+
+        if include_callbacks:
+            for cb in include_callbacks:
+                if isinstance(cb, TensorBoard):
+                    tb_meta: Dict[str, bytes] = dict()
+                    event_files = self._get_tensorboard_files(cb.log_dir)
+                    tb_meta["__TENSORBOARD__"] = pickle.dumps(event_files, protocol=4)
+                    # Updates the meta dictionary with tensorboard metadata if existed
+                    if meta:
+                        tb_meta.update(meta)
+                    else:
+                        meta = tb_meta
 
         # Create TileDB model array
         if not update:
@@ -162,6 +178,21 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
                             "optimizer."
                         )
             return model
+
+    def load_tensorboard(
+        self,
+        target_dir: Optional[str] = None,
+        timestamp: Optional[Timestamp] = None,
+    ) -> None:
+
+        with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
+            tb_data = pickle.loads(model_array.meta["__TENSORBOARD__"])
+            for path in tb_data.keys():
+                log_dir = target_dir if target_dir else os.path.dirname(path)
+                if not os.path.exists(log_dir):
+                    os.mkdir(log_dir)
+                with open(os.path.join(log_dir, os.path.basename(path)), "wb") as f:
+                    f.write(tb_data[path])
 
     def preview(self) -> str:
         """Create a string representation of the model."""
@@ -391,3 +422,11 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
                 )
             var_value_tuples.extend(zip(weight_vars, read_weight_values))
         backend.batch_set_value(var_value_tuples)
+
+    @staticmethod
+    def _get_tensorboard_files(log_dir: str) -> Mapping[str, bytes]:
+        event_files: Dict[str, bytes] = dict()
+        for path in glob.glob(f"{log_dir}/train/*tfevents*"):
+            with open(path, "rb") as f:
+                event_files[path] = f.read()
+        return event_files
