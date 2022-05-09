@@ -1,11 +1,14 @@
 """Functionality for saving and loading PytTorch models as TileDB arrays"""
 
+import glob
+import os
 import pickle
-from typing import Any, Mapping, Optional
+from typing import Any, Dict, Mapping, Optional
 
 import numpy as np
 import torch
 from torch.optim import Optimizer
+from torch.utils.tensorboard import SummaryWriter
 
 import tiledb
 
@@ -39,6 +42,7 @@ class PyTorchTileDBModel(TileDBModel[torch.nn.Module]):
         update: bool = False,
         meta: Optional[Meta] = None,
         model_info: Optional[Mapping[str, Any]] = None,
+        summary_writer: Optional[SummaryWriter] = None,
     ) -> None:
         """
         Save a PyTorch model as a TileDB array.
@@ -48,6 +52,8 @@ class PyTorchTileDBModel(TileDBModel[torch.nn.Module]):
         :param meta: Extra metadata to save in a TileDB array.
         :param model_info: Contains model info like loss, epoch etc, that could be needed
             to save a model's general checkpoint for inference and/or resuming training.
+        :param summary_path: Contains summary writer's path for storing tensorboard metadata
+                                in array's metadata
         """
         if self.model is None:
             raise RuntimeError("Model is not initialized")
@@ -73,6 +79,18 @@ class PyTorchTileDBModel(TileDBModel[torch.nn.Module]):
             else {}
         )
 
+        tb_meta: Dict[str, bytes] = dict()
+        # Summary writer
+        if summary_writer:
+            event_files = self._get_tensorboard_files(summary_writer.log_dir)
+            tb_meta["__TENSORBOARD__"] = pickle.dumps(event_files, protocol=4)
+            # Updates the meta dictionary with tensorboard metadata if existed
+            if meta:
+                tb_meta.update(meta)
+            else:
+                meta = tb_meta
+
+        print(meta)
         # Create TileDB model array
         if not update:
             self._create_array(serialized_model_info)
@@ -83,7 +101,7 @@ class PyTorchTileDBModel(TileDBModel[torch.nn.Module]):
                 **serialized_optimizer_dict,
                 **serialized_model_info,
             },
-            meta=meta,
+            meta=tb_meta if meta else meta,
         )
 
     # FIXME: This method should change to return the model, not the model_info dict
@@ -130,6 +148,20 @@ class PyTorchTileDBModel(TileDBModel[torch.nn.Module]):
                     model_array_results[attr_name].item(0)
                 )
         return out_dict
+
+    def load_tensorboard(
+        self,
+        target_dir: Optional[str] = None,
+        timestamp: Optional[Timestamp] = None,
+    ) -> None:
+        with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
+            tb_data = pickle.loads(model_array.meta["__TENSORBOARD__"])
+            for path in tb_data.keys():
+                log_dir = target_dir if target_dir else os.path.dirname(path)
+                if not os.path.exists(log_dir):
+                    os.mkdir(log_dir)
+                with open(os.path.join(log_dir, os.path.basename(path)), "wb") as f:
+                    f.write(tb_data[path])
 
     def preview(self) -> str:
         """
@@ -222,3 +254,12 @@ class PyTorchTileDBModel(TileDBModel[torch.nn.Module]):
                 key: np.array([value]) for key, value in serialized_model_dict.items()
             }
             self.update_model_metadata(array=tf_model_tiledb, meta=meta)
+
+    @staticmethod
+    def _get_tensorboard_files(log_dir: str) -> Mapping[str, bytes]:
+        event_files: Dict[str, bytes] = dict()
+        for path in glob.glob(f"{log_dir}/*tfevents*"):
+            print(path)
+            with open(path, "rb") as f:
+                event_files[path] = f.read()
+        return event_files

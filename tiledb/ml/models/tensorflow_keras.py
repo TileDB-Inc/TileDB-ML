@@ -57,6 +57,7 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
             target location.
         :param meta: Extra metadata to save in a TileDB array.
         :param include_optimizer: Whether to save the optimizer or not.
+        :param include_callbacks: Callbacks list to store their data in array's metadata
         """
         if self.model is None:
             raise RuntimeError("Model is not initialized")
