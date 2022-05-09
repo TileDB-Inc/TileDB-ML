@@ -1,6 +1,5 @@
 """Functionality for saving and loading Tensorflow Keras models as TileDB arrays"""
 
-import contextlib
 import io
 import json
 import logging
@@ -29,11 +28,7 @@ except ImportError:
 
     tf_keras_is_keras = False
 
-try:
-    # SharedObjectLoadingScope was introduced in TensorFlow 2.5
-    SharedObjectLoadingScope = keras.utils.generic_utils.SharedObjectLoadingScope
-except AttributeError:
-    SharedObjectLoadingScope = contextlib.nullcontext
+SharedObjectLoadingScope = keras.utils.generic_utils.SharedObjectLoadingScope
 FunctionalOrSequential = (keras.models.Functional, keras.models.Sequential)
 TFOptimizer = keras.optimizer_v1.TFOptimizer
 get_json_type = keras.saving.saved_model.json_utils.get_json_type

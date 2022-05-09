@@ -4,11 +4,7 @@ import numpy as np
 import pytest
 import torch
 
-from tiledb.ml.readers.pytorch import (
-    PyTorchTileDBDataLoader,
-    PyTorchTileDBDataset,
-    sparse_csr_tensor,
-)
+from tiledb.ml.readers.pytorch import PyTorchTileDBDataLoader, PyTorchTileDBDataset
 
 from .utils import (
     ingest_in_tiledb,
@@ -182,14 +178,10 @@ class TestPyTorchTileDBDataset:
                 csr=csr,
                 **kwargs
             )
-            try:
-                generated_x_data = np.concatenate(
-                    [
-                        (x if num_attrs == 1 else x[0]).to_dense().numpy()
-                        for x, y in dataloader
-                    ]
-                )
-                np.testing.assert_array_almost_equal(generated_x_data, x_data)
-            except RuntimeError as ex:
-                assert sparse_csr_tensor is None
-                assert str(ex) == "CSR tensors not supported on this version of PyTorch"
+            generated_x_data = np.concatenate(
+                [
+                    (x if num_attrs == 1 else x[0]).to_dense().numpy()
+                    for x, y in dataloader
+                ]
+            )
+            np.testing.assert_array_almost_equal(generated_x_data, x_data)
