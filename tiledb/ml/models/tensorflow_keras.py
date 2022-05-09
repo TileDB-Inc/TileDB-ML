@@ -426,7 +426,7 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
 
     @staticmethod
     def _get_tensorboard_files(log_dir: str) -> Mapping[str, bytes]:
-        event_files: Dict[str, bytes] = dict()
+        event_files = {}
         for path in glob.glob(f"{log_dir}/train/*tfevents*"):
             with open(path, "rb") as f:
                 event_files[path] = f.read()
