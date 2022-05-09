@@ -79,18 +79,17 @@ class PyTorchTileDBModel(TileDBModel[torch.nn.Module]):
             else {}
         )
 
-        tb_meta: Dict[str, bytes] = dict()
         # Summary writer
+        cb_meta: Dict[str, bytes] = dict()
         if summary_writer:
             event_files = self._get_tensorboard_files(summary_writer.log_dir)
-            tb_meta["__TENSORBOARD__"] = pickle.dumps(event_files, protocol=4)
+            cb_meta["__TENSORBOARD__"] = pickle.dumps(event_files, protocol=4)
             # Updates the meta dictionary with tensorboard metadata if existed
             if meta:
-                tb_meta.update(meta)
+                cb_meta.update(meta)
             else:
-                meta = tb_meta
+                meta = cb_meta
 
-        print(meta)
         # Create TileDB model array
         if not update:
             self._create_array(serialized_model_info)
@@ -101,7 +100,7 @@ class PyTorchTileDBModel(TileDBModel[torch.nn.Module]):
                 **serialized_optimizer_dict,
                 **serialized_model_info,
             },
-            meta=tb_meta if meta else meta,
+            meta=cb_meta if summary_writer and meta else meta,
         )
 
     # FIXME: This method should change to return the model, not the model_info dict
@@ -253,6 +252,7 @@ class PyTorchTileDBModel(TileDBModel[torch.nn.Module]):
             tf_model_tiledb[:] = {
                 key: np.array([value]) for key, value in serialized_model_dict.items()
             }
+            print(meta)
             self.update_model_metadata(array=tf_model_tiledb, meta=meta)
 
     @staticmethod

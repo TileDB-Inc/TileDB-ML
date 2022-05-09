@@ -70,17 +70,17 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
             include_optimizer=include_optimizer
         )
 
+        cb_meta: Dict[str, bytes] = dict()
         if include_callbacks:
             for cb in include_callbacks:
                 if isinstance(cb, TensorBoard):
-                    tb_meta: Dict[str, bytes] = dict()
                     event_files = self._get_tensorboard_files(cb.log_dir)
-                    tb_meta["__TENSORBOARD__"] = pickle.dumps(event_files, protocol=4)
+                    cb_meta["__TENSORBOARD__"] = pickle.dumps(event_files, protocol=4)
                     # Updates the meta dictionary with tensorboard metadata if existed
                     if meta:
-                        tb_meta.update(meta)
+                        cb_meta.update(meta)
                     else:
-                        meta = tb_meta
+                        meta = cb_meta
 
         # Create TileDB model array
         if not update:
@@ -90,7 +90,7 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
             include_optimizer=include_optimizer,
             serialized_weights=model_weights,
             serialized_optimizer_weights=optimizer_weights,
-            meta=meta,
+            meta=cb_meta if include_callbacks and meta else meta,
         )
 
     def load(
