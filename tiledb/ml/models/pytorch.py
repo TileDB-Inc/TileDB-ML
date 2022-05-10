@@ -1,7 +1,5 @@
 """Functionality for saving and loading PytTorch models as TileDB arrays"""
 
-import glob
-import os
 import pickle
 from typing import Any, Mapping, Optional
 
@@ -13,6 +11,7 @@ from torch.utils.tensorboard import SummaryWriter
 import tiledb
 
 from ._cloud_utils import update_file_properties
+from ._tensorboard import load_tensorboard, save_tensorboard
 from .base import Meta, TileDBModel, Timestamp, current_milli_time
 
 
@@ -81,11 +80,8 @@ class PyTorchTileDBModel(TileDBModel[torch.nn.Module]):
 
         # Summary writer
         if summary_writer:
-            event_files = self._get_tensorboard_files(summary_writer.log_dir)
-            meta = {
-                "__TENSORBOARD__": pickle.dumps(event_files, protocol=4),
-                **(meta or {}),
-            }
+            cb_meta = save_tensorboard(summary_writer.log_dir)
+            meta = {**meta, **cb_meta} if meta else cb_meta
 
         # Create TileDB model array
         if not update:
@@ -150,14 +146,7 @@ class PyTorchTileDBModel(TileDBModel[torch.nn.Module]):
         target_dir: Optional[str] = None,
         timestamp: Optional[Timestamp] = None,
     ) -> None:
-        with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
-            tb_data = pickle.loads(model_array.meta["__TENSORBOARD__"])
-            for path in tb_data.keys():
-                log_dir = target_dir if target_dir else os.path.dirname(path)
-                if not os.path.exists(log_dir):
-                    os.mkdir(log_dir)
-                with open(os.path.join(log_dir, os.path.basename(path)), "wb") as f:
-                    f.write(tb_data[path])
+        return load_tensorboard(self.uri, self.ctx, target_dir, timestamp)
 
     def preview(self) -> str:
         """
@@ -250,11 +239,3 @@ class PyTorchTileDBModel(TileDBModel[torch.nn.Module]):
                 key: np.array([value]) for key, value in serialized_model_dict.items()
             }
             self.update_model_metadata(array=tf_model_tiledb, meta=meta)
-
-    @staticmethod
-    def _get_tensorboard_files(log_dir: str) -> Mapping[str, bytes]:
-        event_files = {}
-        for path in glob.glob(f"{log_dir}/*tfevents*"):
-            with open(path, "rb") as f:
-                event_files[path] = f.read()
-        return event_files
