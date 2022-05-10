@@ -4,7 +4,11 @@ import numpy as np
 import pytest
 import torch
 
-from tiledb.ml.readers.pytorch import PyTorchTileDBDataLoader, PyTorchTileDBDataset
+from tiledb.ml.readers.pytorch import (
+    PyTorchTileDBDataLoader,
+    PyTorchTileDBDataset,
+    TensorSchema,
+)
 
 from .utils import ingest_in_tiledb, parametrize_for_dataset, validate_tensor_generator
 
@@ -30,11 +34,12 @@ class TestPyTorchTileDBDataset:
         ) as x_kwargs, ingest_in_tiledb(
             tmpdir, y_shape, y_sparse, num_attrs, pass_attrs
         ) as y_kwargs:
+            x_array, y_array = x_kwargs["array"], y_kwargs["array"]
             dataset = PyTorchTileDBDataset(
-                x_array=x_kwargs["array"],
-                y_array=y_kwargs["array"],
-                x_attrs=x_kwargs["attrs"],
-                y_attrs=y_kwargs["attrs"],
+                x_array=x_array,
+                y_array=y_array,
+                x_schema=TensorSchema(x_array.schema, attrs=x_kwargs["attrs"]),
+                y_schema=TensorSchema(y_array.schema, attrs=y_kwargs["attrs"]),
                 buffer_bytes=buffer_bytes,
             )
             assert isinstance(dataset, torch.utils.data.IterableDataset)
@@ -135,7 +140,7 @@ class TestPyTorchTileDBDataset:
                     shuffle_buffer_size=shuffle_buffer_size,
                     num_workers=num_workers,
                 )
-            assert "X and Y arrays must have the same number of rows" in str(ex.value)
+            assert "X and Y arrays have different keys" in str(ex.value)
 
     @parametrize_for_dataset(x_sparse=[True], shuffle_buffer_size=[0], num_workers=[0])
     @pytest.mark.parametrize("csr", [True, False])
