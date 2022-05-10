@@ -2,6 +2,7 @@
 
 import inspect
 import os
+import pickle
 import platform
 import sys
 
@@ -10,7 +11,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optimizers
+from torch.utils.tensorboard import SummaryWriter
 
+import tiledb
 from tiledb.ml.models.pytorch import PyTorchTileDBModel
 
 
@@ -161,6 +164,39 @@ class TestPyTorchModel:
             == torch.__version__
         )
         assert tiledb_obj._file_properties["TILEDB_ML_MODEL_PREVIEW"] == str(model)
+
+    def test_tensorboard_callback_meta(self, tmpdir, net, optimizer, mocker):
+        model = net()
+        tiledb_array = os.path.join(tmpdir, "model_array")
+        tiledb_obj = PyTorchTileDBModel(uri=tiledb_array, model=model)
+
+        mocker.patch(
+            "tiledb.ml.models.pytorch.PyTorchTileDBModel._get_tensorboard_files",
+            return_value={
+                f"{tmpdir}/event_file_name_1": b"test_bytes_1",
+                f"{tmpdir}/event_file_name_2": b"test_bytes_2",
+            },
+        )
+
+        writer = SummaryWriter()
+        tiledb_obj.save(update=False, summary_writer=writer)
+
+        with tiledb.open(tiledb_array) as A:
+            assert len(pickle.loads(A.meta["__TENSORBOARD__"])) == 2
+            assert pickle.loads(A.meta["__TENSORBOARD__"]) == {
+                f"{tmpdir}/event_file_name_1": b"test_bytes_1",
+                f"{tmpdir}/event_file_name_2": b"test_bytes_2",
+            }
+
+        # Loading the event data should create local files
+        tiledb_obj.load_tensorboard()
+        assert os.path.exists(f"{tmpdir}/event_file_name_1")
+        assert os.path.exists(f"{tmpdir}/event_file_name_2")
+
+        custom_dir = os.path.join(tmpdir, "custom_log")
+        tiledb_obj.load_tensorboard(target_dir=custom_dir)
+        assert os.path.exists(f"{custom_dir}/event_file_name_1")
+        assert os.path.exists(f"{custom_dir}/event_file_name_2")
 
 
 class TestPyTorchModelCloud:

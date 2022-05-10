@@ -8,7 +8,7 @@ import logging
 import os.path
 import pickle
 from operator import attrgetter
-from typing import Any, Dict, List, Mapping, Optional, Tuple
+from typing import Any, List, Mapping, Optional, Tuple
 
 import numpy as np
 import tensorflow as tf
@@ -57,6 +57,7 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
             target location.
         :param meta: Extra metadata to save in a TileDB array.
         :param include_optimizer: Whether to save the optimizer or not.
+        :param include_callbacks: Callbacks list to store their data in array's metadata
         """
         if self.model is None:
             raise RuntimeError("Model is not initialized")
@@ -72,14 +73,11 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
         if include_callbacks:
             for cb in include_callbacks:
                 if isinstance(cb, TensorBoard):
-                    tb_meta: Dict[str, bytes] = dict()
                     event_files = self._get_tensorboard_files(cb.log_dir)
-                    tb_meta["__TENSORBOARD__"] = pickle.dumps(event_files, protocol=4)
-                    # Updates the meta dictionary with tensorboard metadata if existed
-                    if meta:
-                        tb_meta.update(meta)
-                    else:
-                        meta = tb_meta
+                    meta = {
+                        "__TENSORBOARD__": pickle.dumps(event_files, protocol=4),
+                        **(meta or {}),
+                    }
 
         # Create TileDB model array
         if not update:
@@ -184,7 +182,6 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
         target_dir: Optional[str] = None,
         timestamp: Optional[Timestamp] = None,
     ) -> None:
-
         with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
             tb_data = pickle.loads(model_array.meta["__TENSORBOARD__"])
             for path in tb_data.keys():
@@ -425,7 +422,7 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
 
     @staticmethod
     def _get_tensorboard_files(log_dir: str) -> Mapping[str, bytes]:
-        event_files: Dict[str, bytes] = dict()
+        event_files = {}
         for path in glob.glob(f"{log_dir}/train/*tfevents*"):
             with open(path, "rb") as f:
                 event_files[path] = f.read()
