@@ -1,11 +1,10 @@
 """Functionality for saving and loading Tensorflow Keras models as TileDB arrays"""
 
 import contextlib
-import glob
 import io
 import json
 import logging
-import os.path
+import os
 import pickle
 from operator import attrgetter
 from typing import Any, List, Mapping, Optional, Tuple
@@ -25,6 +24,7 @@ from tensorflow.python.keras.utils import generic_utils
 import tiledb
 
 from ._cloud_utils import update_file_properties
+from ._tensorboard import load_tensorboard, save_tensorboard
 from .base import Meta, TileDBModel, Timestamp, current_milli_time
 
 # SharedObjectLoadingScope was introduced in TensorFlow 2.5
@@ -73,11 +73,8 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
         if include_callbacks:
             for cb in include_callbacks:
                 if isinstance(cb, TensorBoard):
-                    event_files = self._get_tensorboard_files(cb.log_dir)
-                    meta = {
-                        "__TENSORBOARD__": pickle.dumps(event_files, protocol=4),
-                        **(meta or {}),
-                    }
+                    cb_meta = save_tensorboard(os.path.join(cb.log_dir, "train"))
+                    meta = {**meta, **cb_meta} if meta else cb_meta
 
         # Create TileDB model array
         if not update:
@@ -182,14 +179,7 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
         target_dir: Optional[str] = None,
         timestamp: Optional[Timestamp] = None,
     ) -> None:
-        with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
-            tb_data = pickle.loads(model_array.meta["__TENSORBOARD__"])
-            for path in tb_data.keys():
-                log_dir = target_dir if target_dir else os.path.dirname(path)
-                if not os.path.exists(log_dir):
-                    os.mkdir(log_dir)
-                with open(os.path.join(log_dir, os.path.basename(path)), "wb") as f:
-                    f.write(tb_data[path])
+        return load_tensorboard(self.uri, self.ctx, target_dir, timestamp)
 
     def preview(self) -> str:
         """Create a string representation of the model."""
@@ -419,11 +409,3 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
                 )
             var_value_tuples.extend(zip(weight_vars, read_weight_values))
         backend.batch_set_value(var_value_tuples)
-
-    @staticmethod
-    def _get_tensorboard_files(log_dir: str) -> Mapping[str, bytes]:
-        event_files = {}
-        for path in glob.glob(f"{log_dir}/train/*tfevents*"):
-            with open(path, "rb") as f:
-                event_files[path] = f.read()
-        return event_files

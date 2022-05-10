@@ -4,6 +4,7 @@ import io
 import os
 import pickle
 import platform
+import shutil
 
 import numpy as np
 import pytest
@@ -531,7 +532,7 @@ class TestTensorflowKerasModelCloud:
             ex.value
         )
 
-    def test_tensorboard_callback_meta(self, tmpdir, mocker):
+    def test_tensorboard_callback_meta(self, tmpdir):
         model = keras.models.Sequential()
         model.add(keras.layers.Flatten(input_shape=(10, 10)))
         tiledb_array = os.path.join(tmpdir, "model_array")
@@ -539,28 +540,30 @@ class TestTensorflowKerasModelCloud:
 
         cb = [tf.keras.callbacks.TensorBoard(log_dir=tmpdir)]
 
-        mocker.patch(
-            "tiledb.ml.models.tensorflow_keras.TensorflowKerasTileDBModel._get_tensorboard_files",
-            return_value={
-                f"{tmpdir}/event_file_name_1": b"test_bytes_1",
-                f"{tmpdir}/event_file_name_2": b"test_bytes_2",
-            },
-        )
+        os.mkdir(os.path.join(tmpdir, "train"))
+        with open(os.path.join(tmpdir, "train", "foo_tfevents_1"), "wb") as f:
+            f.write(b"test_bytes_1")
+        with open(os.path.join(tmpdir, "train", "bar_tfevents_2"), "wb") as f:
+            f.write(b"test_bytes_2")
 
         tiledb_obj.save(include_callbacks=cb)
         with tiledb.open(tiledb_array) as A:
-            assert len(pickle.loads(A.meta["__TENSORBOARD__"])) == 2
             assert pickle.loads(A.meta["__TENSORBOARD__"]) == {
-                f"{tmpdir}/event_file_name_1": b"test_bytes_1",
-                f"{tmpdir}/event_file_name_2": b"test_bytes_2",
+                os.path.join(tmpdir, "train", "foo_tfevents_1"): b"test_bytes_1",
+                os.path.join(tmpdir, "train", "bar_tfevents_2"): b"test_bytes_2",
             }
+        shutil.rmtree(os.path.join(tmpdir, "train"))
 
         # Loading the event data should create local files
         tiledb_obj.load_tensorboard()
-        assert os.path.exists(f"{tmpdir}/event_file_name_1")
-        assert os.path.exists(f"{tmpdir}/event_file_name_2")
+        with open(os.path.join(tmpdir, "train", "foo_tfevents_1"), "rb") as f:
+            assert f.read() == b"test_bytes_1"
+        with open(os.path.join(tmpdir, "train", "bar_tfevents_2"), "rb") as f:
+            assert f.read() == b"test_bytes_2"
 
         custom_dir = os.path.join(tmpdir, "custom_log")
         tiledb_obj.load_tensorboard(target_dir=custom_dir)
-        assert os.path.exists(f"{custom_dir}/event_file_name_1")
-        assert os.path.exists(f"{custom_dir}/event_file_name_2")
+        with open(os.path.join(custom_dir, "foo_tfevents_1"), "rb") as f:
+            assert f.read() == b"test_bytes_1"
+        with open(os.path.join(custom_dir, "bar_tfevents_2"), "rb") as f:
+            assert f.read() == b"test_bytes_2"

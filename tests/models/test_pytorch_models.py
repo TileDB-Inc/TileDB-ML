@@ -1,10 +1,11 @@
 """Tests for TileDB PyTorch model save and load."""
 
+import glob
 import inspect
 import os
 import pickle
 import platform
-import sys
+import shutil
 
 import pytest
 import torch
@@ -87,23 +88,19 @@ class ConvNet(nn.Module):
         return x
 
 
-@pytest.mark.parametrize(
-    "optimizer",
-    [
-        getattr(optimizers, name)
-        for name, obj in inspect.getmembers(optimizers)
-        if inspect.isclass(obj) and name != "Optimizer"
-    ],
-)
-@pytest.mark.parametrize(
-    "net",
-    [
-        getattr(sys.modules[__name__], name)
-        for name, obj in inspect.getmembers(sys.modules[__name__])
-        if inspect.isclass(obj) and obj.__module__ == __name__
-    ],
-)
+net = pytest.mark.parametrize("net", [ConvNet, Net, SeqNeuralNetwork])
+
+
 class TestPyTorchModel:
+    @net
+    @pytest.mark.parametrize(
+        "optimizer",
+        [
+            getattr(optimizers, name)
+            for name, obj in inspect.getmembers(optimizers)
+            if inspect.isclass(obj) and name != "Optimizer"
+        ],
+    )
     def test_save(self, tmpdir, net, optimizer):
         EPOCH = 5
         LOSS = 0.4
@@ -139,7 +136,8 @@ class TestPyTorchModel:
         ):
             assert all([a == b for a, b in zip(key_item_1[1], key_item_2[1])])
 
-    def test_preview(self, tmpdir, net, optimizer):
+    @net
+    def test_preview(self, tmpdir, net):
         # With model given as argument
         model = net()
         tiledb_array = os.path.join(tmpdir, "model_array")
@@ -148,7 +146,8 @@ class TestPyTorchModel:
         tiledb_obj_none = PyTorchTileDBModel(uri=tiledb_array, model=None)
         assert tiledb_obj_none.preview() == ""
 
-    def test_file_properties(self, tmpdir, net, optimizer):
+    @net
+    def test_file_properties(self, tmpdir, net):
         model = net()
         tiledb_array = os.path.join(tmpdir, "model_array")
         tiledb_obj = PyTorchTileDBModel(uri=tiledb_array, model=model)
@@ -165,38 +164,42 @@ class TestPyTorchModel:
         )
         assert tiledb_obj._file_properties["TILEDB_ML_MODEL_PREVIEW"] == str(model)
 
-    def test_tensorboard_callback_meta(self, tmpdir, net, optimizer, mocker):
+    @net
+    def test_tensorboard_callback_meta(self, tmpdir, net):
         model = net()
         tiledb_array = os.path.join(tmpdir, "model_array")
         tiledb_obj = PyTorchTileDBModel(uri=tiledb_array, model=model)
 
-        mocker.patch(
-            "tiledb.ml.models.pytorch.PyTorchTileDBModel._get_tensorboard_files",
-            return_value={
-                f"{tmpdir}/event_file_name_1": b"test_bytes_1",
-                f"{tmpdir}/event_file_name_2": b"test_bytes_2",
-            },
-        )
+        # SummaryWriter creates file(s) under log_dir
+        log_dir = os.path.join(tmpdir, "logs")
+        writer = SummaryWriter(log_dir=log_dir)
+        log_files = read_files(log_dir)
+        assert log_files
 
-        writer = SummaryWriter()
         tiledb_obj.save(update=False, summary_writer=writer)
-
         with tiledb.open(tiledb_array) as A:
-            assert len(pickle.loads(A.meta["__TENSORBOARD__"])) == 2
-            assert pickle.loads(A.meta["__TENSORBOARD__"]) == {
-                f"{tmpdir}/event_file_name_1": b"test_bytes_1",
-                f"{tmpdir}/event_file_name_2": b"test_bytes_2",
-            }
+            assert pickle.loads(A.meta["__TENSORBOARD__"]) == log_files
+        shutil.rmtree(log_dir)
 
         # Loading the event data should create local files
         tiledb_obj.load_tensorboard()
-        assert os.path.exists(f"{tmpdir}/event_file_name_1")
-        assert os.path.exists(f"{tmpdir}/event_file_name_2")
+        new_log_files = read_files(log_dir)
+        assert new_log_files == log_files
 
         custom_dir = os.path.join(tmpdir, "custom_log")
         tiledb_obj.load_tensorboard(target_dir=custom_dir)
-        assert os.path.exists(f"{custom_dir}/event_file_name_1")
-        assert os.path.exists(f"{custom_dir}/event_file_name_2")
+        new_log_files = read_files(custom_dir)
+        assert len(new_log_files) == len(log_files)
+        for new_file, old_file in zip(new_log_files.values(), log_files.values()):
+            assert new_file == old_file
+
+
+def read_files(dirpath):
+    files = {}
+    for path in glob.glob(f"{dirpath}/*"):
+        with open(path, "rb") as f:
+            files[path] = f.read()
+    return files
 
 
 class TestPyTorchModelCloud:
