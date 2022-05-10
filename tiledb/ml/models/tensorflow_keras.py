@@ -1,6 +1,5 @@
 """Functionality for saving and loading Tensorflow Keras models as TileDB arrays"""
 
-import contextlib
 import io
 import json
 import logging
@@ -11,15 +10,6 @@ from typing import Any, List, Mapping, Optional, Tuple
 
 import numpy as np
 import tensorflow as tf
-from tensorflow.python.keras import backend, optimizer_v1
-from tensorflow.python.keras.callbacks import TensorBoard as TensorBoard
-from tensorflow.python.keras.engine.functional import Functional
-from tensorflow.python.keras.models import Sequential
-from tensorflow.python.keras.saving import model_config as model_config_lib
-from tensorflow.python.keras.saving import saving_utils
-from tensorflow.python.keras.saving.hdf5_format import preprocess_weights_for_loading
-from tensorflow.python.keras.saving.saved_model import json_utils
-from tensorflow.python.keras.utils import generic_utils
 
 import tiledb
 
@@ -27,10 +17,23 @@ from ._cloud_utils import update_file_properties
 from ._tensorboard import load_tensorboard, save_tensorboard
 from .base import Meta, TileDBModel, Timestamp, current_milli_time
 
-# SharedObjectLoadingScope was introduced in TensorFlow 2.5
-SharedObjectLoadingScope = getattr(
-    generic_utils, "SharedObjectLoadingScope", contextlib.nullcontext
-)
+try:
+    import keras
+
+    if keras.Model is not tf.keras.Model:
+        raise ImportError
+    tf_keras_is_keras = True
+except ImportError:
+    import tensorflow.python.keras as keras
+
+    tf_keras_is_keras = False
+
+SharedObjectLoadingScope = keras.utils.generic_utils.SharedObjectLoadingScope
+FunctionalOrSequential = (keras.models.Functional, keras.models.Sequential)
+TFOptimizer = keras.optimizer_v1.TFOptimizer
+get_json_type = keras.saving.saved_model.json_utils.get_json_type
+preprocess_weights_for_loading = keras.saving.hdf5_format.preprocess_weights_for_loading
+saving_utils = keras.saving.saving_utils
 
 
 class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
@@ -72,7 +75,7 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
 
         if include_callbacks:
             for cb in include_callbacks:
-                if isinstance(cb, TensorBoard):
+                if isinstance(cb, tf.keras.callbacks.TensorBoard):
                     cb_meta = save_tensorboard(os.path.join(cb.log_dir, "train"))
                     meta = {**meta, **cb_meta} if meta else cb_meta
 
@@ -113,12 +116,12 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
             model_config = json.loads(model_array.meta["model_config"])
             model_class = model_config["class_name"]
 
-            if model_class != "Sequential" and model_class != "Functional":
+            if model_class not in ("Functional", "Sequential"):
                 with SharedObjectLoadingScope():
-                    with generic_utils.CustomObjectScope(custom_objects or {}):
+                    with tf.keras.utils.CustomObjectScope(custom_objects or {}):
                         if hasattr(model_config, "decode"):
                             model_config = model_config.decode("utf-8")
-                        model = model_config_lib.model_from_config(
+                        model = tf.keras.models.model_from_config(
                             model_config, custom_objects=custom_objects
                         )
                         if not model.built:
@@ -198,7 +201,7 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
             tiledb.Dim(
                 name="model", domain=(1, 1), tile=1, dtype=np.int32, ctx=self.ctx
             )
-            if isinstance(self.model, (Functional, Sequential))
+            if isinstance(self.model, FunctionalOrSequential)
             else tiledb.Dim(
                 name="model",
                 domain=(1, len(self.model.layers)),
@@ -207,7 +210,7 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
                 ctx=self.ctx,
             ),
         )
-        if isinstance(self.model, (Functional, Sequential)):
+        if isinstance(self.model, FunctionalOrSequential):
             attrs = [
                 tiledb.Attr(
                     name="model_weights",
@@ -286,7 +289,7 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
         with tiledb.open(
             self.uri, "w", timestamp=current_milli_time(), ctx=self.ctx
         ) as tf_model_tiledb:
-            if isinstance(self.model, (Functional, Sequential)):
+            if isinstance(self.model, FunctionalOrSequential):
                 tf_model_tiledb[:] = {
                     "model_weights": np.array([serialized_weights]),
                     "optimizer_weights": np.array([serialized_optimizer_weights]),
@@ -298,7 +301,9 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
                 weight_values = []
                 for layer in sorted(self.model.layers, key=attrgetter("name")):
                     weights = layer.trainable_weights + layer.non_trainable_weights
-                    weight_values.append(pickle.dumps(backend.batch_get_value(weights)))
+                    weight_values.append(
+                        pickle.dumps(tf.keras.backend.batch_get_value(weights))
+                    )
                     weight_names.append(
                         pickle.dumps([w.name.encode("utf8") for w in weights])
                     )
@@ -321,7 +326,7 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
             model_metadata = saving_utils.model_metadata(self.model, include_optimizer)
             for key, value in model_metadata.items():
                 tf_model_tiledb.meta[key] = json.dumps(
-                    value, default=json_utils.get_json_type
+                    value, default=get_json_type
                 ).encode("utf8")
 
             self.update_model_metadata(array=tf_model_tiledb, meta=meta)
@@ -329,16 +334,9 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
     def _serialize_optimizer_weights(self, include_optimizer: bool = True) -> bytes:
         """Serialize optimizer weights"""
         assert self.model
-        if (
-            include_optimizer
-            and self.model.optimizer
-            and not isinstance(self.model.optimizer, optimizer_v1.TFOptimizer)
-        ):
-
-            optimizer_weights = tf.keras.backend.batch_get_value(
-                getattr(self.model.optimizer, "weights")
-            )
-
+        optimizer = self.model.optimizer
+        if include_optimizer and optimizer and not isinstance(optimizer, TFOptimizer):
+            optimizer_weights = tf.keras.backend.batch_get_value(optimizer.weights)
             return pickle.dumps(optimizer_weights, protocol=4)
         else:
             return b""
@@ -408,4 +406,4 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
                     f"but the saved weights have {len(read_weight_values)} elements"
                 )
             var_value_tuples.extend(zip(weight_vars, read_weight_values))
-        backend.batch_set_value(var_value_tuples)
+        tf.keras.backend.batch_set_value(var_value_tuples)
