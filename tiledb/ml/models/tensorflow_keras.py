@@ -8,7 +8,7 @@ import logging
 import os.path
 import pickle
 from operator import attrgetter
-from typing import Any, Dict, List, Mapping, Optional, Tuple
+from typing import Any, List, Mapping, Optional, Tuple
 
 import numpy as np
 import tensorflow as tf
@@ -70,17 +70,14 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
             include_optimizer=include_optimizer
         )
 
-        cb_meta: Dict[str, bytes] = dict()
         if include_callbacks:
             for cb in include_callbacks:
                 if isinstance(cb, TensorBoard):
                     event_files = self._get_tensorboard_files(cb.log_dir)
-                    cb_meta["__TENSORBOARD__"] = pickle.dumps(event_files, protocol=4)
-                    # Updates the meta dictionary with tensorboard metadata if existed
-                    if meta:
-                        cb_meta.update(meta)
-                    else:
-                        meta = cb_meta
+                    meta = {
+                        "__TENSORBOARD__": pickle.dumps(event_files, protocol=4),
+                        **(meta or {}),
+                    }
 
         # Create TileDB model array
         if not update:
@@ -90,7 +87,7 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
             include_optimizer=include_optimizer,
             serialized_weights=model_weights,
             serialized_optimizer_weights=optimizer_weights,
-            meta=cb_meta if include_callbacks and meta else meta,
+            meta=meta,
         )
 
     def load(
@@ -185,7 +182,6 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
         target_dir: Optional[str] = None,
         timestamp: Optional[Timestamp] = None,
     ) -> None:
-
         with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
             tb_data = pickle.loads(model_array.meta["__TENSORBOARD__"])
             for path in tb_data.keys():

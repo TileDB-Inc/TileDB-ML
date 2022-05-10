@@ -3,7 +3,7 @@
 import glob
 import os
 import pickle
-from typing import Any, Dict, Mapping, Optional
+from typing import Any, Mapping, Optional
 
 import numpy as np
 import torch
@@ -80,15 +80,12 @@ class PyTorchTileDBModel(TileDBModel[torch.nn.Module]):
         )
 
         # Summary writer
-        cb_meta: Dict[str, bytes] = dict()
         if summary_writer:
             event_files = self._get_tensorboard_files(summary_writer.log_dir)
-            cb_meta["__TENSORBOARD__"] = pickle.dumps(event_files, protocol=4)
-            # Updates the meta dictionary with tensorboard metadata if existed
-            if meta:
-                cb_meta.update(meta)
-            else:
-                meta = cb_meta
+            meta = {
+                "__TENSORBOARD__": pickle.dumps(event_files, protocol=4),
+                **(meta or {}),
+            }
 
         # Create TileDB model array
         if not update:
@@ -100,7 +97,7 @@ class PyTorchTileDBModel(TileDBModel[torch.nn.Module]):
                 **serialized_optimizer_dict,
                 **serialized_model_info,
             },
-            meta=cb_meta if summary_writer and meta else meta,
+            meta=meta,
         )
 
     # FIXME: This method should change to return the model, not the model_info dict
@@ -252,14 +249,12 @@ class PyTorchTileDBModel(TileDBModel[torch.nn.Module]):
             tf_model_tiledb[:] = {
                 key: np.array([value]) for key, value in serialized_model_dict.items()
             }
-            print(meta)
             self.update_model_metadata(array=tf_model_tiledb, meta=meta)
 
     @staticmethod
     def _get_tensorboard_files(log_dir: str) -> Mapping[str, bytes]:
         event_files = {}
         for path in glob.glob(f"{log_dir}/*tfevents*"):
-            print(path)
             with open(path, "rb") as f:
                 event_files[path] = f.read()
         return event_files
