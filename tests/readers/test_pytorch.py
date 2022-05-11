@@ -19,22 +19,21 @@ class TestPyTorchTileDBDataset:
     def test_dataset(
         self,
         tmpdir,
-        num_rows,
-        num_workers,
-        x_sparse,
-        y_sparse,
         x_shape,
         y_shape,
+        x_sparse,
+        y_sparse,
         num_attrs,
         pass_attrs,
         buffer_bytes,
         batch_size,
         shuffle_buffer_size,
+        num_workers,
     ):
         with ingest_in_tiledb(
             tmpdir,
-            x_data=rand_array(num_rows, *x_shape, sparse=x_sparse),
-            y_data=rand_array(num_rows, *y_shape, sparse=y_sparse),
+            x_shape=x_shape,
+            y_shape=y_shape,
             x_sparse=x_sparse,
             y_sparse=y_sparse,
             num_attrs=num_attrs,
@@ -50,35 +49,34 @@ class TestPyTorchTileDBDataset:
     def test_dataloader(
         self,
         tmpdir,
-        num_rows,
-        num_workers,
-        x_sparse,
-        y_sparse,
         x_shape,
         y_shape,
+        x_sparse,
+        y_sparse,
         num_attrs,
         pass_attrs,
         buffer_bytes,
         batch_size,
         shuffle_buffer_size,
+        num_workers,
     ):
         if num_workers and (x_sparse or y_sparse):
             pytest.skip("multiple workers not supported with sparse arrays")
 
         with ingest_in_tiledb(
             tmpdir,
-            x_data=rand_array(num_rows, *x_shape, sparse=x_sparse),
-            y_data=rand_array(num_rows, *y_shape, sparse=y_sparse),
+            x_shape=x_shape,
+            y_shape=y_shape,
             x_sparse=x_sparse,
             y_sparse=y_sparse,
             num_attrs=num_attrs,
             pass_attrs=pass_attrs,
         ) as kwargs:
             dataloader = PyTorchTileDBDataLoader(
-                num_workers=num_workers,
                 buffer_bytes=buffer_bytes,
                 batch_size=batch_size,
                 shuffle_buffer_size=shuffle_buffer_size,
+                num_workers=num_workers,
                 **kwargs
             )
             assert isinstance(dataloader, torch.utils.data.DataLoader)
@@ -106,27 +104,29 @@ class TestPyTorchTileDBDataset:
                 assert len(unique_x_tensors) - 1 == i
                 assert len(unique_y_tensors) - 1 == i
 
-    @parametrize_for_dataset()
+    @parametrize_for_dataset(
+        # Add one extra row on X
+        x_shape=((108, 10), (108, 10, 3)),
+        y_shape=((107, 5), (107, 5, 2)),
+    )
     def test_unequal_num_rows(
         self,
         tmpdir,
-        num_rows,
-        num_workers,
-        x_sparse,
-        y_sparse,
         x_shape,
         y_shape,
+        x_sparse,
+        y_sparse,
         num_attrs,
         pass_attrs,
         buffer_bytes,
         batch_size,
         shuffle_buffer_size,
+        num_workers,
     ):
         with ingest_in_tiledb(
             tmpdir,
-            # Add one extra row on X
-            x_data=rand_array(num_rows + 1, *x_shape, sparse=x_sparse),
-            y_data=rand_array(num_rows, *y_shape, sparse=y_sparse),
+            x_shape=x_shape,
+            y_shape=y_shape,
             x_sparse=x_sparse,
             y_sparse=y_sparse,
             num_attrs=num_attrs,
@@ -134,10 +134,10 @@ class TestPyTorchTileDBDataset:
         ) as kwargs:
             with pytest.raises(ValueError) as ex:
                 PyTorchTileDBDataLoader(
-                    num_workers=num_workers,
                     buffer_bytes=buffer_bytes,
                     batch_size=batch_size,
                     shuffle_buffer_size=shuffle_buffer_size,
+                    num_workers=num_workers,
                     **kwargs
                 )
             assert "X and Y arrays must have the same number of rows" in str(ex.value)
@@ -147,24 +147,23 @@ class TestPyTorchTileDBDataset:
     def test_sparse_read_order(
         self,
         tmpdir,
-        num_rows,
-        num_workers,
-        x_sparse,
-        y_sparse,
         x_shape,
         y_shape,
+        x_sparse,
+        y_sparse,
         num_attrs,
         pass_attrs,
         buffer_bytes,
         batch_size,
         shuffle_buffer_size,
+        num_workers,
         csr,
     ):
-        x_data = rand_array(num_rows, *x_shape, sparse=x_sparse)
+        x_data = rand_array(x_shape, x_sparse)
         with ingest_in_tiledb(
             tmpdir,
-            x_data=x_data,
-            y_data=rand_array(num_rows, *y_shape, sparse=y_sparse),
+            x_shape=x_data,
+            y_shape=y_shape,
             x_sparse=x_sparse,
             y_sparse=y_sparse,
             num_attrs=num_attrs,

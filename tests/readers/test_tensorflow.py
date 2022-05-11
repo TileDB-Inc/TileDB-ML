@@ -19,22 +19,21 @@ class TestTensorflowTileDBDataset:
     def test_dataset(
         self,
         tmpdir,
-        num_rows,
-        num_workers,
-        x_sparse,
-        y_sparse,
         x_shape,
         y_shape,
+        x_sparse,
+        y_sparse,
         num_attrs,
         pass_attrs,
         buffer_bytes,
         batch_size,
         shuffle_buffer_size,
+        num_workers,
     ):
         with ingest_in_tiledb(
             tmpdir,
-            x_data=rand_array(num_rows, *x_shape, sparse=x_sparse),
-            y_data=rand_array(num_rows, *y_shape, sparse=y_sparse),
+            x_shape=x_shape,
+            y_shape=y_shape,
             x_sparse=x_sparse,
             y_sparse=y_sparse,
             num_attrs=num_attrs,
@@ -52,27 +51,29 @@ class TestTensorflowTileDBDataset:
                 dataset, num_attrs, x_sparse, y_sparse, x_shape, y_shape, batch_size
             )
 
-    @parametrize_for_dataset()
+    @parametrize_for_dataset(
+        # Add one extra row on X
+        x_shape=((108, 10), (108, 10, 3)),
+        y_shape=((107, 5), (107, 5, 2)),
+    )
     def test_unequal_num_rows(
         self,
         tmpdir,
-        num_rows,
-        num_workers,
-        x_sparse,
-        y_sparse,
         x_shape,
         y_shape,
+        x_sparse,
+        y_sparse,
         num_attrs,
         pass_attrs,
         buffer_bytes,
         batch_size,
         shuffle_buffer_size,
+        num_workers,
     ):
         with ingest_in_tiledb(
             tmpdir,
-            # Add one extra row on X
-            x_data=rand_array(num_rows + 1, *x_shape, sparse=x_sparse),
-            y_data=rand_array(num_rows, *y_shape, sparse=y_sparse),
+            x_shape=x_shape,
+            y_shape=y_shape,
             x_sparse=x_sparse,
             y_sparse=y_sparse,
             num_attrs=num_attrs,
@@ -92,23 +93,22 @@ class TestTensorflowTileDBDataset:
     def test_sparse_read_order(
         self,
         tmpdir,
-        num_rows,
-        num_workers,
-        x_sparse,
-        y_sparse,
         x_shape,
         y_shape,
+        x_sparse,
+        y_sparse,
         num_attrs,
         pass_attrs,
         buffer_bytes,
         batch_size,
         shuffle_buffer_size,
+        num_workers,
     ):
-        x_data = rand_array(num_rows, *x_shape, sparse=x_sparse)
+        x_data = rand_array(x_shape, x_sparse)
         with ingest_in_tiledb(
             tmpdir,
-            x_data=x_data,
-            y_data=rand_array(num_rows, *y_shape, sparse=y_sparse),
+            x_shape=x_data,
+            y_shape=y_shape,
             x_sparse=x_sparse,
             y_sparse=y_sparse,
             num_attrs=num_attrs,
