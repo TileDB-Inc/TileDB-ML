@@ -25,10 +25,10 @@ def parametrize_for_dataset(
     x_key_dim=(0, 1),
     y_key_dim=(0, 1),
     num_attrs=(1, 2),
-    pass_attrs=(True, False),
+    pass_attrs=(True,),
     buffer_bytes=(1024, None),
     batch_size=(8,),
-    shuffle_buffer_size=(0, 16),
+    shuffle_buffer_size=(16,),
     num_workers=(0, 2),
 ):
     argnames = [
