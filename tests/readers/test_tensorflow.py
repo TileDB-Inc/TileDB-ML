@@ -6,12 +6,7 @@ import tensorflow as tf
 
 from tiledb.ml.readers.tensorflow import TensorflowTileDBDataset
 
-from .utils import (
-    ingest_in_tiledb,
-    parametrize_for_dataset,
-    rand_array,
-    validate_tensor_generator,
-)
+from .utils import ingest_in_tiledb, parametrize_for_dataset, validate_tensor_generator
 
 
 class TestTensorflowTileDBDataset:
@@ -31,20 +26,19 @@ class TestTensorflowTileDBDataset:
         num_workers,
     ):
         with ingest_in_tiledb(
-            tmpdir,
-            x_shape=x_shape,
-            y_shape=y_shape,
-            x_sparse=x_sparse,
-            y_sparse=y_sparse,
-            num_attrs=num_attrs,
-            pass_attrs=pass_attrs,
-        ) as kwargs:
+            tmpdir, x_shape, x_sparse, num_attrs, pass_attrs
+        ) as x_kwargs, ingest_in_tiledb(
+            tmpdir, y_shape, y_sparse, num_attrs, pass_attrs
+        ) as y_kwargs:
             dataset = TensorflowTileDBDataset(
+                x_array=x_kwargs["array"],
+                y_array=y_kwargs["array"],
+                x_attrs=x_kwargs["attrs"],
+                y_attrs=y_kwargs["attrs"],
                 buffer_bytes=buffer_bytes,
                 batch_size=batch_size,
                 shuffle_buffer_size=shuffle_buffer_size,
                 num_workers=num_workers,
-                **kwargs,
             )
             assert isinstance(dataset, tf.data.Dataset)
             validate_tensor_generator(
@@ -71,21 +65,20 @@ class TestTensorflowTileDBDataset:
         num_workers,
     ):
         with ingest_in_tiledb(
-            tmpdir,
-            x_shape=x_shape,
-            y_shape=y_shape,
-            x_sparse=x_sparse,
-            y_sparse=y_sparse,
-            num_attrs=num_attrs,
-            pass_attrs=pass_attrs,
-        ) as kwargs:
+            tmpdir, x_shape, x_sparse, num_attrs, pass_attrs
+        ) as x_kwargs, ingest_in_tiledb(
+            tmpdir, y_shape, y_sparse, num_attrs, pass_attrs
+        ) as y_kwargs:
             with pytest.raises(ValueError) as ex:
                 TensorflowTileDBDataset(
+                    x_array=x_kwargs["array"],
+                    y_array=y_kwargs["array"],
+                    x_attrs=x_kwargs["attrs"],
+                    y_attrs=y_kwargs["attrs"],
                     buffer_bytes=buffer_bytes,
                     batch_size=batch_size,
                     shuffle_buffer_size=shuffle_buffer_size,
                     num_workers=num_workers,
-                    **kwargs,
                 )
             assert "X and Y arrays must have the same number of rows" in str(ex.value)
 
@@ -104,22 +97,20 @@ class TestTensorflowTileDBDataset:
         shuffle_buffer_size,
         num_workers,
     ):
-        x_data = rand_array(x_shape, x_sparse)
         with ingest_in_tiledb(
-            tmpdir,
-            x_shape=x_data,
-            y_shape=y_shape,
-            x_sparse=x_sparse,
-            y_sparse=y_sparse,
-            num_attrs=num_attrs,
-            pass_attrs=pass_attrs,
-        ) as kwargs:
+            tmpdir, x_shape, x_sparse, num_attrs, pass_attrs
+        ) as x_kwargs, ingest_in_tiledb(
+            tmpdir, y_shape, y_sparse, num_attrs, pass_attrs
+        ) as y_kwargs:
             dataset = TensorflowTileDBDataset(
+                x_array=x_kwargs["array"],
+                y_array=y_kwargs["array"],
+                x_attrs=x_kwargs["attrs"],
+                y_attrs=y_kwargs["attrs"],
                 buffer_bytes=buffer_bytes,
                 batch_size=batch_size,
                 shuffle_buffer_size=shuffle_buffer_size,
                 num_workers=num_workers,
-                **kwargs,
             )
             generated_x_data = np.concatenate(
                 [
@@ -129,4 +120,4 @@ class TestTensorflowTileDBDataset:
                     for x_tensors, y_tensors in dataset
                 ]
             )
-            np.testing.assert_array_almost_equal(generated_x_data, x_data)
+            np.testing.assert_array_almost_equal(generated_x_data, x_kwargs["data"])

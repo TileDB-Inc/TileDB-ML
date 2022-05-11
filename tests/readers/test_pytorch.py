@@ -6,12 +6,7 @@ import torch
 
 from tiledb.ml.readers.pytorch import PyTorchTileDBDataLoader, PyTorchTileDBDataset
 
-from .utils import (
-    ingest_in_tiledb,
-    parametrize_for_dataset,
-    rand_array,
-    validate_tensor_generator,
-)
+from .utils import ingest_in_tiledb, parametrize_for_dataset, validate_tensor_generator
 
 
 class TestPyTorchTileDBDataset:
@@ -31,15 +26,17 @@ class TestPyTorchTileDBDataset:
         num_workers,
     ):
         with ingest_in_tiledb(
-            tmpdir,
-            x_shape=x_shape,
-            y_shape=y_shape,
-            x_sparse=x_sparse,
-            y_sparse=y_sparse,
-            num_attrs=num_attrs,
-            pass_attrs=pass_attrs,
-        ) as kwargs:
-            dataset = PyTorchTileDBDataset(buffer_bytes=buffer_bytes, **kwargs)
+            tmpdir, x_shape, x_sparse, num_attrs, pass_attrs
+        ) as x_kwargs, ingest_in_tiledb(
+            tmpdir, y_shape, y_sparse, num_attrs, pass_attrs
+        ) as y_kwargs:
+            dataset = PyTorchTileDBDataset(
+                x_array=x_kwargs["array"],
+                y_array=y_kwargs["array"],
+                x_attrs=x_kwargs["attrs"],
+                y_attrs=y_kwargs["attrs"],
+                buffer_bytes=buffer_bytes,
+            )
             assert isinstance(dataset, torch.utils.data.IterableDataset)
             validate_tensor_generator(
                 dataset, num_attrs, x_sparse, y_sparse, x_shape, y_shape
@@ -64,20 +61,19 @@ class TestPyTorchTileDBDataset:
             pytest.skip("multiple workers not supported with sparse arrays")
 
         with ingest_in_tiledb(
-            tmpdir,
-            x_shape=x_shape,
-            y_shape=y_shape,
-            x_sparse=x_sparse,
-            y_sparse=y_sparse,
-            num_attrs=num_attrs,
-            pass_attrs=pass_attrs,
-        ) as kwargs:
+            tmpdir, x_shape, x_sparse, num_attrs, pass_attrs
+        ) as x_kwargs, ingest_in_tiledb(
+            tmpdir, y_shape, y_sparse, num_attrs, pass_attrs
+        ) as y_kwargs:
             dataloader = PyTorchTileDBDataLoader(
+                x_array=x_kwargs["array"],
+                y_array=y_kwargs["array"],
+                x_attrs=x_kwargs["attrs"],
+                y_attrs=y_kwargs["attrs"],
                 buffer_bytes=buffer_bytes,
                 batch_size=batch_size,
                 shuffle_buffer_size=shuffle_buffer_size,
                 num_workers=num_workers,
-                **kwargs
             )
             assert isinstance(dataloader, torch.utils.data.DataLoader)
             validate_tensor_generator(
@@ -124,21 +120,20 @@ class TestPyTorchTileDBDataset:
         num_workers,
     ):
         with ingest_in_tiledb(
-            tmpdir,
-            x_shape=x_shape,
-            y_shape=y_shape,
-            x_sparse=x_sparse,
-            y_sparse=y_sparse,
-            num_attrs=num_attrs,
-            pass_attrs=pass_attrs,
-        ) as kwargs:
+            tmpdir, x_shape, x_sparse, num_attrs, pass_attrs
+        ) as x_kwargs, ingest_in_tiledb(
+            tmpdir, y_shape, y_sparse, num_attrs, pass_attrs
+        ) as y_kwargs:
             with pytest.raises(ValueError) as ex:
                 PyTorchTileDBDataLoader(
+                    x_array=x_kwargs["array"],
+                    y_array=y_kwargs["array"],
+                    x_attrs=x_kwargs["attrs"],
+                    y_attrs=y_kwargs["attrs"],
                     buffer_bytes=buffer_bytes,
                     batch_size=batch_size,
                     shuffle_buffer_size=shuffle_buffer_size,
                     num_workers=num_workers,
-                    **kwargs
                 )
             assert "X and Y arrays must have the same number of rows" in str(ex.value)
 
@@ -159,23 +154,21 @@ class TestPyTorchTileDBDataset:
         num_workers,
         csr,
     ):
-        x_data = rand_array(x_shape, x_sparse)
         with ingest_in_tiledb(
-            tmpdir,
-            x_shape=x_data,
-            y_shape=y_shape,
-            x_sparse=x_sparse,
-            y_sparse=y_sparse,
-            num_attrs=num_attrs,
-            pass_attrs=pass_attrs,
-        ) as kwargs:
+            tmpdir, x_shape, x_sparse, num_attrs, pass_attrs
+        ) as x_kwargs, ingest_in_tiledb(
+            tmpdir, y_shape, y_sparse, num_attrs, pass_attrs
+        ) as y_kwargs:
             dataloader = PyTorchTileDBDataLoader(
+                x_array=x_kwargs["array"],
+                y_array=y_kwargs["array"],
+                x_attrs=x_kwargs["attrs"],
+                y_attrs=y_kwargs["attrs"],
                 buffer_bytes=buffer_bytes,
                 batch_size=batch_size,
                 shuffle_buffer_size=shuffle_buffer_size,
                 num_workers=num_workers,
                 csr=csr,
-                **kwargs
             )
             generated_x_data = np.concatenate(
                 [
@@ -183,4 +176,4 @@ class TestPyTorchTileDBDataset:
                     for x, y in dataloader
                 ]
             )
-            np.testing.assert_array_almost_equal(generated_x_data, x_data)
+            np.testing.assert_array_almost_equal(generated_x_data, x_kwargs["data"])

@@ -57,47 +57,13 @@ def parametrize_for_dataset(
 
 
 @contextmanager
-def ingest_in_tiledb(
-    tmpdir,
-    *,
-    x_shape,
-    y_shape,
-    x_sparse,
-    y_sparse,
-    num_attrs,
-    pass_attrs,
-):
-    """Context manager for ingest data into TileDB.
-
-    Yield the keyword arguments for instantiating a TiledbDataset.
-    """
+def ingest_in_tiledb(tmpdir, shape, sparse, num_attrs, pass_attrs):
+    """Context manager for ingesting data into TileDB."""
     array_uuid = str(uuid.uuid4())
-    x_uri = os.path.join(tmpdir, "x_" + array_uuid)
-    y_uri = os.path.join(tmpdir, "y_" + array_uuid)
-    x_data = (
-        rand_array(x_shape, x_sparse)
-        if not isinstance(x_shape, np.ndarray)
-        else x_shape
-    )
-    y_data = (
-        rand_array(y_shape, y_sparse)
-        if not isinstance(y_shape, np.ndarray)
-        else y_shape
-    )
-    x_attrs = tuple(f"x{i}" for i in range(num_attrs))
-    y_attrs = tuple(f"y{i}" for i in range(num_attrs))
-    _ingest_in_tiledb(x_uri, x_data, x_sparse, x_attrs)
-    _ingest_in_tiledb(y_uri, y_data, y_sparse, y_attrs)
-    with tiledb.open(x_uri) as x_array, tiledb.open(y_uri) as y_array:
-        yield dict(
-            x_array=x_array,
-            y_array=y_array,
-            x_attrs=x_attrs if pass_attrs else (),
-            y_attrs=y_attrs if pass_attrs else (),
-        )
+    uri = os.path.join(tmpdir, array_uuid)
+    data = rand_array(shape, sparse)
+    attrs = tuple(f"{array_uuid[0]}{i}" for i in range(num_attrs))
 
-
-def _ingest_in_tiledb(uri: str, data: np.ndarray, sparse: bool, attrs: Sequence[str]):
     dims = [
         tiledb.Dim(
             name=f"dim_{dim}",
@@ -122,6 +88,9 @@ def _ingest_in_tiledb(uri: str, data: np.ndarray, sparse: bool, attrs: Sequence[
     with tiledb.open(uri, "w") as tiledb_array:
         idx = np.nonzero(data) if sparse else slice(None)
         tiledb_array[idx] = {attr: data[idx] for attr in attrs}
+
+    with tiledb.open(uri) as array:
+        yield {"data": data, "array": array, "attrs": attrs if pass_attrs else ()}
 
 
 def rand_array(shape: Sequence[int], sparse: bool = False) -> np.ndarray:
