@@ -3,6 +3,7 @@ import pytest
 
 import tiledb
 from tiledb.ml.readers._buffer_utils import estimate_row_bytes, get_max_buffer_size
+from tiledb.ml.readers._tensor_gen import TensorSchema
 
 
 @pytest.fixture
@@ -40,7 +41,7 @@ def sparse_uri(tmp_path):
         allows_duplicates=True,
         domain=tiledb.Domain(
             tiledb.Dim(name="d0", domain=(0, 999), dtype=np.int32),
-            tiledb.Dim(name="d1", domain=(-5000, 5000), dtype=np.int32),
+            tiledb.Dim(name="d1", domain=(-250, 249), dtype=np.int32),
             tiledb.Dim(name="d2", domain=(1, 10), dtype=np.int32),
         ),
         attrs=[
@@ -57,7 +58,7 @@ def sparse_uri(tmp_path):
         d0 = np.concatenate(
             [np.arange(num_rows, dtype=np.uint32) for _ in range(cells_per_row)]
         )
-        d1 = np.random.randint(-5000, 5001, num_cells).astype(np.int32)
+        d1 = np.random.randint(-250, 250, num_cells).astype(np.int32)
         d2 = np.random.randint(1, 11, num_cells).astype(np.uint16)
         a[d0, d1, d2] = {
             "af8": np.random.rand(num_cells),
@@ -67,49 +68,68 @@ def sparse_uri(tmp_path):
     return uri
 
 
-def test_estimate_row_bytes_dense(dense_uri):
+@pytest.mark.parametrize("key_dim,row_cells", [(0, 10), (1, 20000), (2, 50000)])
+def test_estimate_row_bytes_dense(dense_uri, key_dim, row_cells):
     with tiledb.open(dense_uri) as a:
-        # 10 cells/row, 8+4+1=13 bytes/cell
-        assert estimate_row_bytes(a) == 130
-        # 10 cells/row, 8+1=9 bytes/cell
-        assert estimate_row_bytes(a, attrs=["af8", "au1"]) == 90
-        # 10 cells/row, 4 bytes/cell
-        assert estimate_row_bytes(a, attrs=["af4"]) == 40
+        # 8+4+1=13 bytes/cell
+        schema = TensorSchema(a.schema, key_dim)
+        assert estimate_row_bytes(a, schema) == row_cells * 13
+        # 8+1=9 bytes/cell
+        schema = TensorSchema(a.schema, key_dim, ["af8", "au1"])
+        assert estimate_row_bytes(a, schema) == row_cells * 9
+        # 4 bytes/cell
+        schema = TensorSchema(a.schema, key_dim, ["af4"])
+        assert estimate_row_bytes(a, schema) == row_cells * 4
 
 
-def test_estimate_row_bytes_sparse(sparse_uri):
+@pytest.mark.parametrize("key_dim,row_cells", [(0, 3), (1, 6), (2, 300)])
+def test_estimate_row_bytes_sparse(sparse_uri, key_dim, row_cells):
     with tiledb.open(sparse_uri) as a:
-        # 3 cells/row, 3*4 bytes for dims + 8+4+1=13 bytes for attrs = 25 bytes/cell
-        assert estimate_row_bytes(a) == 75
-        # 3 cells/row, 3*4 bytes for dims + 8+1=9 bytes for attrs = 21 bytes/cell
-        assert estimate_row_bytes(a, attrs=["af8", "au1"]) == 63
-        # 3 cells/row, 3*4 bytes for dims + 4 bytes for attrs = 16 bytes/cell
-        assert estimate_row_bytes(a, attrs=["af4"]) == 48
+        # 3*4 bytes for dims + 8+4+1=13 bytes for attrs = 25 bytes/cell
+        schema = TensorSchema(a.schema, key_dim)
+        assert estimate_row_bytes(a, schema) == row_cells * 25
+        # 3*4 bytes for dims + 8+1=9 bytes for attrs = 21 bytes/cell
+        schema = TensorSchema(a.schema, key_dim, ["af8", "au1"])
+        assert estimate_row_bytes(a, schema) == row_cells * 21
+        # 3*4 bytes for dims + 4 bytes for attrs = 16 bytes/cell
+        schema = TensorSchema(a.schema, key_dim, ["af4"])
+        assert estimate_row_bytes(a, schema) == row_cells * 16
 
 
-@pytest.mark.parametrize("memory_budget", [2**i for i in range(14, 20)])
 @pytest.mark.parametrize(
     "attrs",
     [(), ("af8",), ("af4",), ("au1",), ("af8", "af4"), ("af8", "au1"), ("af4", "au1")],
 )
-def test_get_max_buffer_size(dense_uri, memory_budget, attrs):
+@pytest.mark.parametrize(
+    "key_dim_index,memory_budget",
+    [
+        (0, 16_000),
+        (0, 32_000),
+        (0, 64_000),
+        (1, 500_000),
+        (1, 600_000),
+        (1, 700_000),
+    ],
+)
+def test_get_max_buffer_size(dense_uri, attrs, key_dim_index, memory_budget):
     config = {
         "sm.memory_budget": memory_budget,
         "py.max_incomplete_retries": 0,
     }
     with tiledb.scope_ctx(config), tiledb.open(dense_uri) as a:
-        buffer_size = get_max_buffer_size(a.schema, attrs)
+        schema = TensorSchema(a.schema, key_dim_index, attrs)
+        buffer_size = get_max_buffer_size(a, schema)
         # Check that the buffer size is a multiple of the row tile extent
-        assert buffer_size % a.dim(0).tile == 0
+        assert buffer_size % a.dim(key_dim_index).tile == 0
 
         # Check that we can slice with buffer_size without incomplete reads
-        query = a.query(attrs=attrs or None)
-        for offset in range(0, a.shape[0], buffer_size):
-            query[offset : offset + buffer_size]
+        offsets = range(schema.start_key, schema.stop_key, buffer_size)
+        query = a.query(attrs=schema.attrs)
+        for offset in offsets:
+            query[schema[offset : offset + buffer_size]]
 
-        if buffer_size < a.shape[0]:
+        if buffer_size < a.shape[key_dim_index]:
             # Check that buffer_size is the max size we can slice without incomplete reads
-            buffer_size += 1
-            with pytest.raises(tiledb.TileDBError):
-                for offset in range(0, a.shape[0], buffer_size):
-                    query[offset : offset + buffer_size]
+            with pytest.raises(tiledb.TileDBError) as ex:
+                query[schema[offsets[0] : offsets[0] + buffer_size + 1]]
+            assert "py.max_incomplete_retries" in str(ex.value)

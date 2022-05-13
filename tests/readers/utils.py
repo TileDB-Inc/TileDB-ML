@@ -22,11 +22,13 @@ def parametrize_for_dataset(
     y_shape=((NUM_ROWS, 5), (NUM_ROWS, 5, 2)),
     x_sparse=(True, False),
     y_sparse=(True, False),
+    x_key_dim=(0, 1),
+    y_key_dim=(0, 1),
     num_attrs=(1, 2),
-    pass_attrs=(True, False),
+    pass_attrs=(True,),
     buffer_bytes=(1024, None),
     batch_size=(8,),
-    shuffle_buffer_size=(0, 16),
+    shuffle_buffer_size=(16,),
     num_workers=(0, 2),
 ):
     argnames = [
@@ -34,6 +36,8 @@ def parametrize_for_dataset(
         "y_shape",
         "x_sparse",
         "y_sparse",
+        "x_key_dim",
+        "y_key_dim",
         "num_attrs",
         "pass_attrs",
         "buffer_bytes",
@@ -46,6 +50,8 @@ def parametrize_for_dataset(
         y_shape,
         x_sparse,
         y_sparse,
+        x_key_dim,
+        y_key_dim,
         num_attrs,
         pass_attrs,
         buffer_bytes,
@@ -57,12 +63,14 @@ def parametrize_for_dataset(
 
 
 @contextmanager
-def ingest_in_tiledb(tmpdir, shape, sparse, num_attrs, pass_attrs):
+def ingest_in_tiledb(tmpdir, shape, sparse, key_dim, num_attrs, pass_attrs):
     """Context manager for ingesting data into TileDB."""
     array_uuid = str(uuid.uuid4())
     uri = os.path.join(tmpdir, array_uuid)
-    data = rand_array(shape, sparse)
     attrs = tuple(f"{array_uuid[0]}{i}" for i in range(num_attrs))
+    data = original_data = rand_array(shape, sparse)
+    if key_dim > 0:
+        data = np.moveaxis(data, 0, key_dim)
 
     dims = [
         tiledb.Dim(
@@ -90,7 +98,12 @@ def ingest_in_tiledb(tmpdir, shape, sparse, num_attrs, pass_attrs):
         tiledb_array[idx] = {attr: data[idx] for attr in attrs}
 
     with tiledb.open(uri) as array:
-        yield {"data": data, "array": array, "attrs": attrs if pass_attrs else ()}
+        yield {
+            "data": original_data,
+            "array": array,
+            "key_dim": key_dim,
+            "attrs": attrs if pass_attrs else (),
+        }
 
 
 def rand_array(shape: Sequence[int], sparse: bool = False) -> np.ndarray:
