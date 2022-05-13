@@ -2,6 +2,7 @@ import itertools as it
 import os
 import uuid
 from contextlib import contextmanager
+from typing import Sequence
 
 import numpy as np
 import pytest
@@ -12,74 +13,57 @@ import torch
 
 import tiledb
 
+NUM_ROWS = 107
+
 
 def parametrize_for_dataset(
-    num_rows=(107,),
-    num_workers=(0, 2),
+    *,
+    x_shape=((NUM_ROWS, 10), (NUM_ROWS, 10, 3)),
+    y_shape=((NUM_ROWS, 5), (NUM_ROWS, 5, 2)),
     x_sparse=(True, False),
     y_sparse=(True, False),
-    x_shape=((10,), (10, 3)),
-    y_shape=((5,), (5, 2)),
     num_attrs=(1, 2),
     pass_attrs=(True, False),
-    batch_size=(8,),
     buffer_bytes=(1024, None),
+    batch_size=(8,),
     shuffle_buffer_size=(0, 16),
+    num_workers=(0, 2),
 ):
     argnames = [
-        "num_rows",
-        "num_workers",
-        "x_sparse",
-        "y_sparse",
         "x_shape",
         "y_shape",
+        "x_sparse",
+        "y_sparse",
         "num_attrs",
         "pass_attrs",
         "buffer_bytes",
         "batch_size",
         "shuffle_buffer_size",
+        "num_workers",
     ]
     argvalues = it.product(
-        num_rows,
-        num_workers,
-        x_sparse,
-        y_sparse,
         x_shape,
         y_shape,
+        x_sparse,
+        y_sparse,
         num_attrs,
         pass_attrs,
         buffer_bytes,
         batch_size,
         shuffle_buffer_size,
+        num_workers,
     )
     return pytest.mark.parametrize(argnames, argvalues)
 
 
 @contextmanager
-def ingest_in_tiledb(
-    tmpdir,
-    x_data,
-    y_data,
-    x_sparse,
-    y_sparse,
-    num_attrs,
-    pass_attrs,
-):
-    """Context manager for ingest data into TileDB.
-
-    Yield the keyword arguments for instantiating a TiledbDataset.
-    """
+def ingest_in_tiledb(tmpdir, shape, sparse, num_attrs, pass_attrs):
+    """Context manager for ingesting data into TileDB."""
     array_uuid = str(uuid.uuid4())
-    x_uri = os.path.join(tmpdir, "x_" + array_uuid)
-    y_uri = os.path.join(tmpdir, "y_" + array_uuid)
-    _ingest_in_tiledb(x_uri, x_data, x_sparse, num_attrs)
-    _ingest_in_tiledb(y_uri, y_data, y_sparse, num_attrs)
-    attrs = [f"features_{attr}" for attr in range(num_attrs)] if pass_attrs else []
-    with tiledb.open(x_uri) as x_array, tiledb.open(y_uri) as y_array:
-        yield dict(x_array=x_array, y_array=y_array, x_attrs=attrs, y_attrs=attrs)
+    uri = os.path.join(tmpdir, array_uuid)
+    data = rand_array(shape, sparse)
+    attrs = tuple(f"{array_uuid[0]}{i}" for i in range(num_attrs))
 
-
-def _ingest_in_tiledb(uri: str, data: np.ndarray, sparse: bool, num_attrs: int) -> None:
     dims = [
         tiledb.Dim(
             name=f"dim_{dim}",
@@ -94,10 +78,7 @@ def _ingest_in_tiledb(uri: str, data: np.ndarray, sparse: bool, num_attrs: int) 
     schema = tiledb.ArraySchema(
         domain=tiledb.Domain(*dims),
         sparse=sparse,
-        attrs=[
-            tiledb.Attr(name=f"features_{attr}", dtype=np.float32)
-            for attr in range(num_attrs)
-        ],
+        attrs=[tiledb.Attr(name=attr, dtype=np.float32) for attr in attrs],
     )
 
     # Create the (empty) array on disk.
@@ -106,20 +87,21 @@ def _ingest_in_tiledb(uri: str, data: np.ndarray, sparse: bool, num_attrs: int) 
     # Ingest
     with tiledb.open(uri, "w") as tiledb_array:
         idx = np.nonzero(data) if sparse else slice(None)
-        tiledb_array[idx] = {f"features_{attr}": data[idx] for attr in range(num_attrs)}
+        tiledb_array[idx] = {attr: data[idx] for attr in attrs}
+
+    with tiledb.open(uri) as array:
+        yield {"data": data, "array": array, "attrs": attrs if pass_attrs else ()}
 
 
-def rand_array(num_rows: int, *row_shape: int, sparse: bool = False) -> np.ndarray:
-    """Create a random array of shape (num_rows, *row_shape).
+def rand_array(shape: Sequence[int], sparse: bool = False) -> np.ndarray:
+    """Create a random array of the given shape.
 
-    :param num_rows: Number of rows of the array (i.e. first dimension size).
-    :param row_shape: Shape of each row (i.e. remaining dimension sizes).
+    :param shape: Shape of the array.
     :param sparse:
       - If false, all values will be in the (0, 1) range.
-      - If true, only `num_rows` values will be in the (0, 1) range, the rest will be 0.
+      - If true, only `shape[0]` values will be in the (0, 1) range, the rest will be 0.
         Note: some rows may be all zeros.
     """
-    shape = (num_rows, *row_shape)
     if sparse:
         a = np.zeros(shape)
         flat_idxs = np.random.choice(a.size, size=len(a), replace=False)
@@ -135,12 +117,12 @@ def validate_tensor_generator(
 ):
     for x_tensors, y_tensors in generator:
         for x_tensor in x_tensors if num_attrs > 1 else [x_tensors]:
-            _validate_tensor(x_tensor, x_sparse, x_shape, batch_size)
+            _validate_tensor(x_tensor, x_sparse, x_shape[1:], batch_size)
         for y_tensor in y_tensors if num_attrs > 1 else [y_tensors]:
-            _validate_tensor(y_tensor, y_sparse, y_shape, batch_size)
+            _validate_tensor(y_tensor, y_sparse, y_shape[1:], batch_size)
 
 
-def _validate_tensor(tensor, expected_sparse, expected_shape, batch_size=None):
+def _validate_tensor(tensor, expected_sparse, expected_row_shape, batch_size=None):
     if batch_size is None and not isinstance(tensor, scipy.sparse.spmatrix):
         row_shape = tensor.shape
     else:
@@ -151,7 +133,7 @@ def _validate_tensor(tensor, expected_sparse, expected_shape, batch_size=None):
         else:
             # num_rows may be less than batch_size
             assert num_rows <= batch_size, (num_rows, batch_size)
-    assert tuple(row_shape) == expected_shape
+    assert tuple(row_shape) == expected_row_shape
     assert _is_sparse(tensor) == expected_sparse
 
 
