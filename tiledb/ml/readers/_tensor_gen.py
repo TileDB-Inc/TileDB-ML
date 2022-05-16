@@ -26,27 +26,28 @@ class TensorSchema:
         :param key_dim: Name or index of the key dimension; defaults to the first dimension.
         :param attrs: Attribute names of array to read; defaults to all attributes.
         """
-        shape = list(schema.shape)
-        dims = [schema.domain.dim(idx).name for idx in range(schema.ndim)]
-        if isinstance(key_dim, int):
-            key_dim_index = key_dim
-        else:
-            key_dim_index = dims.index(key_dim)
+        get_dim = schema.domain.dim
+        if not np.issubdtype(get_dim(key_dim).dtype, np.integer):
+            raise ValueError(f"Key dimension {key_dim} must have integer domain")
+
+        dims = [get_dim(i).name for i in range(schema.ndim)]
+        key_dim_index = dims.index(key_dim) if not isinstance(key_dim, int) else key_dim
         if key_dim_index > 0:
             # Swap key dimension to first position
-            shape[0], shape[key_dim_index] = shape[key_dim_index], shape[0]
             dims[0], dims[key_dim_index] = dims[key_dim_index], dims[0]
 
-        all_attrs = [schema.attr(idx).name for idx in range(schema.nattr)]
+        all_attrs = [schema.attr(i).name for i in range(schema.nattr)]
         unknown_attrs = [attr for attr in attrs if attr not in all_attrs]
         if unknown_attrs:
             raise ValueError(f"Unknown attributes: {unknown_attrs}")
 
-        self._shape = tuple(shape)
         self._dims = tuple(dims)
         self._attrs = tuple(attrs or all_attrs)
-        self._key_bounds = tuple(map(int, schema.domain.dim(key_dim_index).domain))
+        self._key_bounds = tuple(map(int, get_dim(key_dim).domain))
         self._leading_dim_slices = (slice(None),) * key_dim_index
+        if all(np.issubdtype(get_dim(name).dtype, np.integer) for name in dims):
+            domains = [get_dim(name).domain for name in dims]
+            self._shape = tuple(int(stop - start + 1) for start, stop in domains)
 
     @property
     def attrs(self) -> Sequence[str]:
@@ -60,8 +61,14 @@ class TensorSchema:
 
     @property
     def shape(self) -> Tuple[int, ...]:
-        """The shape of the array, with the key dimension moved first."""
-        return self._shape
+        """The shape of the array, with the key dimension moved first.
+
+        :raises ValueError: If the array does not have integer domain.
+        """
+        try:
+            return self._shape
+        except AttributeError:
+            raise ValueError("Cannot infer shape from non-integer dimensions")
 
     @property
     def key_dim_index(self) -> int:
