@@ -72,14 +72,16 @@ def ingest_in_tiledb(tmpdir, shape, sparse, key_dim, num_attrs, pass_attrs):
     if key_dim > 0:
         data = np.moveaxis(data, 0, key_dim)
 
+    # set the domain to (-n/2, n/2) to test negative domain indexing
+    dim_starts = [-(data.shape[dim] // 2) for dim in range(data.ndim)]
     dims = [
         tiledb.Dim(
             name=f"dim_{dim}",
-            domain=(0, data.shape[dim] - 1),
+            domain=(dim_start, dim_start + data.shape[dim] - 1),
             tile=np.random.randint(1, data.shape[dim] + 1),
             dtype=np.int32,
         )
-        for dim in range(data.ndim)
+        for dim, dim_start in enumerate(dim_starts)
     ]
 
     # TileDB schema
@@ -94,8 +96,14 @@ def ingest_in_tiledb(tmpdir, shape, sparse, key_dim, num_attrs, pass_attrs):
 
     # Ingest
     with tiledb.open(uri, "w") as tiledb_array:
-        idx = np.nonzero(data) if sparse else slice(None)
-        tiledb_array[idx] = {attr: data[idx] for attr in attrs}
+        if sparse:
+            idxs = np.nonzero(data)
+            dim_idxs = tuple(
+                dim_start + idx for idx, dim_start in zip(idxs, dim_starts)
+            )
+        else:
+            idxs = dim_idxs = slice(None)
+        tiledb_array[dim_idxs] = {attr: data[idxs] for attr in attrs}
 
     with tiledb.open(uri) as array:
         yield {

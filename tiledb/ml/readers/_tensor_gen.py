@@ -148,11 +148,14 @@ class TileDBNumpyGenerator(TileDBTensorGenerator[np.ndarray]):
         (5, 12, 20) and `key_dim_index==1`, the returned Numpy arrays of `a[:, 4:8, :]`
         have shape (5, 4, 20) but this method returns arrays of shape (4, 5, 20).
         """
-        query = self._array.query(attrs=self._schema.attrs)
-        get_data = itemgetter(*self._schema.attrs)
+        attrs = self._schema.attrs
+        multi_index = self._array.query(attrs=attrs).multi_index
+        get_data = itemgetter(*attrs)
         key_dim_index = self._schema.key_dim_index
         for key_dim_slice in iter_slices(start_key, stop_key, slice_size):
-            attr_dict = query[self._schema[key_dim_slice]]
+            # multi_index needs inclusive slices
+            idx = self._schema[key_dim_slice.start : key_dim_slice.stop - 1]
+            attr_dict = multi_index[idx]
             if key_dim_index > 0:
                 # Move key_dim_index axes first
                 for attr, array in attr_dict.items():
@@ -175,18 +178,31 @@ class TileDBSparseGenerator(TileDBTensorGenerator[T]):
     def iter_tensors(
         self, slice_size: int, start_key: int, stop_key: int
     ) -> Union[Iterator[T], Iterator[Sequence[T]]]:
-        shape = list(self._schema.shape)
-        query = self._array.query(attrs=self._schema.attrs)
-        get_coords = itemgetter(*self._schema.dims)
-        get_data = itemgetter(*self._schema.attrs)
+        attrs = self._schema.attrs
+        multi_index = self._array.query(attrs=attrs).multi_index
+        get_data = itemgetter(*attrs)
+
+        dims = self._schema.dims
+        dim_starts = tuple(self._array.domain.dim(d).domain[0] for d in dims)
         single_attr = self.single_attr
+        shape = list(self._schema.shape)
+
+        # generate slices of the array along the key dimension
         for key_dim_slice in iter_slices(start_key, stop_key, slice_size):
+            # set the shape of the key dimension equal to the current slice size
             shape[0] = key_dim_slice.stop - key_dim_slice.start
-            attr_dict = query[self._schema[key_dim_slice]]
-            coords = get_coords(attr_dict)
-            # normalize the key dimension so that it starts at zero
-            np.subtract(coords[0], key_dim_slice.start, out=coords[0])
+            # multi_index needs inclusive slices
+            idx = self._schema[key_dim_slice.start : key_dim_slice.stop - 1]
+            attr_dict = multi_index[idx]
             data = get_data(attr_dict)
+
+            # convert coordinates from the original domain to zero-based
+            # for the key (i.e. first) dimension, ignore the keys before the current slice
+            coords = tuple(attr_dict[d] for d in dims)
+            for i, (coord, dim_start) in enumerate(zip(coords, dim_starts)):
+                coord -= dim_start if i > 0 else key_dim_slice.start
+
+            # yield either a single tensor or a sequence of tensors, one for each attr
             if single_attr:
                 yield self._from_coo(sparse.COO(coords, data, shape))
             else:
