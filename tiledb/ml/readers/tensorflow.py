@@ -39,7 +39,9 @@ def TensorflowTileDBDataset(
     :param y_array: TileDB array of the labels.
     :param batch_size: Size of each batch.
     :param buffer_bytes: Maximum size (in bytes) of memory to allocate for reading from
-        each array (default=`tiledb.default_ctx().config()["sm.memory_budget"]`).
+        each array. This is bounded by the `sm.memory_budget` config parameter of the
+        array context for dense arrays and `py.init_buffer_bytes` (or 10 MB if unset) for
+        sparse arrays. These bounds are also used as the default memory budget.
     :param shuffle_buffer_size: Number of elements from which this dataset will sample.
     :param prefetch: Maximum number of batches that will be buffered when prefetching.
         By default, the buffer size is dynamically tuned.
