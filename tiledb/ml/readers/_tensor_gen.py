@@ -76,6 +76,11 @@ class TensorSchema:
         return len(self._leading_dim_slices)
 
     @property
+    def num_keys(self) -> int:
+        """The number of distinct values along the key dimension"""
+        return self.stop_key - self.start_key
+
+    @property
     def start_key(self) -> int:
         """The minimum value of the key dimension."""
         return self._key_bounds[0]

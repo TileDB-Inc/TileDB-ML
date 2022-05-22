@@ -1,6 +1,6 @@
 """Functionality for loading data from TileDB arrays to the Tensorflow Data API."""
 
-import math
+from math import ceil
 from typing import Optional, Sequence, Tuple, Union
 
 import numpy as np
@@ -75,17 +75,19 @@ def TensorflowTileDBDataset(
         return tf.data.Dataset.zip((x_dataset.unbatch(), y_dataset.unbatch()))
 
     x_schema.ensure_equal_keys(y_schema)
-    start, stop = x_schema.start_key, x_schema.stop_key
     if num_workers:
-        per_worker = int(math.ceil((stop - start) / num_workers))
-        offsets = [(s.start, s.stop) for s in iter_slices(start, stop, per_worker)]
+        per_worker = ceil(x_schema.num_keys / num_workers)
+        offsets = [
+            (s.start, s.stop)
+            for s in iter_slices(x_schema.start_key, x_schema.stop_key, per_worker)
+        ]
         offsets_tensor = tf.convert_to_tensor(offsets, dtype=tf.int64)
         offsets_dataset = tf.data.Dataset.from_tensor_slices(offsets_tensor)
         dataset = offsets_dataset.interleave(
             bounded_dataset, num_parallel_calls=num_workers, deterministic=False
         )
     else:
-        dataset = bounded_dataset((start, stop))
+        dataset = bounded_dataset((x_schema.start_key, x_schema.stop_key))
 
     if shuffle_buffer_size > 0:
         dataset = dataset.shuffle(shuffle_buffer_size)

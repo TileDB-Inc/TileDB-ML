@@ -1,8 +1,8 @@
 """Functionality for loading data from TileDB arrays to the PyTorch Dataloader API."""
 
-import itertools as it
-import math
+import itertools
 import random
+from math import ceil
 from operator import methodcaller
 from typing import (
     Callable,
@@ -124,6 +124,7 @@ class PyTorchTileDBDataset(torch.utils.data.IterableDataset[XY]):
         x_schema.ensure_equal_keys(y_schema)
         self._start = x_schema.start_key
         self._stop = x_schema.stop_key
+        self._num_keys = x_schema.num_keys
         self._shuffle_buffer_size = shuffle_buffer_size
 
     def __iter__(self) -> Iterator[XY]:
@@ -134,8 +135,7 @@ class PyTorchTileDBDataset(torch.utils.data.IterableDataset[XY]):
                     raise NotImplementedError(
                         "https://github.com/pytorch/pytorch/issues/20248"
                     )
-            num_keys = self._stop - self._start
-            per_worker = int(math.ceil(num_keys / worker_info.num_workers))
+            per_worker = ceil(self._num_keys / worker_info.num_workers)
             start = self._start + worker_info.id * per_worker
             stop = min(start + per_worker, self._stop)
         else:
@@ -237,7 +237,7 @@ def _get_tensor_collator(
     if num_attrs == 1:
         return collator
     else:
-        return _CompositeCollator(*it.repeat(collator, num_attrs))
+        return _CompositeCollator(*itertools.repeat(collator, num_attrs))
 
 
 _T = TypeVar("_T")
@@ -252,7 +252,7 @@ def _iter_shuffled(iterable: Iterable[_T], buffer_size: int) -> Iterator[_T]:
 
     """
     iterator = iter(iterable)
-    buffer = list(it.islice(iterator, buffer_size))
+    buffer = list(itertools.islice(iterator, buffer_size))
     randrange = random.randrange
     for x in iterator:
         idx = randrange(0, buffer_size)
