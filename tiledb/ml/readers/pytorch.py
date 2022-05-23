@@ -29,13 +29,12 @@ except AttributeError:
 
 import tiledb
 
-from ._buffer_utils import get_buffer_size
 from ._tensor_gen import (
-    TensorSchema,
     TileDBNumpyGenerator,
     TileDBSparseGenerator,
     TileDBTensorGenerator,
 )
+from ._tensor_schema import TensorSchema, get_buffer_size
 
 TensorLike = Union[np.ndarray, sparse.COO, scipy.sparse.csr_matrix]
 TensorLikeOrSequence = Union[TensorLike, Sequence[TensorLike]]

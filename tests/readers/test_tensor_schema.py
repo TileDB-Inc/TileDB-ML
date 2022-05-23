@@ -2,8 +2,8 @@ import numpy as np
 import pytest
 
 import tiledb
-from tiledb.ml.readers._buffer_utils import get_buffer_size
-from tiledb.ml.readers._tensor_gen import TensorSchema, iter_slices
+from tiledb.ml.readers._tensor_gen import iter_slices
+from tiledb.ml.readers._tensor_schema import TensorSchema, get_buffer_size
 
 
 @pytest.fixture

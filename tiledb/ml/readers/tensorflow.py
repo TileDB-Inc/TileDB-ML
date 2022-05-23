@@ -9,14 +9,13 @@ import tensorflow as tf
 
 import tiledb
 
-from ._buffer_utils import get_buffer_size
 from ._tensor_gen import (
-    TensorSchema,
     TileDBNumpyGenerator,
     TileDBSparseGenerator,
     TileDBTensorGenerator,
     iter_slices,
 )
+from ._tensor_schema import TensorSchema, get_buffer_size
 
 
 def TensorflowTileDBDataset(
