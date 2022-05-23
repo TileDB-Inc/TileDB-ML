@@ -53,11 +53,11 @@ def TensorflowTileDBDataset(
         used to fetch inputs asynchronously and in parallel. Note: yielded batches may
         be shuffled even if `shuffle_buffer_size` is zero when `num_workers` > 1.
     """
-    x_schema = TensorSchema(x_array.schema, x_key_dim, x_attrs)
+    x_schema = TensorSchema(x_array, x_key_dim, x_attrs)
     x_gen = _get_tensor_generator(x_array, x_schema)
     x_buffer_size = get_buffer_size(x_array, x_schema, buffer_bytes)
 
-    y_schema = TensorSchema(y_array.schema, y_key_dim, y_attrs)
+    y_schema = TensorSchema(y_array, y_key_dim, y_attrs)
     y_gen = _get_tensor_generator(y_array, y_schema)
     y_buffer_size = get_buffer_size(y_array, y_schema, buffer_bytes)
 

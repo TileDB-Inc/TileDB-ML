@@ -17,37 +17,36 @@ class TensorSchema:
 
     def __init__(
         self,
-        schema: tiledb.ArraySchema,
+        array: tiledb.Array,
         key_dim: Union[int, str] = 0,
         attrs: Sequence[str] = (),
     ):
         """
-        :param schema: Schema of the TileDB array to read from.
+        :param array: TileDB array to read from.
         :param key_dim: Name or index of the key dimension; defaults to the first dimension.
         :param attrs: Attribute names of array to read; defaults to all attributes.
         """
-        get_dim = schema.domain.dim
+        get_dim = array.domain.dim
         if not np.issubdtype(get_dim(key_dim).dtype, np.integer):
             raise ValueError(f"Key dimension {key_dim} must have integer domain")
 
-        dims = [get_dim(i).name for i in range(schema.ndim)]
-        key_dim_index = dims.index(key_dim) if not isinstance(key_dim, int) else key_dim
-        if key_dim_index > 0:
-            # Swap key dimension to first position
-            dims[0], dims[key_dim_index] = dims[key_dim_index], dims[0]
-
-        all_attrs = [schema.attr(i).name for i in range(schema.nattr)]
+        all_attrs = [array.attr(i).name for i in range(array.nattr)]
         unknown_attrs = [attr for attr in attrs if attr not in all_attrs]
         if unknown_attrs:
             raise ValueError(f"Unknown attributes: {unknown_attrs}")
 
+        ned = list(array.nonempty_domain())
+        dims = [get_dim(i).name for i in range(array.ndim)]
+        key_dim_index = dims.index(key_dim) if not isinstance(key_dim, int) else key_dim
+        if key_dim_index > 0:
+            # Swap key dimension to first position
+            dims[0], dims[key_dim_index] = dims[key_dim_index], dims[0]
+            ned[0], ned[key_dim_index] = ned[key_dim_index], ned[0]
+
+        self._ned: Sequence[Tuple[int, int]] = tuple(ned)
         self._dims = tuple(dims)
         self._attrs = tuple(attrs or all_attrs)
-        self._key_bounds = tuple(map(int, get_dim(key_dim).domain))
         self._leading_dim_slices = (slice(None),) * key_dim_index
-        if all(np.issubdtype(get_dim(name).dtype, np.integer) for name in dims):
-            domains = [get_dim(name).domain for name in dims]
-            self._shape = tuple(int(stop - start + 1) for start, stop in domains)
 
     @property
     def attrs(self) -> Sequence[str]:
@@ -56,19 +55,27 @@ class TensorSchema:
 
     @property
     def dims(self) -> Sequence[str]:
-        """The dimension names of the array."""
+        """The dimension names of the array, with the key dimension moved first."""
         return self._dims
+
+    @property
+    def nonempty_domain(self) -> Sequence[Tuple[int, int]]:
+        """The non-empty domain of the array, with the key dimension moved first."""
+        return self._ned
 
     @property
     def shape(self) -> Tuple[int, ...]:
         """The shape of the array, with the key dimension moved first.
 
+        **Note**: For sparse arrays, the returned shape reflects the non-empty domain of
+        the array, not the full array shape.
+
         :raises ValueError: If the array does not have integer domain.
         """
-        try:
-            return self._shape
-        except AttributeError:
-            raise ValueError("Cannot infer shape from non-integer dimensions")
+        shape = tuple(stop - start + 1 for start, stop in self._ned)
+        if all(isinstance(i, int) for i in shape):
+            return shape
+        raise ValueError("Shape not defined for non-integer domain")
 
     @property
     def key_dim_index(self) -> int:
@@ -83,12 +90,12 @@ class TensorSchema:
     @property
     def start_key(self) -> int:
         """The minimum value of the key dimension."""
-        return self._key_bounds[0]
+        return self._ned[0][0]
 
     @property
     def stop_key(self) -> int:
         """The maximum value of the key dimension, plus 1."""
-        return self._key_bounds[1] + 1
+        return self._ned[0][1] + 1
 
     def __getitem__(self, key_dim_slice: slice) -> Tuple[slice, ...]:
         """Return the indexing tuple for querying the TileDB array by `dim_key=key_dim_slice`.
@@ -104,10 +111,9 @@ class TensorSchema:
 
         :raises ValueError: If the key dimension bounds are not equal.
         """
-        if self._key_bounds != other._key_bounds:
+        if self._ned[0] != other._ned[0]:
             raise ValueError(
-                f"X and Y arrays have different keys: "
-                f"{self._key_bounds} != {other._key_bounds}"
+                f"X and Y arrays have different key domain: {self._ned[0]} != {other._ned[0]}"
             )
 
 
@@ -195,7 +201,7 @@ class TileDBSparseGenerator(TileDBTensorGenerator[T]):
         get_data = itemgetter(*attrs)
 
         dims = self._schema.dims
-        dim_starts = tuple(self._array.domain.dim(d).domain[0] for d in dims)
+        dim_starts = tuple(map(itemgetter(0), self._schema.nonempty_domain))
         single_attr = self.single_attr
         shape = list(self._schema.shape)
 

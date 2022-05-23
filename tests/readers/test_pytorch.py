@@ -40,12 +40,8 @@ class TestPyTorchTileDBDataset:
             dataset = PyTorchTileDBDataset(
                 x_array=x_array,
                 y_array=y_array,
-                x_schema=TensorSchema(
-                    x_array.schema, x_kwargs["key_dim"], x_kwargs["attrs"]
-                ),
-                y_schema=TensorSchema(
-                    y_array.schema, y_kwargs["key_dim"], y_kwargs["attrs"]
-                ),
+                x_schema=TensorSchema(x_array, x_kwargs["key_dim"], x_kwargs["attrs"]),
+                y_schema=TensorSchema(y_array, y_kwargs["key_dim"], y_kwargs["attrs"]),
                 buffer_bytes=buffer_bytes,
             )
             assert isinstance(dataset, torch.utils.data.IterableDataset)
@@ -154,7 +150,7 @@ class TestPyTorchTileDBDataset:
                     shuffle_buffer_size=shuffle_buffer_size,
                     num_workers=num_workers,
                 )
-            assert "X and Y arrays have different keys" in str(ex.value)
+            assert "X and Y arrays have different key domain" in str(ex.value)
 
     @parametrize_for_dataset(x_sparse=[True], shuffle_buffer_size=[0], num_workers=[0])
     @pytest.mark.parametrize("csr", [True, False])

@@ -80,7 +80,7 @@ parametrize_attrs = pytest.mark.parametrize(
 def test_get_buffer_size_dense(dense_uri, attrs, key_dim_index, memory_budget):
     config = {"py.max_incomplete_retries": 0, "sm.memory_budget": memory_budget}
     with tiledb.open(dense_uri, config=config) as a:
-        schema = TensorSchema(a.schema, key_dim_index, attrs)
+        schema = TensorSchema(a, key_dim_index, attrs)
         buffer_size = get_buffer_size(a, schema)
         query = a.query(attrs=schema.attrs)
         for key_slice in iter_slices(schema.start_key, schema.stop_key, buffer_size):
@@ -110,7 +110,7 @@ def test_get_buffer_size_sparse(sparse_uri, attrs, key_dim_index, memory_budget)
         "py.init_buffer_bytes": memory_budget,
     }
     with tiledb.open(sparse_uri, config=config) as a:
-        schema = TensorSchema(a.schema, key_dim_index, attrs)
+        schema = TensorSchema(a, key_dim_index, attrs)
         buffer_size = get_buffer_size(a, schema)
         query = a.query(attrs=schema.attrs)
         for key_slice in iter_slices(schema.start_key, schema.stop_key, buffer_size):

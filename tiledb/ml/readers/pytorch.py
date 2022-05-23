@@ -78,8 +78,8 @@ def PyTorchTileDBDataLoader(
         even if `shuffle_buffer_size` is zero when `num_workers` > 1.
     :param csr: For sparse 2D arrays, whether to return CSR tensors instead of COO.
     """
-    x_schema = TensorSchema(x_array.schema, x_key_dim, x_attrs)
-    y_schema = TensorSchema(y_array.schema, y_key_dim, y_attrs)
+    x_schema = TensorSchema(x_array, x_key_dim, x_attrs)
+    y_schema = TensorSchema(y_array, y_key_dim, y_attrs)
     return torch.utils.data.DataLoader(
         dataset=PyTorchTileDBDataset(
             x_array=x_array,
@@ -112,12 +112,12 @@ class PyTorchTileDBDataset(torch.utils.data.IterableDataset[XY]):
         super().__init__()
 
         if x_schema is None:
-            x_schema = TensorSchema(x_array.schema)
+            x_schema = TensorSchema(x_array)
         self._x_gen = _get_tensor_generator(x_array, x_schema)
         self._x_buffer_size = get_buffer_size(x_array, x_schema, buffer_bytes)
 
         if y_schema is None:
-            y_schema = TensorSchema(y_array.schema)
+            y_schema = TensorSchema(y_array)
         self._y_gen = _get_tensor_generator(y_array, y_schema)
         self._y_buffer_size = get_buffer_size(y_array, y_schema, buffer_bytes)
 
