@@ -2,120 +2,14 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from operator import itemgetter
-from typing import Callable, Generic, Iterator, Sequence, Tuple, TypeVar, Union
+from typing import Callable, Generic, Iterator, Sequence, TypeVar, Union
 
 import numpy as np
 import sparse
 
 import tiledb
 
-
-class TensorSchema:
-    """
-    A class to encapsulate the information needed for mapping a TileDB array to tensors.
-    """
-
-    def __init__(
-        self,
-        array: tiledb.Array,
-        key_dim: Union[int, str] = 0,
-        attrs: Sequence[str] = (),
-    ):
-        """
-        :param array: TileDB array to read from.
-        :param key_dim: Name or index of the key dimension; defaults to the first dimension.
-        :param attrs: Attribute names of array to read; defaults to all attributes.
-        """
-        get_dim = array.domain.dim
-        if not np.issubdtype(get_dim(key_dim).dtype, np.integer):
-            raise ValueError(f"Key dimension {key_dim} must have integer domain")
-
-        all_attrs = [array.attr(i).name for i in range(array.nattr)]
-        unknown_attrs = [attr for attr in attrs if attr not in all_attrs]
-        if unknown_attrs:
-            raise ValueError(f"Unknown attributes: {unknown_attrs}")
-
-        ned = list(array.nonempty_domain())
-        dims = [get_dim(i).name for i in range(array.ndim)]
-        key_dim_index = dims.index(key_dim) if not isinstance(key_dim, int) else key_dim
-        if key_dim_index > 0:
-            # Swap key dimension to first position
-            dims[0], dims[key_dim_index] = dims[key_dim_index], dims[0]
-            ned[0], ned[key_dim_index] = ned[key_dim_index], ned[0]
-
-        self._ned: Sequence[Tuple[int, int]] = tuple(ned)
-        self._dims = tuple(dims)
-        self._attrs = tuple(attrs or all_attrs)
-        self._leading_dim_slices = (slice(None),) * key_dim_index
-
-    @property
-    def attrs(self) -> Sequence[str]:
-        """The attribute names of the array to read."""
-        return self._attrs
-
-    @property
-    def dims(self) -> Sequence[str]:
-        """The dimension names of the array, with the key dimension moved first."""
-        return self._dims
-
-    @property
-    def nonempty_domain(self) -> Sequence[Tuple[int, int]]:
-        """The non-empty domain of the array, with the key dimension moved first."""
-        return self._ned
-
-    @property
-    def shape(self) -> Tuple[int, ...]:
-        """The shape of the array, with the key dimension moved first.
-
-        **Note**: For sparse arrays, the returned shape reflects the non-empty domain of
-        the array, not the full array shape.
-
-        :raises ValueError: If the array does not have integer domain.
-        """
-        shape = tuple(stop - start + 1 for start, stop in self._ned)
-        if all(isinstance(i, int) for i in shape):
-            return shape
-        raise ValueError("Shape not defined for non-integer domain")
-
-    @property
-    def key_dim_index(self) -> int:
-        """The index of the key dimension in the original TileDB schema."""
-        return len(self._leading_dim_slices)
-
-    @property
-    def num_keys(self) -> int:
-        """The number of distinct values along the key dimension"""
-        return self.stop_key - self.start_key
-
-    @property
-    def start_key(self) -> int:
-        """The minimum value of the key dimension."""
-        return self._ned[0][0]
-
-    @property
-    def stop_key(self) -> int:
-        """The maximum value of the key dimension, plus 1."""
-        return self._ned[0][1] + 1
-
-    def __getitem__(self, key_dim_slice: slice) -> Tuple[slice, ...]:
-        """Return the indexing tuple for querying the TileDB array by `dim_key=key_dim_slice`.
-
-        For example, if `self.key_dim_index == 2`, then querying by the key dimension
-        would be `array[:, :, key_dim_slice]`, which corresponds to the indexing tuple
-        `(slice(None), slice(None), key_dim_slice)`.
-        """
-        return (*self._leading_dim_slices, key_dim_slice)
-
-    def ensure_equal_keys(self, other: TensorSchema) -> None:
-        """Ensure that the key dimension bounds of the of two schemas are equal.
-
-        :raises ValueError: If the key dimension bounds are not equal.
-        """
-        if self._ned[0] != other._ned[0]:
-            raise ValueError(
-                f"X and Y arrays have different key domain: {self._ned[0]} != {other._ned[0]}"
-            )
-
+from ._tensor_schema import TensorSchema
 
 T = TypeVar("T")
 
