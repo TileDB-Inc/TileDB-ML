@@ -2,8 +2,7 @@ import numpy as np
 import pytest
 
 import tiledb
-from tiledb.ml.readers._tensor_gen import iter_slices
-from tiledb.ml.readers._tensor_schema import TensorSchema, get_buffer_size
+from tiledb.ml.readers._tensor_schema import TensorSchema, iter_slices
 
 
 @pytest.fixture
@@ -77,11 +76,11 @@ parametrize_attrs = pytest.mark.parametrize(
     [(0, 16_000), (0, 32_000), (0, 64_000), (1, 500_000), (1, 600_000), (1, 700_000)],
 )
 @parametrize_attrs
-def test_get_buffer_size_dense(dense_uri, attrs, key_dim_index, memory_budget):
+def test_get_max_buffer_size_dense(dense_uri, attrs, key_dim_index, memory_budget):
     config = {"py.max_incomplete_retries": 0, "sm.memory_budget": memory_budget}
     with tiledb.open(dense_uri, config=config) as a:
         schema = TensorSchema(a, key_dim_index, attrs)
-        buffer_size = get_buffer_size(a, schema)
+        buffer_size = schema._get_max_buffer_size_dense()
         query = a.query(attrs=schema.attrs)
         for key_slice in iter_slices(schema.start_key, schema.stop_key, buffer_size):
             # query succeeds without incomplete retries
@@ -99,7 +98,7 @@ def test_get_buffer_size_dense(dense_uri, attrs, key_dim_index, memory_budget):
     [(0, 1024), (0, 2048), (0, 4096), (1, 1024), (1, 2048), (1, 4096)],
 )
 @parametrize_attrs
-def test_get_buffer_size_sparse(sparse_uri, attrs, key_dim_index, memory_budget):
+def test_get_max_buffer_size_sparse(sparse_uri, attrs, key_dim_index, memory_budget):
     # The first dimension has a fixed number of non-zero cells per "row". The others
     # don't, so the estimated buffer_size is not necessarily the maximum number of
     # "rows" than can fit in the given memory budget. In this case relax the test by
@@ -111,7 +110,7 @@ def test_get_buffer_size_sparse(sparse_uri, attrs, key_dim_index, memory_budget)
     }
     with tiledb.open(sparse_uri, config=config) as a:
         schema = TensorSchema(a, key_dim_index, attrs)
-        buffer_size = get_buffer_size(a, schema)
+        buffer_size = schema._get_max_buffer_size_sparse()
         query = a.query(attrs=schema.attrs)
         for key_slice in iter_slices(schema.start_key, schema.stop_key, buffer_size):
             # query succeeds without incomplete retries (or at most 1 retry if not exact)

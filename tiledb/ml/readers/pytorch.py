@@ -34,7 +34,7 @@ from ._tensor_gen import (
     TileDBSparseGenerator,
     TileDBTensorGenerator,
 )
-from ._tensor_schema import TensorSchema, get_buffer_size
+from ._tensor_schema import TensorSchema
 
 TensorLike = Union[np.ndarray, sparse.COO, scipy.sparse.csr_matrix]
 TensorLikeOrSequence = Union[TensorLike, Sequence[TensorLike]]
@@ -109,24 +109,18 @@ class PyTorchTileDBDataset(torch.utils.data.IterableDataset[XY]):
         shuffle_buffer_size: int = 0,
     ):
         super().__init__()
+        self._x_schema = x_schema or TensorSchema(x_array)
+        self._y_schema = y_schema or TensorSchema(y_array)
+        self._x_schema.ensure_equal_keys(self._y_schema)
 
-        if x_schema is None:
-            x_schema = TensorSchema(x_array)
-        self._x_gen = _get_tensor_generator(x_array, x_schema)
-        self._x_buffer_size = get_buffer_size(x_array, x_schema, buffer_bytes)
-
-        if y_schema is None:
-            y_schema = TensorSchema(y_array)
-        self._y_gen = _get_tensor_generator(y_array, y_schema)
-        self._y_buffer_size = get_buffer_size(y_array, y_schema, buffer_bytes)
-
-        x_schema.ensure_equal_keys(y_schema)
-        self._start = x_schema.start_key
-        self._stop = x_schema.stop_key
-        self._num_keys = x_schema.num_keys
+        self._x_gen = _get_tensor_generator(x_array, self._x_schema)
+        self._y_gen = _get_tensor_generator(y_array, self._y_schema)
+        self._buffer_bytes = buffer_bytes
         self._shuffle_buffer_size = shuffle_buffer_size
 
     def __iter__(self) -> Iterator[XY]:
+        start = self._x_schema.start_key
+        stop = self._x_schema.stop_key
         worker_info = torch.utils.data.get_worker_info()
         if worker_info is not None:
             for gen in self._x_gen, self._y_gen:
@@ -134,25 +128,23 @@ class PyTorchTileDBDataset(torch.utils.data.IterableDataset[XY]):
                     raise NotImplementedError(
                         "https://github.com/pytorch/pytorch/issues/20248"
                     )
-            per_worker = ceil(self._num_keys / worker_info.num_workers)
-            start = self._start + worker_info.id * per_worker
-            stop = min(start + per_worker, self._stop)
-        else:
-            start = self._start
-            stop = self._stop
+            per_worker = ceil(self._x_schema.num_keys / worker_info.num_workers)
+            start += worker_info.id * per_worker
+            stop = min(start + per_worker, stop)
 
         def iter_rows(
-            gen: TileDBTensorGenerator[TensorLike], buffer_size: int
+            gen: TileDBTensorGenerator[TensorLike], schema: TensorSchema
         ) -> Iterator[TensorLikeOrSequence]:
-            iter_tensors = gen.iter_tensors(buffer_size, start, stop)
+            key_dim_slices = schema.partition_key_dim(self._buffer_bytes, start, stop)
+            iter_tensors = gen.iter_tensors(key_dim_slices)
             if gen.single_attr:
                 return (row for tensor in iter_tensors for row in tensor)
             else:
                 return (row for tensors in iter_tensors for row in zip(*tensors))
 
         rows: Iterator[XY] = zip(
-            iter_rows(self._x_gen, self._x_buffer_size),
-            iter_rows(self._y_gen, self._y_buffer_size),
+            iter_rows(self._x_gen, self._x_schema),
+            iter_rows(self._y_gen, self._y_schema),
         )
         if self._shuffle_buffer_size > 0:
             rows = _iter_shuffled(rows, self._shuffle_buffer_size)
