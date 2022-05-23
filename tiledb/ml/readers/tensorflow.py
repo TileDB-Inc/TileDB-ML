@@ -13,9 +13,8 @@ from ._tensor_gen import (
     TileDBNumpyGenerator,
     TileDBSparseGenerator,
     TileDBTensorGenerator,
-    iter_slices,
 )
-from ._tensor_schema import TensorSchema, get_buffer_size
+from ._tensor_schema import TensorSchema, iter_slices
 
 
 def TensorflowTileDBDataset(
@@ -53,27 +52,29 @@ def TensorflowTileDBDataset(
         be shuffled even if `shuffle_buffer_size` is zero when `num_workers` > 1.
     """
     x_schema = TensorSchema(x_array, x_key_dim, x_attrs)
-    x_gen = _get_tensor_generator(x_array, x_schema)
-    x_buffer_size = get_buffer_size(x_array, x_schema, buffer_bytes)
-
     y_schema = TensorSchema(y_array, y_key_dim, y_attrs)
+    x_schema.ensure_equal_keys(y_schema)
+
+    x_gen = _get_tensor_generator(x_array, x_schema)
     y_gen = _get_tensor_generator(y_array, y_schema)
-    y_buffer_size = get_buffer_size(y_array, y_schema, buffer_bytes)
 
     def bounded_dataset(bounds: Union[Tuple[int, int], tf.Tensor]) -> tf.data.Dataset:
         x_dataset = tf.data.Dataset.from_generator(
-            x_gen.iter_tensors,
-            args=(x_buffer_size, bounds[0], bounds[1]),
+            lambda start, stop: x_gen.iter_tensors(
+                x_schema.partition_key_dim(buffer_bytes, start, stop)
+            ),
+            args=(bounds[0], bounds[1]),
             output_signature=_get_tensor_specs(x_array, x_schema),
         )
         y_dataset = tf.data.Dataset.from_generator(
-            y_gen.iter_tensors,
-            args=(y_buffer_size, bounds[0], bounds[1]),
+            lambda start, stop: y_gen.iter_tensors(
+                y_schema.partition_key_dim(buffer_bytes, start, stop)
+            ),
+            args=(bounds[0], bounds[1]),
             output_signature=_get_tensor_specs(y_array, y_schema),
         )
         return tf.data.Dataset.zip((x_dataset.unbatch(), y_dataset.unbatch()))
 
-    x_schema.ensure_equal_keys(y_schema)
     if num_workers:
         per_worker = ceil(x_schema.num_keys / num_workers)
         offsets = [

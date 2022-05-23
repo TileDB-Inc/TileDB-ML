@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from operator import itemgetter
-from typing import Callable, Generic, Iterator, Sequence, TypeVar, Union
+from typing import Callable, Generic, Iterable, Sequence, TypeVar, Union
 
 import numpy as np
 import sparse
@@ -32,8 +32,8 @@ class TileDBTensorGenerator(ABC, Generic[T]):
 
     @abstractmethod
     def iter_tensors(
-        self, slice_size: int, start_key: int, stop_key: int
-    ) -> Union[Iterator[T], Iterator[Sequence[T]]]:
+        self, key_dim_slices: Iterable[slice]
+    ) -> Union[Iterable[T], Iterable[Sequence[T]]]:
         """
         Generate batches of tensors.
 
@@ -42,9 +42,7 @@ class TileDBTensorGenerator(ABC, Generic[T]):
         - a single tensor if N == 1.
         Each tensor is a `T` instance of shape `(slice_size, *self._schema.shape[1:])`.
 
-        :param slice_size: Size of each slice along the key dimension.
-        :param start_key: Start value along the key dimension.
-        :param stop_key: Stop value along the key dimension.
+        :param key_dim_slices: Slices along the key dimension.
         """
 
 
@@ -52,8 +50,8 @@ class TileDBNumpyGenerator(TileDBTensorGenerator[np.ndarray]):
     """Generator of Numpy arrays read from a TileDB array."""
 
     def iter_tensors(
-        self, slice_size: int, start_key: int, stop_key: int
-    ) -> Union[Iterator[np.ndarray], Iterator[Sequence[np.ndarray]]]:
+        self, key_dim_slices: Iterable[slice]
+    ) -> Union[Iterable[np.ndarray], Iterable[Sequence[np.ndarray]]]:
         """
         If `self._schema.key_dim index > 0`, the returned Numpy arrays will ve reshaped
         so that the key_dim axes is first. For example, is the TileDB array `a` has shape
@@ -64,7 +62,7 @@ class TileDBNumpyGenerator(TileDBTensorGenerator[np.ndarray]):
         multi_index = self._array.query(attrs=attrs).multi_index
         get_data = itemgetter(*attrs)
         key_dim_index = self._schema.key_dim_index
-        for key_dim_slice in iter_slices(start_key, stop_key, slice_size):
+        for key_dim_slice in key_dim_slices:
             # multi_index needs inclusive slices
             idx = self._schema[key_dim_slice.start : key_dim_slice.stop - 1]
             attr_dict = multi_index[idx]
@@ -88,8 +86,8 @@ class TileDBSparseGenerator(TileDBTensorGenerator[T]):
         self._from_coo = from_coo
 
     def iter_tensors(
-        self, slice_size: int, start_key: int, stop_key: int
-    ) -> Union[Iterator[T], Iterator[Sequence[T]]]:
+        self, key_dim_slices: Iterable[slice]
+    ) -> Union[Iterable[T], Iterable[Sequence[T]]]:
         attrs = self._schema.attrs
         multi_index = self._array.query(attrs=attrs).multi_index
         get_data = itemgetter(*attrs)
@@ -99,8 +97,7 @@ class TileDBSparseGenerator(TileDBTensorGenerator[T]):
         single_attr = self.single_attr
         shape = list(self._schema.shape)
 
-        # generate slices of the array along the key dimension
-        for key_dim_slice in iter_slices(start_key, stop_key, slice_size):
+        for key_dim_slice in key_dim_slices:
             # set the shape of the key dimension equal to the current slice size
             shape[0] = key_dim_slice.stop - key_dim_slice.start
             # multi_index needs inclusive slices
@@ -119,9 +116,3 @@ class TileDBSparseGenerator(TileDBTensorGenerator[T]):
                 yield self._from_coo(sparse.COO(coords, data, shape))
             else:
                 yield tuple(self._from_coo(sparse.COO(coords, d, shape)) for d in data)
-
-
-def iter_slices(start: int, stop: int, step: int) -> Iterator[slice]:
-    offsets = range(start, stop, step)
-    yield from map(slice, offsets, offsets[1:])
-    yield slice(offsets[-1], stop)
