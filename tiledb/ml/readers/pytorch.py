@@ -68,8 +68,10 @@ def PyTorchTileDBDataLoader(
     :param shuffle_buffer_size: Number of elements from which this dataset will sample.
     :param prefetch: Number of samples loaded in advance by each worker. Not applicable
         (and should not be given) when `num_workers` is 0.
-    :param x_attrs: Attribute names of x_array.
-    :param y_attrs: Attribute names of y_array.
+    :param x_attrs: Attribute and/or dimension names of the x_array to read. Defaults to
+        all attributes.
+    :param y_attrs: Attribute and/or dimension names of the y_array to read. Defaults to
+        all attributes.
     :param x_key_dim: Name or index of the key dimension of x_array.
     :param y_key_dim: Name or index of the key dimension of y_array.
     :param num_workers: how many subprocesses to use for data loading. 0 means that the
@@ -94,8 +96,8 @@ def PyTorchTileDBDataLoader(
         num_workers=num_workers,
         worker_init_fn=_worker_init,
         collate_fn=_CompositeCollator(
-            _get_tensor_collator(x_array, csr, len(x_schema.attrs)),
-            _get_tensor_collator(y_array, csr, len(y_schema.attrs)),
+            _get_tensor_collator(x_array, csr, len(x_schema.fields)),
+            _get_tensor_collator(y_array, csr, len(y_schema.fields)),
         ),
     )
 
@@ -135,7 +137,7 @@ class _PyTorchTileDBDataset(torch.utils.data.IterableDataset[XY]):
         key_dim_slices = schema.partition_key_dim(
             self._buffer_bytes, self._start_key, self._stop_key
         )
-        if len(schema.attrs) == 1:
+        if len(schema.fields) == 1:
             return (row for tensor in gen(key_dim_slices) for row in tensor)
         else:
             return (row for tensors in gen(key_dim_slices) for row in zip(*tensors))
@@ -219,7 +221,7 @@ def _csr_collate(arrays: Sequence[scipy.sparse.csr_matrix]) -> torch.Tensor:
 
 
 def _get_tensor_collator(
-    array: tiledb.Array, csr: bool, num_attrs: int
+    array: tiledb.Array, csr: bool, num_fields: int
 ) -> Union[_SingleCollator, _CompositeCollator]:
     if not array.schema.sparse:
         collator = _ndarray_collate
@@ -230,10 +232,10 @@ def _get_tensor_collator(
     else:
         collator = _csr_to_coo_collate
 
-    if num_attrs == 1:
+    if num_fields == 1:
         return collator
     else:
-        return _CompositeCollator(*itertools.repeat(collator, num_attrs))
+        return _CompositeCollator(*itertools.repeat(collator, num_fields))
 
 
 _T = TypeVar("_T")

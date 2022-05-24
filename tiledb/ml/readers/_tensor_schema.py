@@ -23,54 +23,77 @@ class TensorSchema:
         self,
         array: tiledb.Array,
         key_dim: Union[int, str] = 0,
-        attrs: Sequence[str] = (),
+        fields: Sequence[str] = (),
     ):
         """
         :param array: TileDB array to read from.
-        :param key_dim: Name or index of the key dimension; defaults to the first dimension.
-        :param attrs: Attribute names of array to read; defaults to all attributes.
+        :param key_dim: Name or index of the key dimension. Defaults to the first dimension.
+        :param fields: Attribute and/or dimension names of the array to read. Defaults to
+            all attributes.
         """
-        get_dim = array.domain.dim
-        if not np.issubdtype(get_dim(key_dim).dtype, np.integer):
+        if not np.issubdtype(array.dim(key_dim).dtype, np.integer):
             raise ValueError(f"Key dimension {key_dim} must have integer domain")
 
         all_attrs = [array.attr(i).name for i in range(array.nattr)]
-        unknown_attrs = [attr for attr in attrs if attr not in all_attrs]
-        if unknown_attrs:
-            raise ValueError(f"Unknown attributes: {unknown_attrs}")
+        all_dims = [array.dim(i).name for i in range(array.ndim)]
+
+        dims = []
+        if fields:
+            attrs = []
+            for field in fields:
+                if field in all_attrs:
+                    attrs.append(field)
+                elif field in all_dims:
+                    dims.append(field)
+                else:
+                    raise ValueError(f"Unknown attribute or dimension '{field}'")
+        else:
+            fields = attrs = all_attrs
 
         ned = list(array.nonempty_domain())
-        dims = [get_dim(i).name for i in range(array.ndim)]
-        key_dim_index = dims.index(key_dim) if not isinstance(key_dim, int) else key_dim
+        key_dim_index = key_dim if isinstance(key_dim, int) else all_dims.index(key_dim)
         if key_dim_index > 0:
             # Swap key dimension to first position
-            dims[0], dims[key_dim_index] = dims[key_dim_index], dims[0]
+            all_dims[0], all_dims[key_dim_index] = all_dims[key_dim_index], all_dims[0]
             ned[0], ned[key_dim_index] = ned[key_dim_index], ned[0]
 
         self._array = array
         self._ned: Sequence[Tuple[int, int]] = tuple(ned)
-        self._dims = tuple(dims)
-        self._attrs = tuple(attrs or all_attrs)
+        self._dims = tuple(all_dims)
+        self._fields = tuple(fields)
         self._leading_dim_slices = (slice(None),) * key_dim_index
+        self._query_kwargs = {
+            "attrs": tuple(attrs),
+            "dims": tuple(all_dims if array.schema.sparse else dims),
+        }
 
     @property
-    def attrs(self) -> Sequence[str]:
-        """The attribute names of the array to read."""
-        return self._attrs
+    def fields(self) -> Sequence[str]:
+        """Names of attributes and dimensions to read."""
+        return self._fields
+
+    @property
+    def field_dtypes(self) -> Sequence[np.dtype]:
+        """Dtypes of attributes and dimensions to read."""
+        get_dim, get_attr = self._array.dim, self._array.attr
+        return tuple(
+            (get_dim if field in self._dims else get_attr)(field).dtype
+            for field in self._fields
+        )
 
     @property
     def dims(self) -> Sequence[str]:
-        """The dimension names of the array, with the key dimension moved first."""
+        """All dimension names of the array, with the key dimension moved first."""
         return self._dims
 
     @property
     def nonempty_domain(self) -> Sequence[Tuple[int, int]]:
-        """The non-empty domain of the array, with the key dimension moved first."""
+        """Non-empty domain of the array, with the key dimension moved first."""
         return self._ned
 
     @property
     def shape(self) -> Tuple[int, ...]:
-        """The shape of the array, with the key dimension moved first.
+        """Shape of the array, with the key dimension moved first.
 
         **Note**: For sparse arrays, the returned shape reflects the non-empty domain of
         the array, not the full array shape.
@@ -84,23 +107,28 @@ class TensorSchema:
 
     @property
     def key_dim_index(self) -> int:
-        """The index of the key dimension in the original TileDB schema."""
+        """Index of the key dimension in the original TileDB schema."""
         return len(self._leading_dim_slices)
 
     @property
     def num_keys(self) -> int:
-        """The number of distinct values along the key dimension"""
+        """Number of distinct values along the key dimension"""
         return self.stop_key - self.start_key
 
     @property
     def start_key(self) -> int:
-        """The minimum value of the key dimension."""
+        """Minimum value of the key dimension."""
         return self._ned[0][0]
 
     @property
     def stop_key(self) -> int:
-        """The maximum value of the key dimension, plus 1."""
+        """Maximum value of the key dimension, plus 1."""
         return self._ned[0][1] + 1
+
+    @property
+    def multi_index(self) -> tiledb.multirange_indexing.MultiRangeIndexer:
+        """Indexer instance to use for querying the array."""
+        return self._array.query(**self._query_kwargs).multi_index
 
     def __getitem__(self, key_dim_slice: slice) -> Tuple[slice, ...]:
         """Return the indexing tuple for querying the TileDB array by `dim_key=key_dim_slice`.
@@ -160,7 +188,7 @@ class TensorSchema:
             memory_budget = init_buffer_bytes
 
         # the size of each row is variable and can only be estimated
-        query = array.query(attrs=self.attrs, return_incomplete=True)
+        query = array.query(return_incomplete=True, **self._query_kwargs)
         res_sizes = query.multi_index[:].estimated_result_sizes()
 
         max_buffer_bytes = max(res_size.data_bytes for res_size in res_sizes.values())
@@ -174,8 +202,8 @@ class TensorSchema:
         if memory_budget is None or memory_budget > config_memory_budget:
             memory_budget = config_memory_budget
 
-        # The memory budget should be large enough to read the cells of the largest attribute
-        bytes_per_cell = max(array.attr(attr).dtype.itemsize for attr in self.attrs)
+        # The memory budget should be large enough to read the cells of the largest field
+        bytes_per_cell = max(dtype.itemsize for dtype in self.field_dtypes)
 
         # We want to be reading tiles following the tile extents along each dimension.
         # The number of cells for each such tile is the product of all tile extents.

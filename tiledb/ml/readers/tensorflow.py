@@ -38,8 +38,10 @@ def TensorflowTileDBDataset(
     :param shuffle_buffer_size: Number of elements from which this dataset will sample.
     :param prefetch: Maximum number of batches that will be buffered when prefetching.
         By default, the buffer size is dynamically tuned.
-    :param x_attrs: Attribute names of x_array.
-    :param y_attrs: Attribute names of y_array.
+    :param x_attrs: Attribute and/or dimension names of the x_array to read. Defaults to
+        all attributes.
+    :param y_attrs: Attribute and/or dimension names of the y_array to read. Defaults to
+        all attributes.
     :param x_key_dim: Name or index of the key dimension of x_array.
     :param y_key_dim: Name or index of the key dimension of y_array.
     :param num_workers: If greater than zero, create a threadpool of `num_workers` threads
@@ -96,11 +98,9 @@ def _get_tensor_specs(
     array: tiledb.Array, schema: TensorSchema
 ) -> Union[TensorSpec, Sequence[TensorSpec]]:
     cls = tf.SparseTensorSpec if array.schema.sparse else tf.TensorSpec
-    specs = (
-        cls(shape=(None, *schema.shape[1:]), dtype=array.attr(attr).dtype)
-        for attr in schema.attrs
-    )
-    return tuple(specs) if len(schema.attrs) > 1 else next(specs)
+    shape = (None, *schema.shape[1:])
+    specs = tuple(cls(shape=shape, dtype=dtype) for dtype in schema.field_dtypes)
+    return specs if len(specs) > 1 else specs[0]
 
 
 def _get_tensor_generator(
