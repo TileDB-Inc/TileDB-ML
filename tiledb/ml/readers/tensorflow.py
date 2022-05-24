@@ -3,17 +3,12 @@
 from math import ceil
 from typing import Optional, Sequence, Tuple, Union
 
-import numpy as np
 import sparse
 import tensorflow as tf
 
 import tiledb
 
-from ._tensor_gen import (
-    TileDBNumpyGenerator,
-    TileDBSparseGenerator,
-    TileDBTensorGenerator,
-)
+from ._tensor_gen import TileDBNumpyGenerator, TileDBSparseGenerator
 from ._tensor_schema import TensorSchema, iter_slices
 
 
@@ -60,14 +55,14 @@ def TensorflowTileDBDataset(
 
     def bounded_dataset(bounds: Union[Tuple[int, int], tf.Tensor]) -> tf.data.Dataset:
         x_dataset = tf.data.Dataset.from_generator(
-            lambda start, stop: x_gen.iter_tensors(
+            lambda start, stop: x_gen(
                 x_schema.partition_key_dim(buffer_bytes, start, stop)
             ),
             args=(bounds[0], bounds[1]),
             output_signature=_get_tensor_specs(x_array, x_schema),
         )
         y_dataset = tf.data.Dataset.from_generator(
-            lambda start, stop: y_gen.iter_tensors(
+            lambda start, stop: y_gen(
                 y_schema.partition_key_dim(buffer_bytes, start, stop)
             ),
             args=(bounds[0], bounds[1]),
@@ -110,7 +105,7 @@ def _get_tensor_specs(
 
 def _get_tensor_generator(
     array: tiledb.Array, schema: TensorSchema
-) -> TileDBTensorGenerator[Union[np.ndarray, tf.SparseTensor]]:
+) -> Union[TileDBNumpyGenerator, TileDBSparseGenerator[tf.SparseTensor]]:
     if not array.schema.sparse:
         return TileDBNumpyGenerator(array, schema)
     else:
