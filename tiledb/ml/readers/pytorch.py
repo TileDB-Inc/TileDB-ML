@@ -29,16 +29,21 @@ except AttributeError:
 
 import tiledb
 
-from ._tensor_gen import (
-    TileDBNumpyGenerator,
-    TileDBSparseGenerator,
-    TileDBTensorGenerator,
-)
+from ._tensor_gen import TileDBNumpyGenerator, TileDBSparseGenerator
 from ._tensor_schema import TensorSchema
 
-TensorLike = Union[np.ndarray, sparse.COO, scipy.sparse.csr_matrix]
-TensorLikeOrSequence = Union[TensorLike, Sequence[TensorLike]]
+TensorLikeSequence = Union[
+    Sequence[np.ndarray], Sequence[sparse.COO], Sequence[scipy.sparse.csr_matrix]
+]
+TensorLikeOrSequence = Union[
+    np.ndarray, sparse.COO, scipy.sparse.csr_matrix, TensorLikeSequence
+]
 XY = Tuple[TensorLikeOrSequence, TensorLikeOrSequence]
+TileDBTensorGenerator = Union[
+    TileDBNumpyGenerator,
+    TileDBSparseGenerator[sparse.COO],
+    TileDBSparseGenerator[scipy.sparse.csr_matrix],
+]
 
 
 def PyTorchTileDBDataLoader(
@@ -133,14 +138,13 @@ class PyTorchTileDBDataset(torch.utils.data.IterableDataset[XY]):
             stop = min(start + per_worker, stop)
 
         def iter_rows(
-            gen: TileDBTensorGenerator[TensorLike], schema: TensorSchema
+            gen: TileDBTensorGenerator, schema: TensorSchema
         ) -> Iterator[TensorLikeOrSequence]:
             key_dim_slices = schema.partition_key_dim(self._buffer_bytes, start, stop)
-            iter_tensors = gen.iter_tensors(key_dim_slices)
-            if gen.single_attr:
-                return (row for tensor in iter_tensors for row in tensor)
+            if len(schema.attrs) == 1:
+                return (row for tensor in gen(key_dim_slices) for row in tensor)
             else:
-                return (row for tensors in iter_tensors for row in zip(*tensors))
+                return (row for tensors in gen(key_dim_slices) for row in zip(*tensors))
 
         rows: Iterator[XY] = zip(
             iter_rows(self._x_gen, self._x_schema),
@@ -153,7 +157,7 @@ class PyTorchTileDBDataset(torch.utils.data.IterableDataset[XY]):
 
 def _get_tensor_generator(
     array: tiledb.Array, schema: TensorSchema
-) -> TileDBTensorGenerator[TensorLike]:
+) -> TileDBTensorGenerator:
     if not array.schema.sparse:
         return TileDBNumpyGenerator(array, schema)
     elif array.ndim == 2:
@@ -162,7 +166,7 @@ def _get_tensor_generator(
         return TileDBSparseGenerator(array, schema, from_coo=lambda x: x)
 
 
-_SingleCollator = Callable[[Sequence[TensorLike]], torch.Tensor]
+_SingleCollator = Callable[[TensorLikeSequence], torch.Tensor]
 
 
 class _CompositeCollator:
@@ -174,7 +178,7 @@ class _CompositeCollator:
     def __init__(self, *collators: _SingleCollator):
         self._collators = collators
 
-    def __call__(self, rows: Sequence[Sequence[TensorLike]]) -> Sequence[torch.Tensor]:
+    def __call__(self, rows: Sequence[TensorLikeSequence]) -> Sequence[torch.Tensor]:
         columns = tuple(zip(*rows))
         collators = self._collators
         assert len(columns) == len(collators)
