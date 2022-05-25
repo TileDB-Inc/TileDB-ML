@@ -4,51 +4,12 @@ import numpy as np
 import pytest
 import torch
 
-from tiledb.ml.readers.pytorch import (
-    PyTorchTileDBDataLoader,
-    TensorSchema,
-    _PyTorchTileDBDataset,
-)
+from tiledb.ml.readers.pytorch import PyTorchTileDBDataLoader
 
 from .utils import ingest_in_tiledb, parametrize_for_dataset, validate_tensor_generator
 
 
-class TestPyTorchTileDBDataset:
-    @parametrize_for_dataset(batch_size=[0], shuffle_buffer_size=[0], num_workers=[0])
-    def test_dataset(
-        self,
-        tmpdir,
-        x_shape,
-        y_shape,
-        x_sparse,
-        y_sparse,
-        x_key_dim,
-        y_key_dim,
-        num_attrs,
-        pass_attrs,
-        buffer_bytes,
-        batch_size,
-        shuffle_buffer_size,
-        num_workers,
-    ):
-        with ingest_in_tiledb(
-            tmpdir, x_shape, x_sparse, x_key_dim, num_attrs, pass_attrs
-        ) as x_kwargs, ingest_in_tiledb(
-            tmpdir, y_shape, y_sparse, y_key_dim, num_attrs, pass_attrs
-        ) as y_kwargs:
-            x_array, y_array = x_kwargs["array"], y_kwargs["array"]
-            dataset = _PyTorchTileDBDataset(
-                x_array=x_array,
-                y_array=y_array,
-                x_schema=TensorSchema(x_array, x_kwargs["key_dim"], x_kwargs["attrs"]),
-                y_schema=TensorSchema(y_array, y_kwargs["key_dim"], y_kwargs["attrs"]),
-                buffer_bytes=buffer_bytes,
-            )
-            assert isinstance(dataset, torch.utils.data.IterableDataset)
-            validate_tensor_generator(
-                dataset, num_attrs, x_sparse, y_sparse, x_shape, y_shape
-            )
-
+class TestPyTorchTileDBDataLoader:
     @parametrize_for_dataset()
     def test_dataloader(
         self,
