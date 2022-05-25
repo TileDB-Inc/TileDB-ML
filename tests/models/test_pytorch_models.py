@@ -208,7 +208,7 @@ class TestPyTorchModelCloud:
         uri = os.path.join(tmpdir, "model_array")
 
         mock_get_cloud_uri = mocker.patch(
-            "tiledb.ml.models.base.get_cloud_uri", return_value=uri
+            "tiledb.ml.models._base.get_cloud_uri", return_value=uri
         )
 
         _ = PyTorchTileDBModel(uri=uri, namespace="test_namespace", model=model)
@@ -231,7 +231,7 @@ class TestPyTorchModelCloud:
         model = Net()
         uri = os.path.join(tmpdir, "model_array")
 
-        mocker.patch("tiledb.ml.models.base.get_cloud_uri", return_value=uri)
+        mocker.patch("tiledb.ml.models._base.get_cloud_uri", return_value=uri)
 
         tiledb_obj = PyTorchTileDBModel(
             uri=uri, namespace="test_namespace", model=model

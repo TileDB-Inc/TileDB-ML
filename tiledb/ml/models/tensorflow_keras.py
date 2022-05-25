@@ -13,9 +13,9 @@ import tensorflow as tf
 
 import tiledb
 
+from ._base import Meta, TileDBModel, Timestamp, current_milli_time
 from ._cloud_utils import update_file_properties
 from ._tensorboard import load_tensorboard, save_tensorboard
-from .base import Meta, TileDBModel, Timestamp, current_milli_time
 
 try:
     import keras

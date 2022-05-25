@@ -6,8 +6,8 @@ import torch
 
 from tiledb.ml.readers.pytorch import (
     PyTorchTileDBDataLoader,
-    PyTorchTileDBDataset,
     TensorSchema,
+    _PyTorchTileDBDataset,
 )
 
 from .utils import ingest_in_tiledb, parametrize_for_dataset, validate_tensor_generator
@@ -37,7 +37,7 @@ class TestPyTorchTileDBDataset:
             tmpdir, y_shape, y_sparse, y_key_dim, num_attrs, pass_attrs
         ) as y_kwargs:
             x_array, y_array = x_kwargs["array"], y_kwargs["array"]
-            dataset = PyTorchTileDBDataset(
+            dataset = _PyTorchTileDBDataset(
                 x_array=x_array,
                 y_array=y_array,
                 x_schema=TensorSchema(x_array, x_kwargs["key_dim"], x_kwargs["attrs"]),

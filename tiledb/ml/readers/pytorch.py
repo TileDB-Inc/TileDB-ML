@@ -85,7 +85,7 @@ def PyTorchTileDBDataLoader(
     x_schema = TensorSchema(x_array, x_key_dim, x_attrs)
     y_schema = TensorSchema(y_array, y_key_dim, y_attrs)
     return torch.utils.data.DataLoader(
-        dataset=PyTorchTileDBDataset(
+        dataset=_PyTorchTileDBDataset(
             x_array=x_array,
             y_array=y_array,
             x_schema=x_schema,
@@ -103,7 +103,7 @@ def PyTorchTileDBDataLoader(
     )
 
 
-class PyTorchTileDBDataset(torch.utils.data.IterableDataset[XY]):
+class _PyTorchTileDBDataset(torch.utils.data.IterableDataset[XY]):
     def __init__(
         self,
         x_array: tiledb.Array,

@@ -5,7 +5,7 @@ from typing import Mapping, Optional
 
 import tiledb
 
-from .base import Timestamp
+from ._base import Timestamp
 
 _KEY = "__TENSORBOARD__"
 

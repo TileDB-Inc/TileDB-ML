@@ -450,7 +450,7 @@ class TestTensorflowKerasModelCloud:
         uri = os.path.join(tmpdir, "model_array")
 
         mock_get_cloud_uri = mocker.patch(
-            "tiledb.ml.models.base.get_cloud_uri", return_value=uri
+            "tiledb.ml.models._base.get_cloud_uri", return_value=uri
         )
 
         _ = TensorflowKerasTileDBModel(uri=uri, namespace="test_namespace", model=model)
@@ -481,7 +481,7 @@ class TestTensorflowKerasModelCloud:
 
         uri = os.path.join(tmpdir, "model_array")
 
-        mocker.patch("tiledb.ml.models.base.get_cloud_uri", return_value=uri)
+        mocker.patch("tiledb.ml.models._base.get_cloud_uri", return_value=uri)
 
         tiledb_obj = TensorflowKerasTileDBModel(
             uri=uri, namespace="test_namespace", model=model
