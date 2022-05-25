@@ -24,8 +24,7 @@ def parametrize_for_dataset(
     y_sparse=(True, False),
     x_key_dim=(0, 1),
     y_key_dim=(0, 1),
-    num_attrs=(1, 2),
-    pass_attrs=(True,),
+    num_fields=(0, 1, 2),
     buffer_bytes=(1024, None),
     batch_size=(8,),
     shuffle_buffer_size=(16,),
@@ -38,8 +37,7 @@ def parametrize_for_dataset(
         "y_sparse",
         "x_key_dim",
         "y_key_dim",
-        "num_attrs",
-        "pass_attrs",
+        "num_fields",
         "buffer_bytes",
         "batch_size",
         "shuffle_buffer_size",
@@ -52,8 +50,7 @@ def parametrize_for_dataset(
         y_sparse,
         x_key_dim,
         y_key_dim,
-        num_attrs,
-        pass_attrs,
+        num_fields,
         buffer_bytes,
         batch_size,
         shuffle_buffer_size,
@@ -63,12 +60,11 @@ def parametrize_for_dataset(
 
 
 @contextmanager
-def ingest_in_tiledb(tmpdir, shape, sparse, key_dim, num_attrs, pass_attrs):
+def ingest_in_tiledb(tmpdir, shape, sparse, key_dim, num_fields):
     """Context manager for ingesting data into TileDB."""
     array_uuid = str(uuid.uuid4())
     uri = os.path.join(tmpdir, array_uuid)
-    attrs = tuple(f"{array_uuid[0]}{i}" for i in range(num_attrs))
-    data = original_data = rand_array(shape, sparse)
+    data = original_data = _rand_array(shape, sparse)
     if key_dim > 0:
         data = np.moveaxis(data, 0, key_dim)
 
@@ -83,38 +79,36 @@ def ingest_in_tiledb(tmpdir, shape, sparse, key_dim, num_attrs, pass_attrs):
         )
         for dim, dim_start in enumerate(dim_starts)
     ]
-
-    # TileDB schema
-    schema = tiledb.ArraySchema(
-        domain=tiledb.Domain(*dims),
-        sparse=sparse,
-        attrs=[tiledb.Attr(name=attr, dtype=np.float32) for attr in attrs],
-    )
-
-    # Create the (empty) array on disk.
+    attrs = [
+        tiledb.Attr(name="data", dtype=np.float32),
+        tiledb.Attr(name="idx", dtype=np.int16),
+    ]
+    schema = tiledb.ArraySchema(domain=tiledb.Domain(*dims), attrs=attrs, sparse=sparse)
     tiledb.Array.create(uri, schema)
 
-    # Ingest
     with tiledb.open(uri, "w") as tiledb_array:
+        data_idx = np.arange(data.size).reshape(data.shape)
         if sparse:
-            idxs = np.nonzero(data)
+            nz_idxs = np.nonzero(data)
             dim_idxs = tuple(
-                dim_start + idx for idx, dim_start in zip(idxs, dim_starts)
+                dim_start + idx for idx, dim_start in zip(nz_idxs, dim_starts)
             )
+            tiledb_array[dim_idxs] = {"data": data[nz_idxs], "idx": data_idx[nz_idxs]}
         else:
-            idxs = dim_idxs = slice(None)
-        tiledb_array[dim_idxs] = {attr: data[idxs] for attr in attrs}
+            tiledb_array[:] = {"data": data, "idx": data_idx}
 
+    all_fields = [f.name for f in dims + attrs]
+    fields = np.random.choice(all_fields, size=num_fields, replace=False).tolist()
     with tiledb.open(uri) as array:
         yield {
             "data": original_data,
             "array": array,
             "key_dim": key_dim,
-            "attrs": attrs if pass_attrs else (),
+            "fields": fields,
         }
 
 
-def rand_array(shape: Sequence[int], sparse: bool = False) -> np.ndarray:
+def _rand_array(shape: Sequence[int], sparse: bool = False) -> np.ndarray:
     """Create a random array of the given shape.
 
     :param shape: Shape of the array.
@@ -133,12 +127,12 @@ def rand_array(shape: Sequence[int], sparse: bool = False) -> np.ndarray:
 
 
 def validate_tensor_generator(
-    generator, num_attrs, x_sparse, y_sparse, x_shape, y_shape, batch_size=None
+    generator, num_fields, x_sparse, y_sparse, x_shape, y_shape, batch_size=None
 ):
     for x_tensors, y_tensors in generator:
-        for x_tensor in x_tensors if num_attrs > 1 else [x_tensors]:
+        for x_tensor in x_tensors if num_fields != 1 else [x_tensors]:
             _validate_tensor(x_tensor, x_sparse, x_shape[1:], batch_size)
-        for y_tensor in y_tensors if num_attrs > 1 else [y_tensors]:
+        for y_tensor in y_tensors if num_fields != 1 else [y_tensors]:
             _validate_tensor(y_tensor, y_sparse, y_shape[1:], batch_size)
 
 
