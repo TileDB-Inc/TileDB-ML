@@ -1,6 +1,6 @@
 """Functionality for loading data from TileDB arrays to the Tensorflow Data API."""
 
-import math
+from math import ceil
 from typing import Optional, Sequence, Tuple, Union
 
 import numpy as np
@@ -53,11 +53,11 @@ def TensorflowTileDBDataset(
         used to fetch inputs asynchronously and in parallel. Note: yielded batches may
         be shuffled even if `shuffle_buffer_size` is zero when `num_workers` > 1.
     """
-    x_schema = TensorSchema(x_array.schema, x_key_dim, x_attrs)
+    x_schema = TensorSchema(x_array, x_key_dim, x_attrs)
     x_gen = _get_tensor_generator(x_array, x_schema)
     x_buffer_size = get_buffer_size(x_array, x_schema, buffer_bytes)
 
-    y_schema = TensorSchema(y_array.schema, y_key_dim, y_attrs)
+    y_schema = TensorSchema(y_array, y_key_dim, y_attrs)
     y_gen = _get_tensor_generator(y_array, y_schema)
     y_buffer_size = get_buffer_size(y_array, y_schema, buffer_bytes)
 
@@ -75,17 +75,19 @@ def TensorflowTileDBDataset(
         return tf.data.Dataset.zip((x_dataset.unbatch(), y_dataset.unbatch()))
 
     x_schema.ensure_equal_keys(y_schema)
-    start, stop = x_schema.start_key, x_schema.stop_key
     if num_workers:
-        per_worker = int(math.ceil((stop - start) / num_workers))
-        offsets = [(s.start, s.stop) for s in iter_slices(start, stop, per_worker)]
+        per_worker = ceil(x_schema.num_keys / num_workers)
+        offsets = [
+            (s.start, s.stop)
+            for s in iter_slices(x_schema.start_key, x_schema.stop_key, per_worker)
+        ]
         offsets_tensor = tf.convert_to_tensor(offsets, dtype=tf.int64)
         offsets_dataset = tf.data.Dataset.from_tensor_slices(offsets_tensor)
         dataset = offsets_dataset.interleave(
             bounded_dataset, num_parallel_calls=num_workers, deterministic=False
         )
     else:
-        dataset = bounded_dataset((start, stop))
+        dataset = bounded_dataset((x_schema.start_key, x_schema.stop_key))
 
     if shuffle_buffer_size > 0:
         dataset = dataset.shuffle(shuffle_buffer_size)

@@ -120,17 +120,16 @@ def rand_array(shape: Sequence[int], sparse: bool = False) -> np.ndarray:
     :param shape: Shape of the array.
     :param sparse:
       - If false, all values will be in the (0, 1) range.
-      - If true, only `shape[0]` values will be in the (0, 1) range, the rest will be 0.
-        Note: some rows may be all zeros.
+      - If true, only one value per row will be non-zero, the rest will be 0.
     """
-    if sparse:
-        a = np.zeros(shape)
-        flat_idxs = np.random.choice(a.size, size=len(a), replace=False)
-        a.flat[flat_idxs] = np.random.random(len(flat_idxs))
-    else:
-        a = np.random.random(shape)
-    assert a.shape == shape
-    return a
+    if not sparse:
+        return np.random.random(shape)
+
+    rows, cols = shape[0], np.prod(shape[1:])
+    a = np.zeros((rows, cols))
+    col_idxs = np.random.choice(cols, size=rows)
+    a[np.arange(rows), col_idxs] = np.random.random(rows)
+    return a.reshape(shape)
 
 
 def validate_tensor_generator(

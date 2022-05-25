@@ -88,7 +88,7 @@ class TestTensorflowTileDBDataset:
                     shuffle_buffer_size=shuffle_buffer_size,
                     num_workers=num_workers,
                 )
-            assert "X and Y arrays have different keys" in str(ex.value)
+            assert "X and Y arrays have different key domain" in str(ex.value)
 
     @parametrize_for_dataset(x_sparse=[True], shuffle_buffer_size=[0], num_workers=[0])
     def test_sparse_read_order(

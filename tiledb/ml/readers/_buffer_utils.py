@@ -30,7 +30,7 @@ def get_buffer_size(
     else:
         buffer_size = _get_max_buffer_size_dense(array, schema, memory_budget)
     # clip the buffer size between 1 and total number of rows
-    return max(1, min(buffer_size, schema.stop_key - schema.start_key))
+    return max(1, min(buffer_size, schema.num_keys))
 
 
 def _get_max_buffer_size_sparse(
@@ -51,9 +51,9 @@ def _get_max_buffer_size_sparse(
     res_sizes = query.multi_index[:].estimated_result_sizes()
 
     max_buffer_bytes = max(res_size.data_bytes for res_size in res_sizes.values())
-    max_bytes_per_row = max_buffer_bytes // (schema.stop_key - schema.start_key)
+    max_bytes_per_row = ceil(max_buffer_bytes / schema.num_keys)
 
-    return int(memory_budget // max_bytes_per_row)
+    return memory_budget // max_bytes_per_row
 
 
 def _get_max_buffer_size_dense(

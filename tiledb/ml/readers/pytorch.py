@@ -1,8 +1,8 @@
 """Functionality for loading data from TileDB arrays to the PyTorch Dataloader API."""
 
-import itertools as it
-import math
+import itertools
 import random
+from math import ceil
 from operator import methodcaller
 from typing import (
     Callable,
@@ -78,8 +78,8 @@ def PyTorchTileDBDataLoader(
         even if `shuffle_buffer_size` is zero when `num_workers` > 1.
     :param csr: For sparse 2D arrays, whether to return CSR tensors instead of COO.
     """
-    x_schema = TensorSchema(x_array.schema, x_key_dim, x_attrs)
-    y_schema = TensorSchema(y_array.schema, y_key_dim, y_attrs)
+    x_schema = TensorSchema(x_array, x_key_dim, x_attrs)
+    y_schema = TensorSchema(y_array, y_key_dim, y_attrs)
     return torch.utils.data.DataLoader(
         dataset=PyTorchTileDBDataset(
             x_array=x_array,
@@ -112,18 +112,19 @@ class PyTorchTileDBDataset(torch.utils.data.IterableDataset[XY]):
         super().__init__()
 
         if x_schema is None:
-            x_schema = TensorSchema(x_array.schema)
+            x_schema = TensorSchema(x_array)
         self._x_gen = _get_tensor_generator(x_array, x_schema)
         self._x_buffer_size = get_buffer_size(x_array, x_schema, buffer_bytes)
 
         if y_schema is None:
-            y_schema = TensorSchema(y_array.schema)
+            y_schema = TensorSchema(y_array)
         self._y_gen = _get_tensor_generator(y_array, y_schema)
         self._y_buffer_size = get_buffer_size(y_array, y_schema, buffer_bytes)
 
         x_schema.ensure_equal_keys(y_schema)
         self._start = x_schema.start_key
         self._stop = x_schema.stop_key
+        self._num_keys = x_schema.num_keys
         self._shuffle_buffer_size = shuffle_buffer_size
 
     def __iter__(self) -> Iterator[XY]:
@@ -134,8 +135,7 @@ class PyTorchTileDBDataset(torch.utils.data.IterableDataset[XY]):
                     raise NotImplementedError(
                         "https://github.com/pytorch/pytorch/issues/20248"
                     )
-            num_keys = self._stop - self._start
-            per_worker = int(math.ceil(num_keys / worker_info.num_workers))
+            per_worker = ceil(self._num_keys / worker_info.num_workers)
             start = self._start + worker_info.id * per_worker
             stop = min(start + per_worker, self._stop)
         else:
@@ -237,7 +237,7 @@ def _get_tensor_collator(
     if num_attrs == 1:
         return collator
     else:
-        return _CompositeCollator(*it.repeat(collator, num_attrs))
+        return _CompositeCollator(*itertools.repeat(collator, num_attrs))
 
 
 _T = TypeVar("_T")
@@ -252,7 +252,7 @@ def _iter_shuffled(iterable: Iterable[_T], buffer_size: int) -> Iterator[_T]:
 
     """
     iterator = iter(iterable)
-    buffer = list(it.islice(iterator, buffer_size))
+    buffer = list(itertools.islice(iterator, buffer_size))
     randrange = random.randrange
     for x in iterator:
         idx = randrange(0, buffer_size)
