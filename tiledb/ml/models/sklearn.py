@@ -10,8 +10,8 @@ from sklearn.base import BaseEstimator
 
 import tiledb
 
+from ._base import Meta, TileDBModel, Timestamp, current_milli_time
 from ._cloud_utils import update_file_properties
-from .base import Meta, TileDBModel, Timestamp, current_milli_time
 
 
 class SklearnTileDBModel(TileDBModel[BaseEstimator]):
