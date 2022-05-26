@@ -57,7 +57,8 @@ jobs:
       id: stats
       if: ${{ fromJSON(env.run_coverage) }}
       run: |
-        pytest --disable-warnings --cov-report=term-missing --cov=tiledb tests/ | tee coverage.txt
+        pytest --disable-warnings --cov-report=term-missing --cov=tiledb tests/ > coverage.txt
+        cat coverage.txt
         TEST_COVERAGE="$(grep '^TOTAL' coverage.txt | awk -v N=4 '{print $N}')"
         echo "::set-output name=COVERAGE::$TEST_COVERAGE"
 
