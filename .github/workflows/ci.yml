@@ -32,14 +32,13 @@ jobs:
       uses: actions/cache@v3
       with:
         path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ matrix.ml-deps }}
-        restore-keys: ${{ runner.os }}-pip-
+        key: ${{ runner.os }}:ml-deps=[${{ matrix.ml-deps }}]
 
     - name: Install dependencies
       run: |
         pip install --upgrade pip
         pip install -f https://download.pytorch.org/whl/torch_stable.html \
-          pytest-mock pytest-cov scikit-learn==1.0.2 ${{ matrix.ml-deps }}
+          pytest-mock pytest-cov scikit-learn==1.0.2 protobuf==3.* ${{ matrix.ml-deps }}
         pip install -e .[cloud]
 
     - name: Run mypy
@@ -57,7 +56,8 @@ jobs:
       id: stats
       if: ${{ fromJSON(env.run_coverage) }}
       run: |
-        pytest --disable-warnings --cov-report=term-missing --cov=tiledb tests/ | tee coverage.txt
+        pytest --disable-warnings --cov-report=term-missing --cov=tiledb tests/ > coverage.txt
+        cat coverage.txt
         TEST_COVERAGE="$(grep '^TOTAL' coverage.txt | awk -v N=4 '{print $N}')"
         echo "::set-output name=COVERAGE::$TEST_COVERAGE"
 
