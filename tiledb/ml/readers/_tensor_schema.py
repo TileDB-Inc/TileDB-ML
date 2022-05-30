@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from math import ceil
-from typing import Iterator, Optional, Sequence, Tuple, Union
+from typing import Dict, Iterator, Optional, Sequence, Tuple, Union, cast
 
 import numpy as np
 
@@ -126,19 +126,17 @@ class TensorSchema:
         """Maximum value of the key dimension"""
         return self._ned[0][1]
 
-    @property
-    def multi_index(self) -> tiledb.multirange_indexing.MultiRangeIndexer:
-        """Indexer instance to use for querying the array."""
-        return self._array.query(**self._query_kwargs).multi_index
-
-    def __getitem__(self, key_dim_slice: slice) -> Tuple[slice, ...]:
-        """Return the indexing tuple for querying the TileDB array by `dim_key=key_dim_slice`.
-
-        For example, if `self.key_dim_index == 2`, then querying by the key dimension
-        would be `array[:, :, key_dim_slice]`, which corresponds to the indexing tuple
-        `(slice(None), slice(None), key_dim_slice)`.
-        """
-        return (*self._leading_dim_slices, key_dim_slice)
+    def __getitem__(self, key_dim_slice: slice) -> Dict[str, np.ndarray]:
+        """Query the TileDB array by `dim_key=key_dim_slice`."""
+        self._query: tiledb.libtiledb.Query
+        try:
+            query = self._query
+        except AttributeError:
+            self._query = query = self._array.query(**self._query_kwargs)
+        return cast(
+            Dict[str, np.ndarray],
+            query.multi_index[(*self._leading_dim_slices, key_dim_slice)],
+        )
 
     def ensure_equal_keys(self, other: TensorSchema) -> None:
         """Ensure that the key dimension bounds of the of two schemas are equal.

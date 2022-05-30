@@ -43,11 +43,10 @@ class TileDBNumpyGenerator:
         :param key_dim_slices: Slices along the key dimension, where both start and stop
             are inclusive.
         """
-        multi_index = self._schema.multi_index
         get_data = itemgetter(*self._schema.fields)
         key_dim_index = self._schema.key_dim_index
         for key_dim_slice in key_dim_slices:
-            field_arrays = multi_index[self._schema[key_dim_slice]]
+            field_arrays = self._schema[key_dim_slice]
             if key_dim_index > 0:
                 # Move key_dim_index axes first
                 for field, array in field_arrays.items():
@@ -88,7 +87,6 @@ class TileDBSparseGenerator(Generic[T]):
             are inclusive.
         """
         single_field = len(self._schema.fields) == 1
-        multi_index = self._schema.multi_index
         get_data = itemgetter(*self._schema.fields)
 
         dims = self._schema.dims
@@ -98,7 +96,7 @@ class TileDBSparseGenerator(Generic[T]):
         for key_dim_slice in key_dim_slices:
             # set the shape of the key dimension equal to the current slice size
             shape[0] = key_dim_slice.stop - key_dim_slice.start + 1
-            field_arrays = multi_index[self._schema[key_dim_slice]]
+            field_arrays = self._schema[key_dim_slice]
             data = get_data(field_arrays)
 
             # convert coordinates from the original domain to zero-based
