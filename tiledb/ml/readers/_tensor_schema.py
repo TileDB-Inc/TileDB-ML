@@ -9,9 +9,10 @@ import tiledb
 
 
 def iter_slices(start: int, stop: int, step: int) -> Iterator[slice]:
-    offsets = range(start, stop, step)
-    yield from map(slice, offsets, offsets[1:])
-    yield slice(offsets[-1], stop)
+    starts = range(start, stop + 1, step)
+    stops = range(start + step - 1, stop, step)
+    yield from map(slice, starts, stops)
+    yield slice(starts[-1], stop)
 
 
 class TensorSchema:
@@ -113,7 +114,7 @@ class TensorSchema:
     @property
     def num_keys(self) -> int:
         """Number of distinct values along the key dimension"""
-        return self.stop_key - self.start_key
+        return self.stop_key - self.start_key + 1
 
     @property
     def start_key(self) -> int:
@@ -122,8 +123,8 @@ class TensorSchema:
 
     @property
     def stop_key(self) -> int:
-        """Maximum value of the key dimension, plus 1."""
-        return self._ned[0][1] + 1
+        """Maximum value of the key dimension"""
+        return self._ned[0][1]
 
     @property
     def multi_index(self) -> tiledb.multirange_indexing.MultiRangeIndexer:

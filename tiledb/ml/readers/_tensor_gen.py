@@ -40,15 +40,14 @@ class TileDBNumpyGenerator:
         (5, 12, 20) and `key_dim_index==1`, the returned Numpy arrays of `a[:, 4:8, :]`
         have shape (5, 4, 20) but this method returns arrays of shape (4, 5, 20).
 
-        :param key_dim_slices: Slices along the key dimension.
+        :param key_dim_slices: Slices along the key dimension, where both start and stop
+            are inclusive.
         """
         multi_index = self._schema.multi_index
         get_data = itemgetter(*self._schema.fields)
         key_dim_index = self._schema.key_dim_index
         for key_dim_slice in key_dim_slices:
-            # multi_index needs inclusive slices
-            idx = self._schema[key_dim_slice.start : key_dim_slice.stop - 1]
-            field_arrays = multi_index[idx]
+            field_arrays = multi_index[self._schema[key_dim_slice]]
             if key_dim_index > 0:
                 # Move key_dim_index axes first
                 for field, array in field_arrays.items():
@@ -85,7 +84,8 @@ class TileDBSparseGenerator(Generic[T]):
         - a single tensor if N == 1.
         Each tensor is a `T` instance of shape `(slice_size, *self._schema.shape[1:])`.
 
-        :param key_dim_slices: Slices along the key dimension.
+        :param key_dim_slices: Slices along the key dimension, where both start and stop
+            are inclusive.
         """
         single_field = len(self._schema.fields) == 1
         multi_index = self._schema.multi_index
@@ -97,10 +97,8 @@ class TileDBSparseGenerator(Generic[T]):
 
         for key_dim_slice in key_dim_slices:
             # set the shape of the key dimension equal to the current slice size
-            shape[0] = key_dim_slice.stop - key_dim_slice.start
-            # multi_index needs inclusive slices
-            idx = self._schema[key_dim_slice.start : key_dim_slice.stop - 1]
-            field_arrays = multi_index[idx]
+            shape[0] = key_dim_slice.stop - key_dim_slice.start + 1
+            field_arrays = multi_index[self._schema[key_dim_slice]]
             data = get_data(field_arrays)
 
             # convert coordinates from the original domain to zero-based

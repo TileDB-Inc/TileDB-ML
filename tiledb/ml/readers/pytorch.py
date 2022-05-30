@@ -30,7 +30,7 @@ except AttributeError:
 import tiledb
 
 from ._tensor_gen import TileDBNumpyGenerator, TileDBSparseGenerator
-from ._tensor_schema import TensorSchema
+from ._tensor_schema import TensorSchema, iter_slices
 
 TensorLikeSequence = Union[
     Sequence[np.ndarray], Sequence[sparse.COO], Sequence[scipy.sparse.csr_matrix]
@@ -150,8 +150,10 @@ def _worker_init(worker_id: int) -> None:
         if isinstance(gen, TileDBSparseGenerator):
             raise NotImplementedError("https://github.com/pytorch/pytorch/issues/20248")
     per_worker = ceil(dataset._num_keys / worker_info.num_workers)
-    dataset._start_key += worker_id * per_worker
-    dataset._stop_key = min(dataset._start_key + per_worker, dataset._stop_key)
+    partitions = list(iter_slices(dataset._start_key, dataset._stop_key, per_worker))
+    assert len(partitions) == worker_info.num_workers
+    dataset._start_key = partitions[worker_id].start
+    dataset._stop_key = partitions[worker_id].stop
 
 
 def _get_tensor_generator(

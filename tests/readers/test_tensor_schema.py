@@ -98,12 +98,12 @@ def test_get_max_buffer_size_dense(dense_uri, fields, key_dim_index, memory_budg
         buffer_size = schema._get_max_buffer_size_dense()
         for key_slice in iter_slices(schema.start_key, schema.stop_key, buffer_size):
             # query succeeds without incomplete retries
-            schema.multi_index[schema[key_slice.start : key_slice.stop - 1]]
+            schema.multi_index[schema[key_slice]]
 
             if key_slice.stop < schema.stop_key:
                 # querying a larger slice than buffer_size should fail
                 with pytest.raises(tiledb.TileDBError) as ex:
-                    schema.multi_index[schema[key_slice]]
+                    schema.multi_index[schema[key_slice.start : key_slice.stop + 1]]
                 assert "py.max_incomplete_retries" in str(ex.value)
 
 
@@ -127,10 +127,10 @@ def test_get_max_buffer_size_sparse(sparse_uri, fields, key_dim_index, memory_bu
         buffer_size = schema._get_max_buffer_size_sparse()
         for key_slice in iter_slices(schema.start_key, schema.stop_key, buffer_size):
             # query succeeds without incomplete retries (or at most 1 retry if not exact)
-            schema.multi_index[schema[key_slice.start : key_slice.stop - 1]]
+            schema.multi_index[schema[key_slice]]
 
             if exact and key_slice.stop < schema.stop_key:
                 # querying a larger slice than buffer_size should fail
                 with pytest.raises(tiledb.TileDBError) as ex:
-                    schema.multi_index[schema[key_slice]]
+                    schema.multi_index[schema[key_slice.start : key_slice.stop + 1]]
                 assert "py.max_incomplete_retries" in str(ex.value)
