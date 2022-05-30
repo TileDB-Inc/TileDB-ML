@@ -1,4 +1,5 @@
 import itertools as it
+import string
 
 import numpy as np
 import pytest
@@ -36,7 +37,13 @@ def dense_uri(tmp_path_factory):
 @pytest.fixture(scope="module")
 def sparse_uri(tmp_path_factory, non_zero_per_row=3):
     uri = str(tmp_path_factory.mktemp("sparse"))
-    domains = [(1, 1000), (-250, 249), (0, 1)]
+    domains = [
+        (1, 1000),
+        (-250, 249),
+        (0, 1),
+        (np.datetime64("2020-01-01"), np.datetime64("2022-01-01")),
+        ("a", "z"),
+    ]
     schema = tiledb.ArraySchema(
         sparse=True,
         allows_duplicates=True,
@@ -44,6 +51,8 @@ def sparse_uri(tmp_path_factory, non_zero_per_row=3):
             tiledb.Dim(name="d0", domain=domains[0], dtype=np.uint32),
             tiledb.Dim(name="d1", domain=domains[1], dtype=np.int16),
             tiledb.Dim(name="d2", domain=domains[2], dtype=np.float64),
+            tiledb.Dim(name="d3", domain=domains[3], dtype=np.dtype("datetime64[D]")),
+            tiledb.Dim(name="d4", domain=domains[4], dtype="ascii"),
         ),
         attrs=[
             tiledb.Attr(name="af8", dtype=np.float64),
@@ -58,8 +67,11 @@ def sparse_uri(tmp_path_factory, non_zero_per_row=3):
         )
         num_cells = len(d0)
         d1 = np.random.randint(domains[1][0], domains[1][1] + 1, num_cells)
-        d2 = np.random.randint(domains[2][0], domains[2][1] + 1, num_cells)
-        a[d0, d1, d2] = {
+        d2 = np.random.uniform(domains[2][0], domains[2][1], num_cells)
+        d3_days = (domains[3][1] - domains[3][0]).astype(int)
+        d3 = domains[3][0] + np.random.randint(0, d3_days, num_cells)
+        d4 = np.random.choice(list(string.ascii_lowercase), num_cells)
+        a[d0, d1, d2, d3, d4] = {
             "af8": np.random.rand(num_cells),
             "af4": np.random.rand(num_cells).astype(np.float32),
             "au1": np.random.randint(128, size=num_cells, dtype=np.uint8),
@@ -67,18 +79,18 @@ def sparse_uri(tmp_path_factory, non_zero_per_row=3):
     return uri
 
 
-all_fields = ["d0", "d1", "d2", "af8", "af4", "au1"]
-parametrize_fields = pytest.mark.parametrize(
-    "fields",
-    list(it.chain.from_iterable(it.combinations(all_fields, i) for i in range(4))),
-)
+def parametrize_fields(*fields):
+    return pytest.mark.parametrize(
+        "fields",
+        list(it.chain.from_iterable(it.combinations(fields, i) for i in range(4))),
+    )
 
 
 @pytest.mark.parametrize(
     "key_dim_index,memory_budget",
     [(0, 16_000), (0, 32_000), (0, 64_000), (1, 500_000), (1, 600_000), (1, 700_000)],
 )
-@parametrize_fields
+@parametrize_fields("d0", "d1", "d2", "af8", "af4", "au1")
 def test_get_max_buffer_size_dense(dense_uri, fields, key_dim_index, memory_budget):
     config = {"py.max_incomplete_retries": 0, "sm.memory_budget": memory_budget}
     with tiledb.open(dense_uri, config=config) as a:
@@ -99,7 +111,7 @@ def test_get_max_buffer_size_dense(dense_uri, fields, key_dim_index, memory_budg
     "key_dim_index,memory_budget",
     [(0, 1024), (0, 2048), (0, 4096), (1, 1024), (1, 2048), (1, 4096)],
 )
-@parametrize_fields
+@parametrize_fields("d0", "d1", "d2", "d3", "d4", "af8", "af4", "au1")
 def test_get_max_buffer_size_sparse(sparse_uri, fields, key_dim_index, memory_budget):
     # The first dimension has a fixed number of non-zero cells per "row". The others
     # don't, so the estimated buffer_size is not necessarily the maximum number of
