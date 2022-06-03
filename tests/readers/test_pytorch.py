@@ -20,8 +20,7 @@ class TestPyTorchTileDBDataLoader:
         y_sparse,
         x_key_dim,
         y_key_dim,
-        num_attrs,
-        pass_attrs,
+        num_fields,
         buffer_bytes,
         batch_size,
         shuffle_buffer_size,
@@ -31,15 +30,15 @@ class TestPyTorchTileDBDataLoader:
             pytest.skip("multiple workers not supported with sparse arrays")
 
         with ingest_in_tiledb(
-            tmpdir, x_shape, x_sparse, x_key_dim, num_attrs, pass_attrs
+            tmpdir, x_shape, x_sparse, x_key_dim, num_fields
         ) as x_kwargs, ingest_in_tiledb(
-            tmpdir, y_shape, y_sparse, y_key_dim, num_attrs, pass_attrs
+            tmpdir, y_shape, y_sparse, y_key_dim, num_fields
         ) as y_kwargs:
             dataloader = PyTorchTileDBDataLoader(
                 x_array=x_kwargs["array"],
                 y_array=y_kwargs["array"],
-                x_attrs=x_kwargs["attrs"],
-                y_attrs=y_kwargs["attrs"],
+                x_attrs=x_kwargs["fields"],
+                y_attrs=y_kwargs["fields"],
                 x_key_dim=x_kwargs["key_dim"],
                 y_key_dim=y_kwargs["key_dim"],
                 buffer_bytes=buffer_bytes,
@@ -49,28 +48,8 @@ class TestPyTorchTileDBDataLoader:
             )
             assert isinstance(dataloader, torch.utils.data.DataLoader)
             validate_tensor_generator(
-                dataloader, num_attrs, x_sparse, y_sparse, x_shape, y_shape, batch_size
+                dataloader, num_fields, x_sparse, y_sparse, x_shape, y_shape, batch_size
             )
-
-            unique_x_tensors = []
-            unique_y_tensors = []
-            for i, (x_tensors, y_tensors) in enumerate(dataloader):
-                # Keep unique X tensors
-                for x_tensor in x_tensors if num_attrs > 1 else [x_tensors]:
-                    if x_sparse:
-                        x_tensor = x_tensor.to_dense()
-                    if not any(torch.equal(x_tensor, t) for t in unique_x_tensors):
-                        unique_x_tensors.append(x_tensor)
-
-                # Keep unique Y tensors
-                for y_tensor in y_tensors if num_attrs > 1 else [y_tensors]:
-                    if y_sparse:
-                        y_tensor = y_tensor.to_dense()
-                    if not any(torch.equal(y_tensor, t) for t in unique_y_tensors):
-                        unique_y_tensors.append(y_tensor)
-
-                assert len(unique_x_tensors) - 1 == i
-                assert len(unique_y_tensors) - 1 == i
 
     @parametrize_for_dataset(
         # Add one extra key on X
@@ -86,24 +65,23 @@ class TestPyTorchTileDBDataLoader:
         y_sparse,
         x_key_dim,
         y_key_dim,
-        num_attrs,
-        pass_attrs,
+        num_fields,
         buffer_bytes,
         batch_size,
         shuffle_buffer_size,
         num_workers,
     ):
         with ingest_in_tiledb(
-            tmpdir, x_shape, x_sparse, x_key_dim, num_attrs, pass_attrs
+            tmpdir, x_shape, x_sparse, x_key_dim, num_fields
         ) as x_kwargs, ingest_in_tiledb(
-            tmpdir, y_shape, y_sparse, y_key_dim, num_attrs, pass_attrs
+            tmpdir, y_shape, y_sparse, y_key_dim, num_fields
         ) as y_kwargs:
             with pytest.raises(ValueError) as ex:
                 PyTorchTileDBDataLoader(
                     x_array=x_kwargs["array"],
                     y_array=y_kwargs["array"],
-                    x_attrs=x_kwargs["attrs"],
-                    y_attrs=y_kwargs["attrs"],
+                    x_attrs=x_kwargs["fields"],
+                    y_attrs=y_kwargs["fields"],
                     x_key_dim=x_kwargs["key_dim"],
                     y_key_dim=y_kwargs["key_dim"],
                     buffer_bytes=buffer_bytes,
@@ -113,9 +91,9 @@ class TestPyTorchTileDBDataLoader:
                 )
             assert "X and Y arrays have different key domain" in str(ex.value)
 
-    @parametrize_for_dataset(x_sparse=[True], shuffle_buffer_size=[0], num_workers=[0])
+    @parametrize_for_dataset(num_fields=[0], shuffle_buffer_size=[0], num_workers=[0])
     @pytest.mark.parametrize("csr", [True, False])
-    def test_sparse_read_order(
+    def test_dataloader_order(
         self,
         tmpdir,
         x_shape,
@@ -124,24 +102,28 @@ class TestPyTorchTileDBDataLoader:
         y_sparse,
         x_key_dim,
         y_key_dim,
-        num_attrs,
-        pass_attrs,
+        num_fields,
         buffer_bytes,
         batch_size,
         shuffle_buffer_size,
         num_workers,
         csr,
     ):
+        """Test we can read the data in the same order as written.
+
+        The order is guaranteed only for sequential processing (num_workers=0) and
+        no shuffling (shuffle_buffer_size=0).
+        """
         with ingest_in_tiledb(
-            tmpdir, x_shape, x_sparse, x_key_dim, num_attrs, pass_attrs
+            tmpdir, x_shape, x_sparse, x_key_dim, num_fields
         ) as x_kwargs, ingest_in_tiledb(
-            tmpdir, y_shape, y_sparse, y_key_dim, num_attrs, pass_attrs
+            tmpdir, y_shape, y_sparse, y_key_dim, num_fields
         ) as y_kwargs:
             dataloader = PyTorchTileDBDataLoader(
                 x_array=x_kwargs["array"],
                 y_array=y_kwargs["array"],
-                x_attrs=x_kwargs["attrs"],
-                y_attrs=y_kwargs["attrs"],
+                x_attrs=x_kwargs["fields"],
+                y_attrs=y_kwargs["fields"],
                 x_key_dim=x_kwargs["key_dim"],
                 y_key_dim=y_kwargs["key_dim"],
                 buffer_bytes=buffer_bytes,
@@ -150,10 +132,23 @@ class TestPyTorchTileDBDataLoader:
                 num_workers=num_workers,
                 csr=csr,
             )
-            generated_x_data = np.concatenate(
-                [
-                    (x if num_attrs == 1 else x[0]).to_dense().numpy()
-                    for x, y in dataloader
-                ]
+            # since num_fields is 0, fields are all the array attributes of each array
+            # the first item of each batch corresponds to the first attribute (="data")
+            x_data_batches, y_data_batches = [], []
+            for x_tensors, y_tensors in dataloader:
+                x_data_batch = x_tensors[0]
+                if x_sparse:
+                    x_data_batch = x_data_batch.to_dense()
+                x_data_batches.append(x_data_batch)
+
+                y_data_batch = y_tensors[0]
+                if y_sparse:
+                    y_data_batch = y_data_batch.to_dense()
+                y_data_batches.append(y_data_batch)
+
+            np.testing.assert_array_almost_equal(
+                np.concatenate(x_data_batches), x_kwargs["data"]
             )
-            np.testing.assert_array_almost_equal(generated_x_data, x_kwargs["data"])
+            np.testing.assert_array_almost_equal(
+                np.concatenate(y_data_batches), y_kwargs["data"]
+            )

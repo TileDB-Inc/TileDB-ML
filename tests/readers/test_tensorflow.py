@@ -20,23 +20,22 @@ class TestTensorflowTileDBDataset:
         y_sparse,
         x_key_dim,
         y_key_dim,
-        num_attrs,
-        pass_attrs,
+        num_fields,
         buffer_bytes,
         batch_size,
         shuffle_buffer_size,
         num_workers,
     ):
         with ingest_in_tiledb(
-            tmpdir, x_shape, x_sparse, x_key_dim, num_attrs, pass_attrs
+            tmpdir, x_shape, x_sparse, x_key_dim, num_fields
         ) as x_kwargs, ingest_in_tiledb(
-            tmpdir, y_shape, y_sparse, y_key_dim, num_attrs, pass_attrs
+            tmpdir, y_shape, y_sparse, y_key_dim, num_fields
         ) as y_kwargs:
             dataset = TensorflowTileDBDataset(
                 x_array=x_kwargs["array"],
                 y_array=y_kwargs["array"],
-                x_attrs=x_kwargs["attrs"],
-                y_attrs=y_kwargs["attrs"],
+                x_attrs=x_kwargs["fields"],
+                y_attrs=y_kwargs["fields"],
                 x_key_dim=x_kwargs["key_dim"],
                 y_key_dim=y_kwargs["key_dim"],
                 buffer_bytes=buffer_bytes,
@@ -46,7 +45,7 @@ class TestTensorflowTileDBDataset:
             )
             assert isinstance(dataset, tf.data.Dataset)
             validate_tensor_generator(
-                dataset, num_attrs, x_sparse, y_sparse, x_shape, y_shape, batch_size
+                dataset, num_fields, x_sparse, y_sparse, x_shape, y_shape, batch_size
             )
 
     @parametrize_for_dataset(
@@ -63,24 +62,23 @@ class TestTensorflowTileDBDataset:
         y_sparse,
         x_key_dim,
         y_key_dim,
-        num_attrs,
-        pass_attrs,
+        num_fields,
         buffer_bytes,
         batch_size,
         shuffle_buffer_size,
         num_workers,
     ):
         with ingest_in_tiledb(
-            tmpdir, x_shape, x_sparse, x_key_dim, num_attrs, pass_attrs
+            tmpdir, x_shape, x_sparse, x_key_dim, num_fields
         ) as x_kwargs, ingest_in_tiledb(
-            tmpdir, y_shape, y_sparse, y_key_dim, num_attrs, pass_attrs
+            tmpdir, y_shape, y_sparse, y_key_dim, num_fields
         ) as y_kwargs:
             with pytest.raises(ValueError) as ex:
                 TensorflowTileDBDataset(
                     x_array=x_kwargs["array"],
                     y_array=y_kwargs["array"],
-                    x_attrs=x_kwargs["attrs"],
-                    y_attrs=y_kwargs["attrs"],
+                    x_attrs=x_kwargs["fields"],
+                    y_attrs=y_kwargs["fields"],
                     x_key_dim=x_kwargs["key_dim"],
                     y_key_dim=y_kwargs["key_dim"],
                     buffer_bytes=buffer_bytes,
@@ -90,8 +88,8 @@ class TestTensorflowTileDBDataset:
                 )
             assert "X and Y arrays have different key domain" in str(ex.value)
 
-    @parametrize_for_dataset(x_sparse=[True], shuffle_buffer_size=[0], num_workers=[0])
-    def test_sparse_read_order(
+    @parametrize_for_dataset(num_fields=[0], shuffle_buffer_size=[0], num_workers=[0])
+    def test_dataset_order(
         self,
         tmpdir,
         x_shape,
@@ -100,23 +98,27 @@ class TestTensorflowTileDBDataset:
         y_sparse,
         x_key_dim,
         y_key_dim,
-        num_attrs,
-        pass_attrs,
+        num_fields,
         buffer_bytes,
         batch_size,
         shuffle_buffer_size,
         num_workers,
     ):
+        """Test we can read the data in the same order as written.
+
+        The order is guaranteed only for sequential processing (num_workers=0) and
+        no shuffling (shuffle_buffer_size=0).
+        """
         with ingest_in_tiledb(
-            tmpdir, x_shape, x_sparse, x_key_dim, num_attrs, pass_attrs
+            tmpdir, x_shape, x_sparse, x_key_dim, num_fields
         ) as x_kwargs, ingest_in_tiledb(
-            tmpdir, y_shape, y_sparse, y_key_dim, num_attrs, pass_attrs
+            tmpdir, y_shape, y_sparse, y_key_dim, num_fields
         ) as y_kwargs:
             dataset = TensorflowTileDBDataset(
                 x_array=x_kwargs["array"],
                 y_array=y_kwargs["array"],
-                x_attrs=x_kwargs["attrs"],
-                y_attrs=y_kwargs["attrs"],
+                x_attrs=x_kwargs["fields"],
+                y_attrs=y_kwargs["fields"],
                 x_key_dim=x_kwargs["key_dim"],
                 y_key_dim=y_kwargs["key_dim"],
                 buffer_bytes=buffer_bytes,
@@ -124,12 +126,23 @@ class TestTensorflowTileDBDataset:
                 shuffle_buffer_size=shuffle_buffer_size,
                 num_workers=num_workers,
             )
-            generated_x_data = np.concatenate(
-                [
-                    tf.sparse.to_dense(
-                        tf.sparse.reorder(x_tensors if num_attrs == 1 else x_tensors[0])
-                    )
-                    for x_tensors, y_tensors in dataset
-                ]
+            # since num_fields is 0, fields are all the array attributes of each array
+            # the first item of each batch corresponds to the first attribute (="data")
+            x_data_batches, y_data_batches = [], []
+            for x_tensors, y_tensors in dataset:
+                x_data_batch = x_tensors[0]
+                if x_sparse:
+                    x_data_batch = tf.sparse.to_dense(x_data_batch)
+                x_data_batches.append(x_data_batch)
+
+                y_data_batch = y_tensors[0]
+                if y_sparse:
+                    y_data_batch = tf.sparse.to_dense(y_data_batch)
+                y_data_batches.append(y_data_batch)
+
+            np.testing.assert_array_almost_equal(
+                np.concatenate(x_data_batches), x_kwargs["data"]
             )
-            np.testing.assert_array_almost_equal(generated_x_data, x_kwargs["data"])
+            np.testing.assert_array_almost_equal(
+                np.concatenate(y_data_batches), y_kwargs["data"]
+            )
