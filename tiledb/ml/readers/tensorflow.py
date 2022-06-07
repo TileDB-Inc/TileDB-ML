@@ -55,19 +55,21 @@ def TensorflowTileDBDataset(
         )
 
     x_gen = _get_tensor_generator(x_array, x_schema)
+    x_buffer_size = x_schema.get_max_buffer_size(buffer_bytes)
     y_gen = _get_tensor_generator(y_array, y_schema)
+    y_buffer_size = y_schema.get_max_buffer_size(buffer_bytes)
     key_ranges = list(x_schema.key_range.partition_by_count(num_workers or 1))
 
     def key_range_dataset(key_range_idx: int) -> tf.data.Dataset:
         x_dataset = tf.data.Dataset.from_generator(
-            lambda i: x_gen(x_schema.partition_key_dim(buffer_bytes, key_ranges[i])),
+            lambda i: x_gen(key_ranges[i].partition_by_weight(x_buffer_size)),
             args=(key_range_idx,),
-            output_signature=_get_tensor_specs(x_array, x_schema),
+            output_signature=_get_tensor_specs(x_schema),
         )
         y_dataset = tf.data.Dataset.from_generator(
-            lambda i: y_gen(y_schema.partition_key_dim(buffer_bytes, key_ranges[i])),
+            lambda i: y_gen(key_ranges[i].partition_by_weight(y_buffer_size)),
             args=(key_range_idx,),
-            output_signature=_get_tensor_specs(y_array, y_schema),
+            output_signature=_get_tensor_specs(y_schema),
         )
         return tf.data.Dataset.zip((x_dataset.unbatch(), y_dataset.unbatch()))
 
@@ -86,10 +88,8 @@ def TensorflowTileDBDataset(
 TensorSpec = Union[tf.TensorSpec, tf.SparseTensorSpec]
 
 
-def _get_tensor_specs(
-    array: tiledb.Array, schema: TensorSchema
-) -> Union[TensorSpec, Sequence[TensorSpec]]:
-    cls = tf.SparseTensorSpec if array.schema.sparse else tf.TensorSpec
+def _get_tensor_specs(schema: TensorSchema) -> Union[TensorSpec, Sequence[TensorSpec]]:
+    cls = tf.SparseTensorSpec if schema.sparse else tf.TensorSpec
     shape = (None, *schema.shape[1:])
     specs = tuple(cls(shape=shape, dtype=dtype) for dtype in schema.field_dtypes)
     return specs if len(specs) > 1 else specs[0]

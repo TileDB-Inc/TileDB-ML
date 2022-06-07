@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from math import ceil
-from typing import Any, Dict, Iterable, Optional, Sequence, Tuple, Union, cast
+from typing import Any, Dict, Optional, Sequence, Tuple, Union, cast
 
 import numpy as np
 
@@ -57,14 +57,18 @@ class TensorSchema:
 
         self._array = array
         self._key_range = IntRange(*ned[0])
-        self._ned: Sequence[Tuple[Any, Any]] = tuple(ned)
+        self._ned = tuple(ned)
         self._dims = tuple(all_dims)
         self._fields = tuple(fields)
         self._leading_dim_slices = (slice(None),) * key_dim_index
         self._query_kwargs = {
             "attrs": tuple(attrs),
-            "dims": tuple(all_dims if array.schema.sparse else dims),
+            "dims": tuple(all_dims if self.sparse else dims),
         }
+
+    @property
+    def sparse(self) -> bool:
+        return bool(self._array.schema.sparse)
 
     @property
     def fields(self) -> Sequence[str]:
@@ -126,27 +130,21 @@ class TensorSchema:
             query.multi_index[(*self._leading_dim_slices, key_dim_slice)],
         )
 
-    def partition_key_dim(
-        self, memory_budget: Optional[int] = None, key_range: Optional[KeyRange] = None
-    ) -> Iterable[KeyRange]:
+    def get_max_buffer_size(self, memory_budget: Optional[int] = None) -> int:
         """
-        Partition the keys between start and stop in slices that can fit in the given
-        memory budget without incomplete retries.
+        Determine the maximum number of keys that can fit in the given memory budget
+        without incomplete retries.
 
         :param memory_budget: The maximum amount of memory to use. This is bounded by the
             `sm.memory_budget` config parameter for dense arrays and `py.init_buffer_bytes`
             (or 10 MB if unset) for sparse arrays. These bounds are also used as the
             default memory budget.
-        :param key_range: The range along the key dimension to partition. Defaults to
-            self.key_range.
         """
-        if self._array.schema.sparse:
+        if self.sparse:
             buffer_size = self._get_max_buffer_size_sparse(memory_budget)
         else:
             buffer_size = self._get_max_buffer_size_dense(memory_budget)
-        if key_range is None:
-            key_range = self.key_range
-        return key_range.partition_by_weight(buffer_size)
+        return buffer_size
 
     def _get_max_buffer_size_sparse(self, memory_budget: Optional[int] = None) -> int:
         array = self._array
@@ -162,7 +160,7 @@ class TensorSchema:
         res_sizes = query.multi_index[:].estimated_result_sizes()
 
         max_buffer_bytes = max(res_size.data_bytes for res_size in res_sizes.values())
-        max_bytes_per_row = ceil(max_buffer_bytes / len(self.key_range))
+        max_bytes_per_row = ceil(max_buffer_bytes / len(self._key_range))
 
         return max(1, memory_budget // max_bytes_per_row)
 
@@ -177,7 +175,7 @@ class TensorSchema:
 
         # We want to be reading tiles following the tile extents along each dimension.
         # The number of cells for each such tile is the product of all tile extents.
-        dim_tiles = [array.dim(dim).tile for dim in self.dims]
+        dim_tiles = [array.dim(dim).tile for dim in self._dims]
         cells_per_tile = np.prod(dim_tiles)
 
         # Each slice consists of `rows_per_slice` rows along the key dimension
