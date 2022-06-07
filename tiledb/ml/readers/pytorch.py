@@ -135,13 +135,11 @@ class _PyTorchTileDBDataset(torch.utils.data.IterableDataset[XY]):
             schema, gen = self._x_schema, self._x_gen
         else:
             schema, gen = self._y_schema, self._y_gen
-        key_dim_slices = schema.partition_key_dim(
-            self._buffer_bytes, self._key_range.min, self._key_range.max
-        )
+        key_subranges = schema.partition_key_dim(self._buffer_bytes, self._key_range)
         if len(schema.fields) == 1:
-            return (row for tensor in gen(key_dim_slices) for row in tensor)
+            return (row for tensor in gen(key_subranges) for row in tensor)
         else:
-            return (row for tensors in gen(key_dim_slices) for row in zip(*tensors))
+            return (row for tensors in gen(key_subranges) for row in zip(*tensors))
 
 
 def _worker_init(worker_id: int) -> None:

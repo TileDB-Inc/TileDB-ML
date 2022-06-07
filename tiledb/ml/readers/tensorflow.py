@@ -1,6 +1,6 @@
 """Functionality for loading data from TileDB arrays to the Tensorflow Data API."""
 
-from typing import Optional, Sequence, Tuple, Union
+from typing import Optional, Sequence, Union
 
 import sparse
 import tensorflow as tf
@@ -53,38 +53,30 @@ def TensorflowTileDBDataset(
         raise ValueError(
             f"X and Y arrays have different key range: {x_schema.key_range} != {y_schema.key_range}"
         )
-    key_range = x_schema.key_range
 
     x_gen = _get_tensor_generator(x_array, x_schema)
     y_gen = _get_tensor_generator(y_array, y_schema)
+    key_ranges = list(x_schema.key_range.partition_by_count(num_workers or 1))
 
-    def bounded_dataset(bounds: Union[Tuple[int, int], tf.Tensor]) -> tf.data.Dataset:
+    def key_range_dataset(key_range_idx: int) -> tf.data.Dataset:
         x_dataset = tf.data.Dataset.from_generator(
-            lambda start, stop: x_gen(
-                x_schema.partition_key_dim(buffer_bytes, start, stop)
-            ),
-            args=(bounds[0], bounds[1]),
+            lambda i: x_gen(x_schema.partition_key_dim(buffer_bytes, key_ranges[i])),
+            args=(key_range_idx,),
             output_signature=_get_tensor_specs(x_array, x_schema),
         )
         y_dataset = tf.data.Dataset.from_generator(
-            lambda start, stop: y_gen(
-                y_schema.partition_key_dim(buffer_bytes, start, stop)
-            ),
-            args=(bounds[0], bounds[1]),
+            lambda i: y_gen(y_schema.partition_key_dim(buffer_bytes, key_ranges[i])),
+            args=(key_range_idx,),
             output_signature=_get_tensor_specs(y_array, y_schema),
         )
         return tf.data.Dataset.zip((x_dataset.unbatch(), y_dataset.unbatch()))
 
     if num_workers:
-        offsets_tensor = tf.convert_to_tensor(
-            [(s.min, s.max) for s in key_range.partition_by_count(num_workers)]
-        )
-        offsets_dataset = tf.data.Dataset.from_tensor_slices(offsets_tensor)
-        dataset = offsets_dataset.interleave(
-            bounded_dataset, num_parallel_calls=num_workers, deterministic=False
+        dataset = tf.data.Dataset.from_tensor_slices(range(len(key_ranges))).interleave(
+            key_range_dataset, num_parallel_calls=num_workers, deterministic=False
         )
     else:
-        dataset = bounded_dataset((key_range.min, key_range.max))
+        dataset = key_range_dataset(0)
 
     if shuffle_buffer_size > 0:
         dataset = dataset.shuffle(shuffle_buffer_size)

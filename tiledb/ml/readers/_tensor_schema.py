@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from math import ceil
-from typing import Any, Dict, Iterator, Optional, Sequence, Tuple, Union, cast
+from typing import Any, Dict, Iterable, Optional, Sequence, Tuple, Union, cast
 
 import numpy as np
 
@@ -9,12 +9,7 @@ import tiledb
 
 from ._ranges import InclusiveRange, IntRange
 
-
-def iter_slices(start: int, stop: int, step: int) -> Iterator[slice]:
-    starts = range(start, stop + 1, step)
-    stops = range(start + step - 1, stop, step)
-    yield from map(slice, starts, stops)
-    yield slice(starts[-1], stop)
+KeyRange = InclusiveRange[int, int]
 
 
 class TensorSchema:
@@ -115,7 +110,7 @@ class TensorSchema:
         return len(self._leading_dim_slices)
 
     @property
-    def key_range(self) -> InclusiveRange[int, int]:
+    def key_range(self) -> KeyRange:
         """Inclusive range of the key dimension"""
         return self._key_range
 
@@ -132,8 +127,8 @@ class TensorSchema:
         )
 
     def partition_key_dim(
-        self, memory_budget: Optional[int], start_key: int, stop_key: int
-    ) -> Iterator[slice]:
+        self, memory_budget: Optional[int] = None, key_range: Optional[KeyRange] = None
+    ) -> Iterable[KeyRange]:
         """
         Partition the keys between start and stop in slices that can fit in the given
         memory budget without incomplete retries.
@@ -142,14 +137,16 @@ class TensorSchema:
             `sm.memory_budget` config parameter for dense arrays and `py.init_buffer_bytes`
             (or 10 MB if unset) for sparse arrays. These bounds are also used as the
             default memory budget.
-        :param start_key: The minimum value of the key dimension to partition.
-        :param stop_key: The maximum value of the key dimension to partition.
+        :param key_range: The range along the key dimension to partition. Defaults to
+            self.key_range.
         """
         if self._array.schema.sparse:
             buffer_size = self._get_max_buffer_size_sparse(memory_budget)
         else:
             buffer_size = self._get_max_buffer_size_dense(memory_budget)
-        return iter_slices(start_key, stop_key, buffer_size)
+        if key_range is None:
+            key_range = self.key_range
+        return key_range.partition_by_weight(buffer_size)
 
     def _get_max_buffer_size_sparse(self, memory_budget: Optional[int] = None) -> int:
         array = self._array
