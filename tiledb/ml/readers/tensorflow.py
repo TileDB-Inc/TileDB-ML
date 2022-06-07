@@ -1,6 +1,5 @@
 """Functionality for loading data from TileDB arrays to the Tensorflow Data API."""
 
-from math import ceil
 from typing import Optional, Sequence, Tuple, Union
 
 import sparse
@@ -9,7 +8,7 @@ import tensorflow as tf
 import tiledb
 
 from ._tensor_gen import TileDBNumpyGenerator, TileDBSparseGenerator
-from ._tensor_schema import TensorSchema, iter_slices
+from ._tensor_schema import TensorSchema
 
 
 def TensorflowTileDBDataset(
@@ -50,7 +49,11 @@ def TensorflowTileDBDataset(
     """
     x_schema = TensorSchema(x_array, x_key_dim, x_attrs)
     y_schema = TensorSchema(y_array, y_key_dim, y_attrs)
-    x_schema.ensure_equal_keys(y_schema)
+    if not x_schema.key_range.equal_values(y_schema.key_range):
+        raise ValueError(
+            f"X and Y arrays have different key range: {x_schema.key_range} != {y_schema.key_range}"
+        )
+    key_range = x_schema.key_range
 
     x_gen = _get_tensor_generator(x_array, x_schema)
     y_gen = _get_tensor_generator(y_array, y_schema)
@@ -73,18 +76,15 @@ def TensorflowTileDBDataset(
         return tf.data.Dataset.zip((x_dataset.unbatch(), y_dataset.unbatch()))
 
     if num_workers:
-        per_worker = ceil(x_schema.num_keys / num_workers)
-        offsets = [
-            (s.start, s.stop)
-            for s in iter_slices(x_schema.start_key, x_schema.stop_key, per_worker)
-        ]
-        offsets_tensor = tf.convert_to_tensor(offsets, dtype=tf.int64)
+        offsets_tensor = tf.convert_to_tensor(
+            [(s.min, s.max) for s in key_range.partition_by_count(num_workers)]
+        )
         offsets_dataset = tf.data.Dataset.from_tensor_slices(offsets_tensor)
         dataset = offsets_dataset.interleave(
             bounded_dataset, num_parallel_calls=num_workers, deterministic=False
         )
     else:
-        dataset = bounded_dataset((x_schema.start_key, x_schema.stop_key))
+        dataset = bounded_dataset((key_range.min, key_range.max))
 
     if shuffle_buffer_size > 0:
         dataset = dataset.shuffle(shuffle_buffer_size)

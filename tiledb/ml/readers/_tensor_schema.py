@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from math import ceil
-from typing import Dict, Iterator, Optional, Sequence, Tuple, Union, cast
+from typing import Any, Dict, Iterator, Optional, Sequence, Tuple, Union, cast
 
 import numpy as np
 
 import tiledb
+
+from ._ranges import InclusiveRange, IntRange
 
 
 def iter_slices(start: int, stop: int, step: int) -> Iterator[slice]:
@@ -59,7 +61,8 @@ class TensorSchema:
             ned[0], ned[key_dim_index] = ned[key_dim_index], ned[0]
 
         self._array = array
-        self._ned: Sequence[Tuple[int, int]] = tuple(ned)
+        self._key_range = IntRange(*ned[0])
+        self._ned: Sequence[Tuple[Any, Any]] = tuple(ned)
         self._dims = tuple(all_dims)
         self._fields = tuple(fields)
         self._leading_dim_slices = (slice(None),) * key_dim_index
@@ -88,7 +91,7 @@ class TensorSchema:
         return self._dims
 
     @property
-    def nonempty_domain(self) -> Sequence[Tuple[int, int]]:
+    def nonempty_domain(self) -> Sequence[Tuple[Any, Any]]:
         """Non-empty domain of the array, with the key dimension moved first."""
         return self._ned
 
@@ -101,9 +104,9 @@ class TensorSchema:
 
         :raises ValueError: If the array does not have integer domain.
         """
-        shape = tuple(stop - start + 1 for start, stop in self._ned)
-        if all(isinstance(i, int) for i in shape):
-            return shape
+        starts, stops = zip(*self._ned)
+        if all(isinstance(i, int) for i in starts + stops):
+            return tuple(stop - start + 1 for start, stop in self._ned)
         raise ValueError("Shape not defined for non-integer domain")
 
     @property
@@ -112,19 +115,9 @@ class TensorSchema:
         return len(self._leading_dim_slices)
 
     @property
-    def num_keys(self) -> int:
-        """Number of distinct values along the key dimension"""
-        return self.stop_key - self.start_key + 1
-
-    @property
-    def start_key(self) -> int:
-        """Minimum value of the key dimension."""
-        return self._ned[0][0]
-
-    @property
-    def stop_key(self) -> int:
-        """Maximum value of the key dimension"""
-        return self._ned[0][1]
+    def key_range(self) -> InclusiveRange[int, int]:
+        """Inclusive range of the key dimension"""
+        return self._key_range
 
     def __getitem__(self, key_dim_slice: slice) -> Dict[str, np.ndarray]:
         """Query the TileDB array by `dim_key=key_dim_slice`."""
@@ -138,21 +131,8 @@ class TensorSchema:
             query.multi_index[(*self._leading_dim_slices, key_dim_slice)],
         )
 
-    def ensure_equal_keys(self, other: TensorSchema) -> None:
-        """Ensure that the key dimension bounds of the of two schemas are equal.
-
-        :raises ValueError: If the key dimension bounds are not equal.
-        """
-        if self._ned[0] != other._ned[0]:
-            raise ValueError(
-                f"X and Y arrays have different key domain: {self._ned[0]} != {other._ned[0]}"
-            )
-
     def partition_key_dim(
-        self,
-        memory_budget: Optional[int] = None,
-        start_key: Optional[int] = None,
-        stop_key: Optional[int] = None,
+        self, memory_budget: Optional[int], start_key: int, stop_key: int
     ) -> Iterator[slice]:
         """
         Partition the keys between start and stop in slices that can fit in the given
@@ -162,19 +142,13 @@ class TensorSchema:
             `sm.memory_budget` config parameter for dense arrays and `py.init_buffer_bytes`
             (or 10 MB if unset) for sparse arrays. These bounds are also used as the
             default memory budget.
-        :param start_key: The minimum value of the key dimension to partition. Defaults
-            to self.start_key.
-        :param stop_key: The maximum value of the key dimension to partition. Defaults
-            to self.stop_key.
+        :param start_key: The minimum value of the key dimension to partition.
+        :param stop_key: The maximum value of the key dimension to partition.
         """
         if self._array.schema.sparse:
             buffer_size = self._get_max_buffer_size_sparse(memory_budget)
         else:
             buffer_size = self._get_max_buffer_size_dense(memory_budget)
-        if start_key is None:
-            start_key = self.start_key
-        if stop_key is None:
-            stop_key = self.stop_key
         return iter_slices(start_key, stop_key, buffer_size)
 
     def _get_max_buffer_size_sparse(self, memory_budget: Optional[int] = None) -> int:
@@ -191,7 +165,7 @@ class TensorSchema:
         res_sizes = query.multi_index[:].estimated_result_sizes()
 
         max_buffer_bytes = max(res_size.data_bytes for res_size in res_sizes.values())
-        max_bytes_per_row = ceil(max_buffer_bytes / self.num_keys)
+        max_bytes_per_row = ceil(max_buffer_bytes / len(self.key_range))
 
         return max(1, memory_budget // max_bytes_per_row)
 

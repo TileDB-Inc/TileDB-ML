@@ -2,7 +2,6 @@
 
 import itertools
 import random
-from math import ceil
 from operator import methodcaller
 from typing import (
     Callable,
@@ -30,7 +29,7 @@ except AttributeError:
 import tiledb
 
 from ._tensor_gen import TileDBNumpyGenerator, TileDBSparseGenerator
-from ._tensor_schema import TensorSchema, iter_slices
+from ._tensor_schema import TensorSchema
 
 TensorLikeSequence = Union[
     Sequence[np.ndarray], Sequence[sparse.COO], Sequence[scipy.sparse.csr_matrix]
@@ -81,7 +80,11 @@ def PyTorchTileDBDataLoader(
     """
     x_schema = TensorSchema(x_array, x_key_dim, x_attrs)
     y_schema = TensorSchema(y_array, y_key_dim, y_attrs)
-    x_schema.ensure_equal_keys(y_schema)
+    if not x_schema.key_range.equal_values(y_schema.key_range):
+        raise ValueError(
+            f"X and Y arrays have different key range: {x_schema.key_range} != {y_schema.key_range}"
+        )
+
     return torch.utils.data.DataLoader(
         dataset=_PyTorchTileDBDataset(
             x_array=x_array,
@@ -115,9 +118,7 @@ class _PyTorchTileDBDataset(torch.utils.data.IterableDataset[XY]):
         super().__init__()
         self._x_schema = x_schema
         self._y_schema = y_schema
-        self._start_key = self._x_schema.start_key
-        self._stop_key = self._x_schema.stop_key
-        self._num_keys = self._x_schema.num_keys
+        self._key_range = x_schema.key_range
         self._x_gen = _get_tensor_generator(x_array, self._x_schema)
         self._y_gen = _get_tensor_generator(y_array, self._y_schema)
         self._buffer_bytes = buffer_bytes
@@ -135,7 +136,7 @@ class _PyTorchTileDBDataset(torch.utils.data.IterableDataset[XY]):
         else:
             schema, gen = self._y_schema, self._y_gen
         key_dim_slices = schema.partition_key_dim(
-            self._buffer_bytes, self._start_key, self._stop_key
+            self._buffer_bytes, self._key_range.min, self._key_range.max
         )
         if len(schema.fields) == 1:
             return (row for tensor in gen(key_dim_slices) for row in tensor)
@@ -149,11 +150,8 @@ def _worker_init(worker_id: int) -> None:
     for gen in dataset._x_gen, dataset._y_gen:
         if isinstance(gen, TileDBSparseGenerator):
             raise NotImplementedError("https://github.com/pytorch/pytorch/issues/20248")
-    per_worker = ceil(dataset._num_keys / worker_info.num_workers)
-    partitions = list(iter_slices(dataset._start_key, dataset._stop_key, per_worker))
-    assert len(partitions) == worker_info.num_workers
-    dataset._start_key = partitions[worker_id].start
-    dataset._stop_key = partitions[worker_id].stop
+    key_ranges = list(dataset._key_range.partition_by_count(worker_info.num_workers))
+    dataset._key_range = key_ranges[worker_id]
 
 
 def _get_tensor_generator(

@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 import tiledb
-from tiledb.ml.readers._tensor_schema import TensorSchema, iter_slices
+from tiledb.ml.readers._tensor_schema import TensorSchema
 
 
 @pytest.fixture(scope="module")
@@ -96,14 +96,14 @@ def test_get_max_buffer_size_dense(dense_uri, fields, key_dim_index, memory_budg
     with tiledb.open(dense_uri, config=config) as a:
         schema = TensorSchema(a, key_dim_index, fields)
         buffer_size = schema._get_max_buffer_size_dense()
-        for key_slice in iter_slices(schema.start_key, schema.stop_key, buffer_size):
+        for key_range in schema.key_range.partition_by_weight(buffer_size):
             # query succeeds without incomplete retries
-            schema[key_slice]
+            schema[key_range.min : key_range.max]
 
-            if key_slice.stop < schema.stop_key:
+            if key_range.max < schema.key_range.max:
                 # querying a larger slice than buffer_size should fail
                 with pytest.raises(tiledb.TileDBError) as ex:
-                    schema[key_slice.start : key_slice.stop + 1]
+                    schema[key_range.min : key_range.max + 1]
                 assert "py.max_incomplete_retries" in str(ex.value)
 
 
@@ -125,12 +125,12 @@ def test_get_max_buffer_size_sparse(sparse_uri, fields, key_dim_index, memory_bu
     with tiledb.open(sparse_uri, config=config) as a:
         schema = TensorSchema(a, key_dim_index, fields)
         buffer_size = schema._get_max_buffer_size_sparse()
-        for key_slice in iter_slices(schema.start_key, schema.stop_key, buffer_size):
+        for key_range in schema.key_range.partition_by_weight(buffer_size):
             # query succeeds without incomplete retries (or at most 1 retry if not exact)
-            schema[key_slice]
+            schema[key_range.min : key_range.max]
 
-            if exact and key_slice.stop < schema.stop_key:
+            if exact and key_range.max < schema.key_range.max:
                 # querying a larger slice than buffer_size should fail
                 with pytest.raises(tiledb.TileDBError) as ex:
-                    schema[key_slice.start : key_slice.stop + 1]
+                    schema[key_range.min : key_range.max + 1]
                 assert "py.max_incomplete_retries" in str(ex.value)
