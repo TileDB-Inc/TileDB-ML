@@ -1,18 +1,32 @@
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from math import ceil
-from typing import Any, Dict, Optional, Sequence, Tuple, Union, cast
+from operator import itemgetter
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    Optional,
+    Sequence,
+    Tuple,
+    TypeVar,
+    Union,
+    cast,
+)
 
 import numpy as np
+import sparse
 
 import tiledb
 
-from ._ranges import InclusiveRange, IntRange
+from ._ranges import InclusiveRange
 
-KeyRange = InclusiveRange[int, int]
+Tensor = TypeVar("Tensor")
 
 
-class TensorSchema:
+class TensorSchema(ABC):
     """
     A class to encapsulate the information needed for mapping a TileDB array to tensors.
     """
@@ -22,12 +36,15 @@ class TensorSchema:
         array: tiledb.Array,
         key_dim: Union[int, str] = 0,
         fields: Sequence[str] = (),
+        transform: Optional[Callable[[Tensor], Tensor]] = None,
     ):
-        """
+        """Create a TensorSchema.
+
         :param array: TileDB array to read from.
         :param key_dim: Name or index of the key dimension. Defaults to the first dimension.
         :param fields: Attribute and/or dimension names of the array to read. Defaults to
             all attributes.
+        :param transform: Function to transform tensors.
         """
         if not np.issubdtype(array.dim(key_dim).dtype, np.integer):
             raise ValueError(f"Key dimension {key_dim} must have integer domain")
@@ -55,20 +72,15 @@ class TensorSchema:
             all_dims[0], all_dims[key_dim_index] = all_dims[key_dim_index], all_dims[0]
             ned[0], ned[key_dim_index] = ned[key_dim_index], ned[0]
 
+        key_dim_min, key_dim_max = ned[0]
+        self._key_range = InclusiveRange.factory(range(key_dim_min, key_dim_max + 1))
         self._array = array
-        self._key_range = IntRange(*ned[0])
+        self._key_dim_index = key_dim_index
         self._ned = tuple(ned)
-        self._dims = tuple(all_dims)
+        self._all_dims = tuple(all_dims)
         self._fields = tuple(fields)
-        self._leading_dim_slices = (slice(None),) * key_dim_index
-        self._query_kwargs = {
-            "attrs": tuple(attrs),
-            "dims": tuple(all_dims if self.sparse else dims),
-        }
-
-    @property
-    def sparse(self) -> bool:
-        return bool(self._array.schema.sparse)
+        self._query_kwargs = {"attrs": tuple(attrs), "dims": tuple(dims)}
+        self._transform = transform
 
     @property
     def fields(self) -> Sequence[str]:
@@ -78,21 +90,7 @@ class TensorSchema:
     @property
     def field_dtypes(self) -> Sequence[np.dtype]:
         """Dtypes of attributes and dimensions to read."""
-        get_dim, get_attr = self._array.dim, self._array.attr
-        return tuple(
-            (get_dim if field in self._dims else get_attr)(field).dtype
-            for field in self._fields
-        )
-
-    @property
-    def dims(self) -> Sequence[str]:
-        """All dimension names of the array, with the key dimension moved first."""
-        return self._dims
-
-    @property
-    def nonempty_domain(self) -> Sequence[Tuple[Any, Any]]:
-        """Non-empty domain of the array, with the key dimension moved first."""
-        return self._ned
+        return tuple(map(self._array.schema.attr_or_dim_dtype, self._fields))
 
     @property
     def shape(self) -> Tuple[int, ...]:
@@ -109,27 +107,36 @@ class TensorSchema:
         raise ValueError("Shape not defined for non-integer domain")
 
     @property
-    def key_dim_index(self) -> int:
-        """Index of the key dimension in the original TileDB schema."""
-        return len(self._leading_dim_slices)
-
-    @property
-    def key_range(self) -> KeyRange:
+    def key_range(self) -> InclusiveRange[Any, int]:
         """Inclusive range of the key dimension"""
         return self._key_range
 
-    def __getitem__(self, key_dim_slice: slice) -> Dict[str, np.ndarray]:
-        """Query the TileDB array by `dim_key=key_dim_slice`."""
-        self._query: tiledb.libtiledb.Query
-        try:
-            query = self._query
-        except AttributeError:
-            self._query = query = self._array.query(**self._query_kwargs)
-        return cast(
-            Dict[str, np.ndarray],
-            query.multi_index[(*self._leading_dim_slices, key_dim_slice)],
-        )
+    @property
+    def query(self) -> KeyDimQuery:
+        """A sliceable object for querying the TileDB array along the key dimension"""
+        return KeyDimQuery(self._array, self._key_dim_index, **self._query_kwargs)
 
+    @property
+    @abstractmethod
+    def sparse(self) -> bool:
+        """Whether the underlying TileDB array is sparse"""
+
+    @abstractmethod
+    def iter_tensors(
+        self, key_ranges: Iterable[InclusiveRange[Any, int]]
+    ) -> Union[Iterable[Tensor], Iterable[Sequence[Tensor]]]:
+        """
+        Generate batches of dense or sparse tensors.
+
+        Each yielded batch is either:
+        - a sequence of N tensors if N > 1, where `N == len(self.fields)`, or
+        - a single tensor if N == 1.
+        where each tensor is of `Tensor` type and has shape `(len(key_range), *self.shape[1:])`.
+
+        :param key_ranges: Inclusive ranges along the key dimension.
+        """
+
+    @abstractmethod
     def get_max_buffer_size(self, memory_budget: Optional[int] = None) -> int:
         """
         Determine the maximum number of keys that can fit in the given memory budget
@@ -140,31 +147,34 @@ class TensorSchema:
             (or 10 MB if unset) for sparse arrays. These bounds are also used as the
             default memory budget.
         """
-        if self.sparse:
-            buffer_size = self._get_max_buffer_size_sparse(memory_budget)
-        else:
-            buffer_size = self._get_max_buffer_size_dense(memory_budget)
-        return buffer_size
 
-    def _get_max_buffer_size_sparse(self, memory_budget: Optional[int] = None) -> int:
-        array = self._array
-        try:
-            init_buffer_bytes = int(array._ctx_().config()["py.init_buffer_bytes"])
-        except KeyError:
-            init_buffer_bytes = 10 * 1024**2
-        if memory_budget is None or memory_budget > init_buffer_bytes:
-            memory_budget = init_buffer_bytes
 
-        # the size of each row is variable and can only be estimated
-        query = array.query(return_incomplete=True, **self._query_kwargs)
-        res_sizes = query.multi_index[:].estimated_result_sizes()
+class DenseTensorSchema(TensorSchema):
+    sparse = False
 
-        max_buffer_bytes = max(res_size.data_bytes for res_size in res_sizes.values())
-        max_bytes_per_row = ceil(max_buffer_bytes / len(self._key_range))
+    def iter_tensors(
+        self, key_ranges: Iterable[InclusiveRange[Any, int]]
+    ) -> Union[Iterable[np.ndarray], Iterable[Sequence[np.ndarray]]]:
+        """
+        Generate batches of Numpy arrays.
 
-        return max(1, memory_budget // max_bytes_per_row)
+        If `key_dim_index > 0`, the generated arrays will ve reshaped so that the key_dim
+        axes is first. For example, if the TileDB array `a` has shape (5, 12, 20) and
+        `key_dim_index == 1`, then `a[:, 4:8, :]` returns arrays of shape (5, 4, 20) but
+        this method yields arrays of shape (4, 5, 20).
+        """
+        query = self.query
+        get_data = itemgetter(*self._fields)
+        key_dim_index = self._key_dim_index
+        for key_range in key_ranges:
+            field_arrays = query[key_range.min : key_range.max]
+            if key_dim_index > 0:
+                # Move key_dim_index axes first
+                for field, array in field_arrays.items():
+                    field_arrays[field] = np.moveaxis(array, key_dim_index, 0)
+            yield get_data(field_arrays)
 
-    def _get_max_buffer_size_dense(self, memory_budget: Optional[int] = None) -> int:
+    def get_max_buffer_size(self, memory_budget: Optional[int] = None) -> int:
         array = self._array
         config_memory_budget = int(array._ctx_().config()["sm.memory_budget"])
         if memory_budget is None or memory_budget > config_memory_budget:
@@ -175,7 +185,7 @@ class TensorSchema:
 
         # We want to be reading tiles following the tile extents along each dimension.
         # The number of cells for each such tile is the product of all tile extents.
-        dim_tiles = [array.dim(dim).tile for dim in self._dims]
+        dim_tiles = [array.dim(dim).tile for dim in self._all_dims]
         cells_per_tile = np.prod(dim_tiles)
 
         # Each slice consists of `rows_per_slice` rows along the key dimension
@@ -196,3 +206,76 @@ class TensorSchema:
 
         # Compute the total number of rows to slice
         return max(1, int(rows_per_slice * num_slices))
+
+
+class SparseTensorSchema(TensorSchema):
+    sparse = True
+
+    def __init__(
+        self,
+        array: tiledb.Array,
+        key_dim: Union[int, str] = 0,
+        fields: Sequence[str] = (),
+        transform: Optional[Callable[[Tensor], Tensor]] = None,
+    ):
+        super().__init__(array, key_dim, fields, transform)
+        self._query_kwargs["dims"] = self._all_dims
+
+    def iter_tensors(
+        self, key_ranges: Iterable[InclusiveRange[Any, int]]
+    ) -> Union[Iterable[Tensor], Iterable[Sequence[Tensor]]]:
+        shape = list(self.shape)
+        query = self.query
+        get_data = itemgetter(*self._fields)
+        single_field = len(self._fields) == 1
+        all_dims = self._all_dims
+        dim_starts = tuple(map(itemgetter(0), self._ned))
+        transform = self._transform or (lambda x: x)
+        for key_range in key_ranges:
+            # Set the shape of the key dimension equal to the current key range length
+            shape[0] = len(key_range)
+            field_arrays = query[key_range.min : key_range.max]
+            data = get_data(field_arrays)
+
+            # Convert coordinates from the original domain to zero-based
+            # For the key (i.e. first) dimension, ignore the keys before the current range
+            coords = tuple(field_arrays[dim] for dim in all_dims)
+            for i, (coord, dim_start) in enumerate(zip(coords, dim_starts)):
+                coord -= dim_start if i > 0 else key_range.min
+
+            # yield either a single tensor or a sequence of tensors, one for each field
+            if single_field:
+                yield transform(sparse.COO(coords, data, shape))
+            else:
+                yield tuple(transform(sparse.COO(coords, d, shape)) for d in data)
+
+    def get_max_buffer_size(self, memory_budget: Optional[int] = None) -> int:
+        array = self._array
+        try:
+            init_buffer_bytes = int(array._ctx_().config()["py.init_buffer_bytes"])
+        except KeyError:
+            init_buffer_bytes = 10 * 1024**2
+        if memory_budget is None or memory_budget > init_buffer_bytes:
+            memory_budget = init_buffer_bytes
+
+        # the size of each row is variable and can only be estimated
+        query = array.query(return_incomplete=True, **self._query_kwargs)
+        res_sizes = query.multi_index[:].estimated_result_sizes()
+
+        max_buffer_bytes = max(res_size.data_bytes for res_size in res_sizes.values())
+        max_bytes_per_row = ceil(max_buffer_bytes / len(self._key_range))
+
+        return max(1, memory_budget // max_bytes_per_row)
+
+
+class KeyDimQuery:
+    def __init__(self, array: tiledb.Array, key_dim_index: int, **kwargs: Any):
+        self._multi_index = array.query(**kwargs).multi_index
+        self._leading_dim_slices = (slice(None),) * key_dim_index
+
+    def __getitem__(self, key_dim_slice: slice) -> Dict[str, np.ndarray]:
+        """Query the TileDB array by `dim_key=key_dim_slice`."""
+        return cast(
+            Dict[str, np.ndarray],
+            self._multi_index[(*self._leading_dim_slices, key_dim_slice)],
+        )

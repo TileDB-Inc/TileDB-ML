@@ -7,8 +7,7 @@ import tensorflow as tf
 
 import tiledb
 
-from ._tensor_gen import TileDBNumpyGenerator, TileDBSparseGenerator
-from ._tensor_schema import TensorSchema
+from ._tensor_schema import DenseTensorSchema, SparseTensorSchema, TensorSchema
 
 
 def TensorflowTileDBDataset(
@@ -47,27 +46,29 @@ def TensorflowTileDBDataset(
         used to fetch inputs asynchronously and in parallel. Note: yielded batches may
         be shuffled even if `shuffle_buffer_size` is zero when `num_workers` > 1.
     """
-    x_schema = TensorSchema(x_array, x_key_dim, x_attrs)
-    y_schema = TensorSchema(y_array, y_key_dim, y_attrs)
+    x_schema = _get_tensor_schema(x_array, x_key_dim, x_attrs)
+    y_schema = _get_tensor_schema(y_array, y_key_dim, y_attrs)
     if not x_schema.key_range.equal_values(y_schema.key_range):
         raise ValueError(
             f"X and Y arrays have different key range: {x_schema.key_range} != {y_schema.key_range}"
         )
 
-    x_gen = _get_tensor_generator(x_array, x_schema)
     x_buffer_size = x_schema.get_max_buffer_size(buffer_bytes)
-    y_gen = _get_tensor_generator(y_array, y_schema)
     y_buffer_size = y_schema.get_max_buffer_size(buffer_bytes)
     key_ranges = list(x_schema.key_range.partition_by_count(num_workers or 1))
 
     def key_range_dataset(key_range_idx: int) -> tf.data.Dataset:
         x_dataset = tf.data.Dataset.from_generator(
-            lambda i: x_gen(key_ranges[i].partition_by_weight(x_buffer_size)),
+            lambda i: x_schema.iter_tensors(
+                key_ranges[i].partition_by_weight(x_buffer_size)
+            ),
             args=(key_range_idx,),
             output_signature=_get_tensor_specs(x_schema),
         )
         y_dataset = tf.data.Dataset.from_generator(
-            lambda i: y_gen(key_ranges[i].partition_by_weight(y_buffer_size)),
+            lambda i: y_schema.iter_tensors(
+                key_ranges[i].partition_by_weight(y_buffer_size)
+            ),
             args=(key_range_idx,),
             output_signature=_get_tensor_specs(y_schema),
         )
@@ -95,13 +96,15 @@ def _get_tensor_specs(schema: TensorSchema) -> Union[TensorSpec, Sequence[Tensor
     return specs if len(specs) > 1 else specs[0]
 
 
-def _get_tensor_generator(
-    array: tiledb.Array, schema: TensorSchema
-) -> Union[TileDBNumpyGenerator, TileDBSparseGenerator[tf.SparseTensor]]:
+def _get_tensor_schema(
+    array: tiledb.Array,
+    key_dim: Union[int, str],
+    fields: Sequence[str],
+) -> TensorSchema:
     if not array.schema.sparse:
-        return TileDBNumpyGenerator(array, schema)
+        return DenseTensorSchema(array, key_dim, fields)
     else:
-        return TileDBSparseGenerator(array, schema, from_coo=_coo_to_sparse_tensor)
+        return SparseTensorSchema(array, key_dim, fields, _coo_to_sparse_tensor)
 
 
 def _coo_to_sparse_tensor(coo: sparse.COO) -> tf.SparseTensor:
