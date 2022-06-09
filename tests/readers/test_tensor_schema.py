@@ -91,17 +91,17 @@ def parametrize_fields(*fields):
     [(0, 16_000), (0, 32_000), (0, 64_000), (1, 500_000), (1, 600_000), (1, 700_000)],
 )
 @parametrize_fields("d0", "d1", "d2", "af8", "af4", "au1")
-def test_max_buffer_size_dense(dense_uri, fields, key_dim_index, memory_budget):
+def test_max_partition_weight_dense(dense_uri, fields, key_dim_index, memory_budget):
     config = {"py.max_incomplete_retries": 0, "sm.memory_budget": memory_budget}
     with tiledb.open(dense_uri, config=config) as a:
         schema = DenseTensorSchema(a, key_dim_index, fields)
-        buffer_size = schema.max_buffer_size()
-        for key_range in schema.key_range.partition_by_weight(buffer_size):
+        max_weight = schema.max_partition_weight
+        for key_range in schema.key_range.partition_by_weight(max_weight):
             # query succeeds without incomplete retries
             schema.query[key_range.min : key_range.max]
 
             if key_range.max < schema.key_range.max:
-                # querying a larger slice than buffer_size should fail
+                # querying a larger slice should fail
                 with pytest.raises(tiledb.TileDBError) as ex:
                     schema.query[key_range.min : key_range.max + 1]
                 assert "py.max_incomplete_retries" in str(ex.value)
@@ -112,9 +112,11 @@ def test_max_buffer_size_dense(dense_uri, fields, key_dim_index, memory_budget):
     [(0, 1024), (0, 2048), (0, 4096), (1, 1024), (1, 2048), (1, 4096)],
 )
 @parametrize_fields("d0", "d1", "d2", "d3", "d4", "af8", "af4", "au1")
-def test_max_buffer_size_sparse(sparse_uri, fields, key_dim_index, init_buffer_bytes):
+def test_max_partition_weight_sparse(
+    sparse_uri, fields, key_dim_index, init_buffer_bytes
+):
     # The first dimension has a fixed number of non-zero cells per "row". The others
-    # don't, so the estimated buffer_size is not necessarily the maximum number of
+    # don't, so the estimated max_weight is not necessarily the maximum number of
     # "rows" than can fit in the given memory budget. In this case relax the test by
     # allowing 1 incomplete retry
     exact = key_dim_index == 0
@@ -124,13 +126,13 @@ def test_max_buffer_size_sparse(sparse_uri, fields, key_dim_index, init_buffer_b
     }
     with tiledb.open(sparse_uri, config=config) as a:
         schema = SparseTensorSchema(a, key_dim_index, fields)
-        buffer_size = schema.max_buffer_size()
-        for key_range in schema.key_range.partition_by_weight(buffer_size):
+        max_weight = schema.max_partition_weight
+        for key_range in schema.key_range.partition_by_weight(max_weight):
             # query succeeds without incomplete retries (or at most 1 retry if not exact)
             schema.query[key_range.min : key_range.max]
 
             if exact and key_range.max < schema.key_range.max:
-                # querying a larger slice than buffer_size should fail
+                # querying a larger slice should fail
                 with pytest.raises(tiledb.TileDBError) as ex:
                     schema.query[key_range.min : key_range.max + 1]
                 assert "py.max_incomplete_retries" in str(ex.value)

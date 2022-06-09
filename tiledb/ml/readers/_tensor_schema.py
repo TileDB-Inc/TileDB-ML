@@ -121,6 +121,19 @@ class TensorSchema(ABC):
     def sparse(self) -> bool:
         """Whether the underlying TileDB array is sparse"""
 
+    @property
+    @abstractmethod
+    def max_partition_weight(self) -> int:
+        """
+        Determine the maximum partition that can be read without incomplete retries.
+
+        What constitutes weight of a partition depends on the array type:
+        - For dense arrays, it is the number of unique keys (= number of "rows").
+          It depends on the `sm.memory_budget` config parameter.
+        - For sparse arrays, it is the number of non-empty cells.
+          It depends on the `py.init_buffer_bytes` config parameter.
+        """
+
     @abstractmethod
     def iter_tensors(
         self, key_ranges: Iterable[InclusiveRange[Any, int]]
@@ -131,18 +144,9 @@ class TensorSchema(ABC):
         Each yielded batch is either:
         - a sequence of N tensors if N > 1, where `N == len(self.fields)`, or
         - a single tensor if N == 1.
-        where each tensor is of `Tensor` type and has shape `(len(key_range), *self.shape[1:])`.
+        where each tensor has shape `(len(key_range), *self.shape[1:])`.
 
         :param key_ranges: Inclusive ranges along the key dimension.
-        """
-
-    @abstractmethod
-    def max_buffer_size(self) -> int:
-        """
-        Determine the maximum number of keys that can be read without incomplete retries.
-
-        This number depends on the `sm.memory_budget` config parameter for dense arrays
-        and `py.init_buffer_bytes` config parameter  (or 10 MB if unset) for sparse arrays.
         """
 
 
@@ -171,7 +175,8 @@ class DenseTensorSchema(TensorSchema):
                     field_arrays[field] = np.moveaxis(array, key_dim_index, 0)
             yield get_data(field_arrays)
 
-    def max_buffer_size(self) -> int:
+    @property
+    def max_partition_weight(self) -> int:
         array = self._array
         memory_budget = int(array._ctx_().config()["sm.memory_budget"])
 
@@ -244,7 +249,8 @@ class SparseTensorSchema(TensorSchema):
             else:
                 yield tuple(transform(sparse.COO(coords, d, shape)) for d in data)
 
-    def max_buffer_size(self) -> int:
+    @property
+    def max_partition_weight(self) -> int:
         array = self._array
         try:
             init_buffer_bytes = int(array._ctx_().config()["py.init_buffer_bytes"])

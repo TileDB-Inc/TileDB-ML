@@ -59,8 +59,8 @@ def PyTorchTileDBDataLoader(
     :param x_key_dim: Name or index of the key dimension of x_array.
     :param y_key_dim: Name or index of the key dimension of y_array.
     :param num_workers: how many subprocesses to use for data loading. 0 means that the
-        data will be loaded in the main process. Note: yielded batches may be shuffled
-        even if `shuffle_buffer_size` is zero when `num_workers` > 1.
+        data will be loaded in the main process. Note: when `num_workers` > 1
+        yielded batches may be shuffled even if `shuffle_buffer_size` is zero.
     :param csr: For sparse 2D arrays, whether to return CSR tensors instead of COO.
     """
     x_schema = _get_tensor_schema(x_array, x_key_dim, x_attrs)
@@ -109,8 +109,8 @@ class _PyTorchTileDBDataset(torch.utils.data.IterableDataset[XY]):
         return rows
 
     def _iter_rows(self, schema: TensorSchema) -> Iterator[TensorLikeOrSequence]:
-        buffer_size = schema.max_buffer_size()
-        key_subranges = self.key_range.partition_by_weight(buffer_size)
+        max_weight = schema.max_partition_weight
+        key_subranges = self.key_range.partition_by_weight(max_weight)
         batches: Iterable[TensorLikeOrSequence] = schema.iter_tensors(key_subranges)
         if len(schema.fields) == 1:
             return (tensor for batch in batches for tensor in batch)
