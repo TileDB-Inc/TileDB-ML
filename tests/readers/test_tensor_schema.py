@@ -107,32 +107,26 @@ def test_max_partition_weight_dense(dense_uri, fields, key_dim_index, memory_bud
                 assert "py.max_incomplete_retries" in str(ex.value)
 
 
-@pytest.mark.parametrize(
-    "key_dim_index,init_buffer_bytes",
-    [(0, 1024), (0, 2048), (0, 4096), (1, 1024), (1, 2048), (1, 4096)],
-)
+@pytest.mark.parametrize("memory_budget", [2048, 4096])
+@pytest.mark.parametrize("key_dim_index", [0, 1, 3, 4])
 @parametrize_fields("d0", "d1", "d2", "d3", "d4", "af8", "af4", "au1")
-def test_max_partition_weight_sparse(
-    sparse_uri, fields, key_dim_index, init_buffer_bytes
-):
-    # The first dimension has a fixed number of non-zero cells per "row". The others
-    # don't, so the estimated max_weight is not necessarily the maximum number of
-    # "rows" than can fit in the given memory budget. In this case relax the test by
-    # allowing 1 incomplete retry
-    exact = key_dim_index == 0
+def test_max_partition_weight_sparse(sparse_uri, fields, key_dim_index, memory_budget):
     config = {
-        "py.max_incomplete_retries": 0 if exact else 1,
-        "py.init_buffer_bytes": init_buffer_bytes,
+        "py.max_incomplete_retries": 0,
+        "py.init_buffer_bytes": memory_budget,
     }
     with tiledb.open(sparse_uri, config=config) as a:
+        key_dim = a.dim(key_dim_index)
         schema = SparseTensorSchema(a, key_dim_index, fields)
         max_weight = schema.max_partition_weight
         for key_range in schema.key_range.partition_by_weight(max_weight):
-            # query succeeds without incomplete retries (or at most 1 retry if not exact)
+            # query succeeds without incomplete retries
             schema.query[key_range.min : key_range.max]
 
-            if exact and key_range.max < schema.key_range.max:
-                # querying a larger slice should fail
-                with pytest.raises(tiledb.TileDBError) as ex:
-                    schema.query[key_range.min : key_range.max + 1]
-                assert "py.max_incomplete_retries" in str(ex.value)
+            if key_range.max < schema.key_range.max:
+                # querying a larger slice should fail. `key_range.max + 1` makes sense
+                # only for integer key dim so test just integer key dims
+                if np.issubdtype(key_dim.dtype, np.integer):
+                    with pytest.raises(tiledb.TileDBError) as ex:
+                        schema.query[key_range.min : key_range.max + 1]
+                    assert "py.max_incomplete_retries" in str(ex.value)
