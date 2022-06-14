@@ -2,7 +2,6 @@
 
 import itertools
 import random
-from math import ceil
 from operator import methodcaller
 from typing import (
     Callable,
@@ -29,8 +28,7 @@ except AttributeError:
 
 import tiledb
 
-from ._tensor_gen import TileDBNumpyGenerator, TileDBSparseGenerator
-from ._tensor_schema import TensorSchema, iter_slices
+from ._tensor_schema import DenseTensorSchema, SparseTensorSchema, TensorSchema
 
 TensorLikeSequence = Union[
     Sequence[np.ndarray], Sequence[sparse.COO], Sequence[scipy.sparse.csr_matrix]
@@ -79,13 +77,15 @@ def PyTorchTileDBDataLoader(
         even if `shuffle_buffer_size` is zero when `num_workers` > 1.
     :param csr: For sparse 2D arrays, whether to return CSR tensors instead of COO.
     """
-    x_schema = TensorSchema(x_array, x_key_dim, x_attrs)
-    y_schema = TensorSchema(y_array, y_key_dim, y_attrs)
-    x_schema.ensure_equal_keys(y_schema)
+    x_schema = _get_tensor_schema(x_array, x_key_dim, x_attrs)
+    y_schema = _get_tensor_schema(y_array, y_key_dim, y_attrs)
+    if not x_schema.key_range.equal_values(y_schema.key_range):
+        raise ValueError(
+            f"X and Y arrays have different key range: {x_schema.key_range} != {y_schema.key_range}"
+        )
+
     return torch.utils.data.DataLoader(
         dataset=_PyTorchTileDBDataset(
-            x_array=x_array,
-            y_array=y_array,
             x_schema=x_schema,
             y_schema=y_schema,
             buffer_bytes=buffer_bytes,
@@ -105,70 +105,56 @@ def PyTorchTileDBDataLoader(
 class _PyTorchTileDBDataset(torch.utils.data.IterableDataset[XY]):
     def __init__(
         self,
-        x_array: tiledb.Array,
-        y_array: tiledb.Array,
         x_schema: TensorSchema,
         y_schema: TensorSchema,
         buffer_bytes: Optional[int] = None,
         shuffle_buffer_size: int = 0,
     ):
         super().__init__()
-        self._x_schema = x_schema
-        self._y_schema = y_schema
-        self._start_key = self._x_schema.start_key
-        self._stop_key = self._x_schema.stop_key
-        self._num_keys = self._x_schema.num_keys
-        self._x_gen = _get_tensor_generator(x_array, self._x_schema)
-        self._y_gen = _get_tensor_generator(y_array, self._y_schema)
+        self.x_schema = x_schema
+        self.y_schema = y_schema
+        self.key_range = x_schema.key_range
         self._buffer_bytes = buffer_bytes
         self._shuffle_buffer_size = shuffle_buffer_size
 
     def __iter__(self) -> Iterator[XY]:
-        rows: Iterator[XY] = zip(self._iter_rows(True), self._iter_rows(False))
+        rows: Iterator[XY] = zip(
+            self._iter_rows(self.x_schema), self._iter_rows(self.y_schema)
+        )
         if self._shuffle_buffer_size > 0:
             rows = _iter_shuffled(rows, self._shuffle_buffer_size)
         return rows
 
-    def _iter_rows(self, is_x: bool) -> Iterator[TensorLikeOrSequence]:
-        if is_x:
-            schema, gen = self._x_schema, self._x_gen
-        else:
-            schema, gen = self._y_schema, self._y_gen
-        key_dim_slices = schema.partition_key_dim(
-            self._buffer_bytes, self._start_key, self._stop_key
-        )
+    def _iter_rows(self, schema: TensorSchema) -> Iterator[TensorLikeOrSequence]:
+        buffer_size = schema.get_max_buffer_size(self._buffer_bytes)
+        key_subranges = self.key_range.partition_by_weight(buffer_size)
+        batches: Iterable[TensorLikeOrSequence] = schema.iter_tensors(key_subranges)
         if len(schema.fields) == 1:
-            return (row for tensor in gen(key_dim_slices) for row in tensor)
+            return (tensor for batch in batches for tensor in batch)
         else:
-            return (row for tensors in gen(key_dim_slices) for row in zip(*tensors))
+            return (tensors for batch in batches for tensors in zip(*batch))
 
 
 def _worker_init(worker_id: int) -> None:
     worker_info = torch.utils.data.get_worker_info()
     dataset = worker_info.dataset
-    for gen in dataset._x_gen, dataset._y_gen:
-        if isinstance(gen, TileDBSparseGenerator):
-            raise NotImplementedError("https://github.com/pytorch/pytorch/issues/20248")
-    per_worker = ceil(dataset._num_keys / worker_info.num_workers)
-    partitions = list(iter_slices(dataset._start_key, dataset._stop_key, per_worker))
-    assert len(partitions) == worker_info.num_workers
-    dataset._start_key = partitions[worker_id].start
-    dataset._stop_key = partitions[worker_id].stop
+    if dataset.x_schema.sparse or dataset.y_schema.sparse:
+        raise NotImplementedError("https://github.com/pytorch/pytorch/issues/20248")
+    key_ranges = list(dataset.key_range.partition_by_count(worker_info.num_workers))
+    dataset.key_range = key_ranges[worker_id]
 
 
-def _get_tensor_generator(
-    array: tiledb.Array, schema: TensorSchema
-) -> Union[
-    TileDBNumpyGenerator,
-    TileDBSparseGenerator[sparse.COO],
-    TileDBSparseGenerator[scipy.sparse.csr_matrix],
-]:
+def _get_tensor_schema(
+    array: tiledb.Array,
+    key_dim: Union[int, str],
+    fields: Sequence[str],
+) -> TensorSchema:
     if not array.schema.sparse:
-        return TileDBNumpyGenerator(array, schema)
+        return DenseTensorSchema(array, key_dim, fields)
     elif array.ndim == 2:
-        return TileDBSparseGenerator(array, schema, from_coo=methodcaller("tocsr"))
+        return SparseTensorSchema(array, key_dim, fields, methodcaller("tocsr"))
     else:
-        return TileDBSparseGenerator(array, schema, from_coo=lambda x: x)
+        return SparseTensorSchema(array, key_dim, fields)
 
 
 _SingleCollator = Callable[[TensorLikeSequence], torch.Tensor]
