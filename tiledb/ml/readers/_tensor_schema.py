@@ -11,7 +11,6 @@ from typing import (
     Iterable,
     Optional,
     Sequence,
-    Tuple,
     TypeVar,
     Union,
     cast,
@@ -88,7 +87,7 @@ class TensorSchema(ABC):
         return tuple(map(self._array.schema.attr_or_dim_dtype, self._fields))
 
     @property
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> Sequence[int]:
         """Shape of the array, with the key dimension moved first.
 
         **Note**: For sparse arrays, the returned shape reflects the non-empty domain of
@@ -96,10 +95,13 @@ class TensorSchema(ABC):
 
         :raises ValueError: If the array does not have integer domain.
         """
-        starts, stops = zip(*self._ned)
-        if all(isinstance(i, int) for i in starts + stops):
-            return tuple(stop - start + 1 for start, stop in self._ned)
-        raise ValueError("Shape not defined for non-integer domain")
+        shape = [len(self.key_range)]
+        for start, stop in self._ned[1:]:
+            if isinstance(start, int) and isinstance(stop, int):
+                shape.append(stop - start + 1)
+            else:
+                raise ValueError("Shape not defined for non-integer domain")
+        return shape
 
     @property
     def query(self) -> KeyDimQuery:
@@ -243,8 +245,8 @@ class SparseTensorSchema(TensorSchema):
         query = self.query
         get_data = itemgetter(*self._fields)
         single_field = len(self._fields) == 1
-        all_dims = self._all_dims
-        dim_starts = tuple(map(itemgetter(0), self._ned))
+        key_dim, *non_key_dims = self._all_dims
+        non_key_dim_starts = tuple(map(itemgetter(0), self._ned[1:]))
         transform = self._transform or (lambda x: x)
         for key_range in key_ranges:
             # Set the shape of the key dimension equal to the current key range length
@@ -253,10 +255,14 @@ class SparseTensorSchema(TensorSchema):
             data = get_data(field_arrays)
 
             # Convert coordinates from the original domain to zero-based
-            # For the key (i.e. first) dimension, ignore the keys before the current range
-            coords = tuple(field_arrays[dim] for dim in all_dims)
-            for i, (coord, dim_start) in enumerate(zip(coords, dim_starts)):
-                coord -= dim_start if i > 0 else key_range.min
+            # For the key (i.e. first) dimension get the indices of the keys
+            coords = [key_range.indices(field_arrays.pop(key_dim))]
+            # For every non-key dimension, subtract the minimum value of the dimension
+            # TODO: update this for non-integer non-key dimensions
+            coords.extend(
+                field_arrays.pop(dim) - dim_start
+                for dim, dim_start in zip(non_key_dims, non_key_dim_starts)
+            )
 
             # yield either a single tensor or a sequence of tensors, one for each field
             if single_field:
