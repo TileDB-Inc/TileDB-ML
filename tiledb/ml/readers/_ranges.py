@@ -52,6 +52,13 @@ class InclusiveRange(ABC, Generic[V, W]):
         """Unique sorted values of this range."""
 
     @abstractmethod
+    def indices(self, values: np.ndarray[V, Any]) -> np.ndarray[np.int_, Any]:
+        """Get the (0-based) indices of the given values in this range.
+
+        :raises ValueError: If any of the given values is not in this range.
+        """
+
+    @abstractmethod
     def __len__(self) -> int:
         """Number of unique members in this range."""
 
@@ -169,6 +176,16 @@ class IntRange(InclusiveRange[int, int]):
     def values(self) -> np.ndarray[int, Any]:
         return np.arange(self.min, self.max + 1)
 
+    def indices(self, values: np.ndarray[int, Any]) -> np.ndarray[np.int_, Any]:
+        indices = values - self.min
+        if not (
+            np.issubsctype(indices, np.integer)
+            and np.all(indices >= 0)
+            and np.all(indices < len(self))
+        ):
+            raise ValueError(f"Values not in the range {self}")
+        return indices
+
     def __len__(self) -> int:
         return self.max - self.min + 1
 
@@ -244,6 +261,13 @@ class WeightedRange(InclusiveRange[VDtype, WDtype]):
 
     def equal_values(self, other: InclusiveRange[V, W]) -> bool:
         return bool(len(self) == len(other) and np.all(self.values == other.values))
+
+    def indices(self, values: np.ndarray[VDtype, Any]) -> np.ndarray[np.int_, Any]:
+        members = self.values
+        indices = np.searchsorted(members, values)
+        if not (np.max(indices) < len(members) and np.all(members[indices] == values)):
+            raise ValueError(f"Values not in the range {self}")
+        return indices
 
     def partition_by_count(self, k: int) -> Iterable[WeightedRange[VDtype, WDtype]]:
         n = len(self)
