@@ -137,15 +137,12 @@ class TensorSchema(ABC):
         """
 
     @abstractmethod
-    def get_max_buffer_size(self, memory_budget: Optional[int] = None) -> int:
+    def max_buffer_size(self) -> int:
         """
-        Determine the maximum number of keys that can fit in the given memory budget
-        without incomplete retries.
+        Determine the maximum number of keys that can be read without incomplete retries.
 
-        :param memory_budget: The maximum amount of memory to use. This is bounded by the
-            `sm.memory_budget` config parameter for dense arrays and `py.init_buffer_bytes`
-            (or 10 MB if unset) for sparse arrays. These bounds are also used as the
-            default memory budget.
+        This number depends on the `sm.memory_budget` config parameter for dense arrays
+        and `py.init_buffer_bytes` config parameter  (or 10 MB if unset) for sparse arrays.
         """
 
 
@@ -174,11 +171,9 @@ class DenseTensorSchema(TensorSchema):
                     field_arrays[field] = np.moveaxis(array, key_dim_index, 0)
             yield get_data(field_arrays)
 
-    def get_max_buffer_size(self, memory_budget: Optional[int] = None) -> int:
+    def max_buffer_size(self) -> int:
         array = self._array
-        config_memory_budget = int(array._ctx_().config()["sm.memory_budget"])
-        if memory_budget is None or memory_budget > config_memory_budget:
-            memory_budget = config_memory_budget
+        memory_budget = int(array._ctx_().config()["sm.memory_budget"])
 
         # The memory budget should be large enough to read the cells of the largest field
         bytes_per_cell = max(dtype.itemsize for dtype in self.field_dtypes)
@@ -249,14 +244,12 @@ class SparseTensorSchema(TensorSchema):
             else:
                 yield tuple(transform(sparse.COO(coords, d, shape)) for d in data)
 
-    def get_max_buffer_size(self, memory_budget: Optional[int] = None) -> int:
+    def max_buffer_size(self) -> int:
         array = self._array
         try:
             init_buffer_bytes = int(array._ctx_().config()["py.init_buffer_bytes"])
         except KeyError:
             init_buffer_bytes = 10 * 1024**2
-        if memory_budget is None or memory_budget > init_buffer_bytes:
-            memory_budget = init_buffer_bytes
 
         # the size of each row is variable and can only be estimated
         query = array.query(return_incomplete=True, **self._query_kwargs)
@@ -265,7 +258,7 @@ class SparseTensorSchema(TensorSchema):
         max_buffer_bytes = max(res_size.data_bytes for res_size in res_sizes.values())
         max_bytes_per_row = ceil(max_buffer_bytes / len(self._key_range))
 
-        return max(1, memory_budget // max_bytes_per_row)
+        return max(1, init_buffer_bytes // max_bytes_per_row)
 
 
 class KeyDimQuery:

@@ -1,6 +1,6 @@
 """Functionality for loading data from TileDB arrays to the Tensorflow Data API."""
 
-from typing import Optional, Sequence, Union
+from typing import Sequence, Union
 
 import sparse
 import tensorflow as tf
@@ -15,7 +15,6 @@ def TensorflowTileDBDataset(
     y_array: tiledb.Array,
     *,
     batch_size: int,
-    buffer_bytes: Optional[int] = None,
     shuffle_buffer_size: int = 0,
     prefetch: int = tf.data.AUTOTUNE,
     x_attrs: Sequence[str] = (),
@@ -29,10 +28,6 @@ def TensorflowTileDBDataset(
     :param x_array: TileDB array of the features.
     :param y_array: TileDB array of the labels.
     :param batch_size: Size of each batch.
-    :param buffer_bytes: Maximum size (in bytes) of memory to allocate for reading from
-        each array. This is bounded by the `sm.memory_budget` config parameter of the
-        array context for dense arrays and `py.init_buffer_bytes` (or 10 MB if unset) for
-        sparse arrays. These bounds are also used as the default memory budget.
     :param shuffle_buffer_size: Number of elements from which this dataset will sample.
     :param prefetch: Maximum number of batches that will be buffered when prefetching.
         By default, the buffer size is dynamically tuned.
@@ -53,8 +48,8 @@ def TensorflowTileDBDataset(
             f"X and Y arrays have different key range: {x_schema.key_range} != {y_schema.key_range}"
         )
 
-    x_buffer_size = x_schema.get_max_buffer_size(buffer_bytes)
-    y_buffer_size = y_schema.get_max_buffer_size(buffer_bytes)
+    x_buffer_size = x_schema.max_buffer_size()
+    y_buffer_size = y_schema.max_buffer_size()
     key_ranges = list(x_schema.key_range.partition_by_count(num_workers or 1))
 
     def key_range_dataset(key_range_idx: int) -> tf.data.Dataset:

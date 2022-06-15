@@ -3,16 +3,7 @@
 import itertools
 import random
 from operator import methodcaller
-from typing import (
-    Callable,
-    Iterable,
-    Iterator,
-    Optional,
-    Sequence,
-    Tuple,
-    TypeVar,
-    Union,
-)
+from typing import Callable, Iterable, Iterator, Sequence, Tuple, TypeVar, Union
 
 import numpy as np
 import scipy.sparse
@@ -44,7 +35,6 @@ def PyTorchTileDBDataLoader(
     y_array: tiledb.Array,
     *,
     batch_size: int,
-    buffer_bytes: Optional[int] = None,
     shuffle_buffer_size: int = 0,
     prefetch: int = 2,
     x_attrs: Sequence[str] = (),
@@ -59,10 +49,6 @@ def PyTorchTileDBDataLoader(
     :param x_array: TileDB array of the features.
     :param y_array: TileDB array of the labels.
     :param batch_size: Size of each batch.
-    :param buffer_bytes: Maximum size (in bytes) of memory to allocate for reading from
-        each array. This is bounded by the `sm.memory_budget` config parameter of the
-        array context for dense arrays and `py.init_buffer_bytes` (or 10 MB if unset) for
-        sparse arrays. These bounds are also used as the default memory budget.
     :param shuffle_buffer_size: Number of elements from which this dataset will sample.
     :param prefetch: Number of samples loaded in advance by each worker. Not applicable
         (and should not be given) when `num_workers` is 0.
@@ -88,7 +74,6 @@ def PyTorchTileDBDataLoader(
         dataset=_PyTorchTileDBDataset(
             x_schema=x_schema,
             y_schema=y_schema,
-            buffer_bytes=buffer_bytes,
             shuffle_buffer_size=shuffle_buffer_size,
         ),
         batch_size=batch_size,
@@ -107,14 +92,12 @@ class _PyTorchTileDBDataset(torch.utils.data.IterableDataset[XY]):
         self,
         x_schema: TensorSchema,
         y_schema: TensorSchema,
-        buffer_bytes: Optional[int] = None,
         shuffle_buffer_size: int = 0,
     ):
         super().__init__()
         self.x_schema = x_schema
         self.y_schema = y_schema
         self.key_range = x_schema.key_range
-        self._buffer_bytes = buffer_bytes
         self._shuffle_buffer_size = shuffle_buffer_size
 
     def __iter__(self) -> Iterator[XY]:
@@ -126,7 +109,7 @@ class _PyTorchTileDBDataset(torch.utils.data.IterableDataset[XY]):
         return rows
 
     def _iter_rows(self, schema: TensorSchema) -> Iterator[TensorLikeOrSequence]:
-        buffer_size = schema.get_max_buffer_size(self._buffer_bytes)
+        buffer_size = schema.max_buffer_size()
         key_subranges = self.key_range.partition_by_weight(buffer_size)
         batches: Iterable[TensorLikeOrSequence] = schema.iter_tensors(key_subranges)
         if len(schema.fields) == 1:
