@@ -5,6 +5,7 @@ import pytest
 import torch
 
 from tiledb.ml.readers.pytorch import PyTorchTileDBDataLoader
+from tiledb.ml.readers.types.typing import ArrayParams
 
 from .utils import ingest_in_tiledb, parametrize_for_dataset, validate_tensor_generator
 
@@ -35,12 +36,12 @@ class TestPyTorchTileDBDataLoader:
             tmpdir, y_shape, y_sparse, key_dim_dtype, y_key_dim, num_fields
         ) as y_kwargs:
             dataloader = PyTorchTileDBDataLoader(
-                x_array=x_kwargs["array"],
-                y_array=y_kwargs["array"],
-                x_attrs=x_kwargs["fields"],
-                y_attrs=y_kwargs["fields"],
-                x_key_dim=x_kwargs["key_dim"],
-                y_key_dim=y_kwargs["key_dim"],
+                x_params=ArrayParams(
+                    x_kwargs["array"], x_kwargs["key_dim"], x_kwargs["fields"]
+                ),
+                y_params=ArrayParams(
+                    y_kwargs["array"], y_kwargs["key_dim"], y_kwargs["fields"]
+                ),
                 batch_size=batch_size,
                 shuffle_buffer_size=shuffle_buffer_size,
                 num_workers=num_workers,
@@ -77,12 +78,12 @@ class TestPyTorchTileDBDataLoader:
         ) as y_kwargs:
             with pytest.raises(ValueError) as ex:
                 PyTorchTileDBDataLoader(
-                    x_array=x_kwargs["array"],
-                    y_array=y_kwargs["array"],
-                    x_attrs=x_kwargs["fields"],
-                    y_attrs=y_kwargs["fields"],
-                    x_key_dim=x_kwargs["key_dim"],
-                    y_key_dim=y_kwargs["key_dim"],
+                    x_params=ArrayParams(
+                        x_kwargs["array"], x_kwargs["key_dim"], x_kwargs["fields"]
+                    ),
+                    y_params=ArrayParams(
+                        y_kwargs["array"], y_kwargs["key_dim"], y_kwargs["fields"]
+                    ),
                     batch_size=batch_size,
                     shuffle_buffer_size=shuffle_buffer_size,
                     num_workers=num_workers,
@@ -118,12 +119,12 @@ class TestPyTorchTileDBDataLoader:
             tmpdir, y_shape, y_sparse, key_dim_dtype, y_key_dim, num_fields
         ) as y_kwargs:
             dataloader = PyTorchTileDBDataLoader(
-                x_array=x_kwargs["array"],
-                y_array=y_kwargs["array"],
-                x_attrs=x_kwargs["fields"],
-                y_attrs=y_kwargs["fields"],
-                x_key_dim=x_kwargs["key_dim"],
-                y_key_dim=y_kwargs["key_dim"],
+                x_params=ArrayParams(
+                    x_kwargs["array"], x_kwargs["key_dim"], x_kwargs["fields"]
+                ),
+                y_params=ArrayParams(
+                    y_kwargs["array"], y_kwargs["key_dim"], y_kwargs["fields"]
+                ),
                 batch_size=batch_size,
                 shuffle_buffer_size=shuffle_buffer_size,
                 num_workers=num_workers,
