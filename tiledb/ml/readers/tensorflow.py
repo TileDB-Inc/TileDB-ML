@@ -38,8 +38,8 @@ def TensorflowTileDBDataset(
     :param x_key_dim: Name or index of the key dimension of x_array.
     :param y_key_dim: Name or index of the key dimension of y_array.
     :param num_workers: If greater than zero, create a threadpool of `num_workers` threads
-        used to fetch inputs asynchronously and in parallel. Note: yielded batches may
-        be shuffled even if `shuffle_buffer_size` is zero when `num_workers` > 1.
+        used to fetch inputs asynchronously and in parallel. Note: when `num_workers` > 1
+        yielded batches may be shuffled even if `shuffle_buffer_size` is zero.
     """
     x_schema = _get_tensor_schema(x_array, x_key_dim, x_attrs)
     y_schema = _get_tensor_schema(y_array, y_key_dim, y_attrs)
@@ -48,21 +48,21 @@ def TensorflowTileDBDataset(
             f"X and Y arrays have different key range: {x_schema.key_range} != {y_schema.key_range}"
         )
 
-    x_buffer_size = x_schema.max_buffer_size()
-    y_buffer_size = y_schema.max_buffer_size()
+    x_max_weight = x_schema.max_partition_weight
+    y_max_weight = y_schema.max_partition_weight
     key_ranges = list(x_schema.key_range.partition_by_count(num_workers or 1))
 
     def key_range_dataset(key_range_idx: int) -> tf.data.Dataset:
         x_dataset = tf.data.Dataset.from_generator(
             lambda i: x_schema.iter_tensors(
-                key_ranges[i].partition_by_weight(x_buffer_size)
+                key_ranges[i].partition_by_weight(x_max_weight)
             ),
             args=(key_range_idx,),
             output_signature=_get_tensor_specs(x_schema),
         )
         y_dataset = tf.data.Dataset.from_generator(
             lambda i: y_schema.iter_tensors(
-                key_ranges[i].partition_by_weight(y_buffer_size)
+                key_ranges[i].partition_by_weight(y_max_weight)
             ),
             args=(key_range_idx,),
             output_signature=_get_tensor_specs(y_schema),

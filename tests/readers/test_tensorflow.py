@@ -18,6 +18,7 @@ class TestTensorflowTileDBDataset:
         y_shape,
         x_sparse,
         y_sparse,
+        key_dim_dtype,
         x_key_dim,
         y_key_dim,
         num_fields,
@@ -26,9 +27,9 @@ class TestTensorflowTileDBDataset:
         num_workers,
     ):
         with ingest_in_tiledb(
-            tmpdir, x_shape, x_sparse, x_key_dim, num_fields
+            tmpdir, x_shape, x_sparse, key_dim_dtype, x_key_dim, num_fields
         ) as x_kwargs, ingest_in_tiledb(
-            tmpdir, y_shape, y_sparse, y_key_dim, num_fields
+            tmpdir, y_shape, y_sparse, key_dim_dtype, y_key_dim, num_fields
         ) as y_kwargs:
             dataset = TensorflowTileDBDataset(
                 x_array=x_kwargs["array"],
@@ -58,6 +59,7 @@ class TestTensorflowTileDBDataset:
         y_shape,
         x_sparse,
         y_sparse,
+        key_dim_dtype,
         x_key_dim,
         y_key_dim,
         num_fields,
@@ -66,9 +68,9 @@ class TestTensorflowTileDBDataset:
         num_workers,
     ):
         with ingest_in_tiledb(
-            tmpdir, x_shape, x_sparse, x_key_dim, num_fields
+            tmpdir, x_shape, x_sparse, key_dim_dtype, x_key_dim, num_fields
         ) as x_kwargs, ingest_in_tiledb(
-            tmpdir, y_shape, y_sparse, y_key_dim, num_fields
+            tmpdir, y_shape, y_sparse, key_dim_dtype, y_key_dim, num_fields
         ) as y_kwargs:
             with pytest.raises(ValueError) as ex:
                 TensorflowTileDBDataset(
@@ -92,6 +94,7 @@ class TestTensorflowTileDBDataset:
         y_shape,
         x_sparse,
         y_sparse,
+        key_dim_dtype,
         x_key_dim,
         y_key_dim,
         num_fields,
@@ -105,9 +108,9 @@ class TestTensorflowTileDBDataset:
         no shuffling (shuffle_buffer_size=0).
         """
         with ingest_in_tiledb(
-            tmpdir, x_shape, x_sparse, x_key_dim, num_fields
+            tmpdir, x_shape, x_sparse, key_dim_dtype, x_key_dim, num_fields
         ) as x_kwargs, ingest_in_tiledb(
-            tmpdir, y_shape, y_sparse, y_key_dim, num_fields
+            tmpdir, y_shape, y_sparse, key_dim_dtype, y_key_dim, num_fields
         ) as y_kwargs:
             dataset = TensorflowTileDBDataset(
                 x_array=x_kwargs["array"],

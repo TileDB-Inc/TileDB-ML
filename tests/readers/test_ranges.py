@@ -57,6 +57,25 @@ class TestIntRange:
         assert self.r != r
         assert not self.r.equal_values(r)
 
+    def test_indices(self):
+        np.testing.assert_array_equal(
+            self.r.indices(np.array([10, 16, 16, 11, 19, 11])),
+            np.array([0, 6, 6, 1, 9, 1]),
+        )
+
+    @pytest.mark.parametrize(
+        "values",
+        [
+            [10, 16, 16, 11, 20],
+            [10, 16, 16, 11, 9],
+            [10, 16, 16, 11, 15.5],
+        ],
+    )
+    def test_indices_error(self, values):
+        with pytest.raises(ValueError) as excinfo:
+            self.r.indices(np.array(values))
+        assert "Values not in the range" in str(excinfo.value)
+
     @pytest.mark.parametrize(
         "k,expected_bounds",
         [
@@ -160,6 +179,25 @@ class TestWeightedRange:
             InclusiveRange.factory([11, 14, 17, 20]),
             WeightedRange,
         )
+
+    def test_indices(self):
+        np.testing.assert_array_equal(
+            self.r.indices(np.array(["a", "e", "e", "d", "a", "f", "c"])),
+            np.array([0, 4, 4, 3, 0, 5, 2]),
+        )
+
+    @pytest.mark.parametrize(
+        "values",
+        [
+            ["a", "e", "e", "d", "_"],
+            ["a", "e", "e", "d", "z"],
+            ["a", "e", "e", "d", "aa"],
+        ],
+    )
+    def test_indices_error(self, values):
+        with pytest.raises(ValueError) as excinfo:
+            self.r.indices(np.array(values))
+        assert "Values not in the range" in str(excinfo.value)
 
     parametrize_by_count = pytest.mark.parametrize(
         "k,expected_mappings",

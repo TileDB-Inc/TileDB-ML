@@ -18,6 +18,7 @@ class TestPyTorchTileDBDataLoader:
         y_shape,
         x_sparse,
         y_sparse,
+        key_dim_dtype,
         x_key_dim,
         y_key_dim,
         num_fields,
@@ -29,9 +30,9 @@ class TestPyTorchTileDBDataLoader:
             pytest.skip("multiple workers not supported with sparse arrays")
 
         with ingest_in_tiledb(
-            tmpdir, x_shape, x_sparse, x_key_dim, num_fields
+            tmpdir, x_shape, x_sparse, key_dim_dtype, x_key_dim, num_fields
         ) as x_kwargs, ingest_in_tiledb(
-            tmpdir, y_shape, y_sparse, y_key_dim, num_fields
+            tmpdir, y_shape, y_sparse, key_dim_dtype, y_key_dim, num_fields
         ) as y_kwargs:
             dataloader = PyTorchTileDBDataLoader(
                 x_array=x_kwargs["array"],
@@ -61,6 +62,7 @@ class TestPyTorchTileDBDataLoader:
         y_shape,
         x_sparse,
         y_sparse,
+        key_dim_dtype,
         x_key_dim,
         y_key_dim,
         num_fields,
@@ -69,9 +71,9 @@ class TestPyTorchTileDBDataLoader:
         num_workers,
     ):
         with ingest_in_tiledb(
-            tmpdir, x_shape, x_sparse, x_key_dim, num_fields
+            tmpdir, x_shape, x_sparse, key_dim_dtype, x_key_dim, num_fields
         ) as x_kwargs, ingest_in_tiledb(
-            tmpdir, y_shape, y_sparse, y_key_dim, num_fields
+            tmpdir, y_shape, y_sparse, key_dim_dtype, y_key_dim, num_fields
         ) as y_kwargs:
             with pytest.raises(ValueError) as ex:
                 PyTorchTileDBDataLoader(
@@ -96,6 +98,7 @@ class TestPyTorchTileDBDataLoader:
         y_shape,
         x_sparse,
         y_sparse,
+        key_dim_dtype,
         x_key_dim,
         y_key_dim,
         num_fields,
@@ -110,9 +113,9 @@ class TestPyTorchTileDBDataLoader:
         no shuffling (shuffle_buffer_size=0).
         """
         with ingest_in_tiledb(
-            tmpdir, x_shape, x_sparse, x_key_dim, num_fields
+            tmpdir, x_shape, x_sparse, key_dim_dtype, x_key_dim, num_fields
         ) as x_kwargs, ingest_in_tiledb(
-            tmpdir, y_shape, y_sparse, y_key_dim, num_fields
+            tmpdir, y_shape, y_sparse, key_dim_dtype, y_key_dim, num_fields
         ) as y_kwargs:
             dataloader = PyTorchTileDBDataLoader(
                 x_array=x_kwargs["array"],
