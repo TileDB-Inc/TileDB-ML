@@ -4,7 +4,17 @@ from abc import ABC, abstractmethod
 from collections import Counter
 from math import ceil
 from operator import itemgetter
-from typing import Any, Dict, Iterable, Sequence, TypeVar, Union, cast
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    Optional,
+    Sequence,
+    TypeVar,
+    Union,
+    cast,
+)
 
 import numpy as np
 import sparse
@@ -12,7 +22,7 @@ import sparse
 import tiledb
 
 from ._ranges import InclusiveRange
-from .types.typing import ArrayParams
+from .types import ArrayParams
 
 Tensor = TypeVar("Tensor")
 
@@ -23,20 +33,25 @@ class TensorSchema(ABC):
     """
 
     def __init__(self, array_params: ArrayParams):
-        self._array_params = array_params
+        self._array = array_params._tensor_schema_kwargs["array"]
+        self._fields = array_params._tensor_schema_kwargs["fields"]
+        self._key_dim_index = array_params._tensor_schema_kwargs["key_dim_index"]
+        self._ned = array_params._tensor_schema_kwargs["ned"]
+        self._all_dims = array_params._tensor_schema_kwargs["all_dims"]
+        self._query_kwargs = array_params._tensor_schema_kwargs["query_kwargs"]
 
     @property
     def fields(self) -> Sequence[str]:
         """Names of attributes and dimensions to read."""
-        return self._array_params.fields
+        return cast(Sequence[str], self._fields)
 
     @property
     def field_dtypes(self) -> Sequence[np.dtype]:
         """Dtypes of attributes and dimensions to read."""
         return tuple(
             map(
-                self._array_params.array.schema.attr_or_dim_dtype,
-                self._array_params.fields,
+                self._array.schema.attr_or_dim_dtype,
+                self._fields,
             )
         )
 
@@ -50,7 +65,7 @@ class TensorSchema(ABC):
         :raises ValueError: If the array does not have integer domain.
         """
         shape = [len(self.key_range)]
-        for start, stop in self._array_params.ned[1:]:
+        for start, stop in self._ned[1:]:
             if isinstance(start, int) and isinstance(stop, int):
                 shape.append(stop - start + 1)
             else:
@@ -61,9 +76,9 @@ class TensorSchema(ABC):
     def query(self) -> KeyDimQuery:
         """A sliceable object for querying the TileDB array along the key dimension"""
         return KeyDimQuery(
-            self._array_params.array,
-            self._array_params.key_dim_index,
-            **self._array_params.query_kwargs,
+            self._array,
+            self._key_dim_index,
+            **self._query_kwargs,
         )
 
     @property
@@ -116,7 +131,7 @@ class DenseTensorSchema(TensorSchema):
 
     @property
     def key_range(self) -> InclusiveRange[int, int]:
-        key_dim_min, key_dim_max = self._array_params.ned[0]
+        key_dim_min, key_dim_max = self._ned[0]
         return InclusiveRange.factory(range(key_dim_min, key_dim_max + 1))
 
     def iter_tensors(
@@ -131,8 +146,8 @@ class DenseTensorSchema(TensorSchema):
         this method yields arrays of shape (4, 5, 20).
         """
         query = self.query
-        get_data = itemgetter(*self._array_params.fields)
-        key_dim_index = self._array_params.key_dim_index
+        get_data = itemgetter(*self._fields)
+        key_dim_index = self._key_dim_index
         for key_range in key_ranges:
             field_arrays = query[key_range.min : key_range.max]
             if key_dim_index > 0:
@@ -143,19 +158,14 @@ class DenseTensorSchema(TensorSchema):
 
     @property
     def max_partition_weight(self) -> int:
-        memory_budget = int(
-            self._array_params.array._ctx_().config()["sm.memory_budget"]
-        )
+        memory_budget = int(self._array._ctx_().config()["sm.memory_budget"])
 
         # The memory budget should be large enough to read the cells of the largest field
         bytes_per_cell = max(dtype.itemsize for dtype in self.field_dtypes)
 
         # We want to be reading tiles following the tile extents along each dimension.
         # The number of cells for each such tile is the product of all tile extents.
-        dim_tiles = [
-            self._array_params.array.dim(dim).tile
-            for dim in self._array_params.all_dims
-        ]
+        dim_tiles = [self._array.dim(dim).tile for dim in self._all_dims]
         cells_per_tile = np.prod(dim_tiles)
 
         # Each slice consists of `rows_per_slice` rows along the key dimension
@@ -181,17 +191,20 @@ class DenseTensorSchema(TensorSchema):
 class SparseTensorSchema(TensorSchema):
     sparse = True
 
-    def __init__(self, array_params: ArrayParams):
+    def __init__(
+        self,
+        array_params: ArrayParams,
+        transform: Optional[Callable[[Tensor], Tensor]] = None,
+    ):
         super().__init__(array_params)
         key_counter: Counter[Any] = Counter()
-        key_dim = self._array_params.all_dims[0]
-        query = self._array_params.array.query(
-            dims=(key_dim,), attrs=(), return_incomplete=True
-        )
+        key_dim = self._all_dims[0]
+        query = self._array.query(dims=(key_dim,), attrs=(), return_incomplete=True)
         for result in query.multi_index[:]:
             key_counter.update(result[key_dim])
         self._key_range = InclusiveRange.factory(key_counter)
-        self._array_params.query_kwargs["dims"] = self._array_params.all_dims
+        self._query_kwargs["dims"] = self._all_dims
+        self.transform = transform
 
     @property
     def key_range(self) -> InclusiveRange[Any, int]:
@@ -202,11 +215,11 @@ class SparseTensorSchema(TensorSchema):
     ) -> Union[Iterable[Tensor], Iterable[Sequence[Tensor]]]:
         shape = list(self.shape)
         query = self.query
-        get_data = itemgetter(*self._array_params.fields)
-        single_field = len(self._array_params.fields) == 1
-        key_dim, *non_key_dims = self._array_params.all_dims
-        non_key_dim_starts = tuple(map(itemgetter(0), self._array_params.ned[1:]))
-        transform = self._array_params.transform or (lambda x: x)
+        get_data = itemgetter(*self._fields)
+        single_field = len(self._fields) == 1
+        key_dim, *non_key_dims = self._all_dims
+        non_key_dim_starts = tuple(map(itemgetter(0), self._ned[1:]))
+        transform = self.transform or (lambda x: x)
         for key_range in key_ranges:
             # Set the shape of the key dimension equal to the current key range length
             shape[0] = len(key_range)
@@ -232,17 +245,14 @@ class SparseTensorSchema(TensorSchema):
     @property
     def max_partition_weight(self) -> int:
         try:
-            memory_budget = int(
-                self._array_params.array._ctx_().config()["py.init_buffer_bytes"]
-            )
+            memory_budget = int(self._array._ctx_().config()["py.init_buffer_bytes"])
         except KeyError:
             memory_budget = 10 * 1024**2
 
         # The memory budget should be large enough to read the cells of the largest field
         bytes_per_cell = max(
-            self._array_params.array.schema.attr_or_dim_dtype(field).itemsize
-            for field in self._array_params.query_kwargs["dims"]
-            + self._array_params.query_kwargs["attrs"]
+            self._array.schema.attr_or_dim_dtype(field).itemsize
+            for field in self._query_kwargs["dims"] + self._query_kwargs["attrs"]
         )
         return max(1, memory_budget // int(bytes_per_cell))
 

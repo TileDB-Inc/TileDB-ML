@@ -6,7 +6,7 @@ import pytest
 
 import tiledb
 from tiledb.ml.readers._tensor_schema import DenseTensorSchema, SparseTensorSchema
-from tiledb.ml.readers.types.typing import ArrayParams
+from tiledb.ml.readers.types import ArrayParams
 
 
 @pytest.fixture(scope="module")

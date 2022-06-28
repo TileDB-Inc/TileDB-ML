@@ -5,7 +5,7 @@ import pytest
 import tensorflow as tf
 
 from tiledb.ml.readers.tensorflow import TensorflowTileDBDataset
-from tiledb.ml.readers.types.typing import ArrayParams
+from tiledb.ml.readers.types import ArrayParams
 
 from .utils import ingest_in_tiledb, parametrize_for_dataset, validate_tensor_generator
 

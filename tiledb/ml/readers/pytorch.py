@@ -18,9 +18,9 @@ except AttributeError:
     sparse_csr_tensor = torch._sparse_csr_tensor
 
 import tiledb
+from tiledb.ml.readers.types import ArrayParams
 
 from ._tensor_schema import DenseTensorSchema, SparseTensorSchema, TensorSchema
-from .types.typing import ArrayParams
 
 TensorLikeSequence = Union[
     Sequence[np.ndarray], Sequence[sparse.COO], Sequence[scipy.sparse.csr_matrix]
@@ -122,8 +122,7 @@ def _get_tensor_schema(array_params: ArrayParams) -> TensorSchema:
     if not array_params.array.schema.sparse:
         return DenseTensorSchema(array_params)
     elif array_params.array.ndim == 2:
-        array_params.transform = methodcaller("tocsr")
-        return SparseTensorSchema(array_params)
+        return SparseTensorSchema(array_params, methodcaller("tocsr"))
     else:
         return SparseTensorSchema(array_params)
 

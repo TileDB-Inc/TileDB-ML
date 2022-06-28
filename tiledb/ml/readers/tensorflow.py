@@ -5,8 +5,9 @@ from typing import Sequence, Union
 import sparse
 import tensorflow as tf
 
+from tiledb.ml.readers.types import ArrayParams
+
 from ._tensor_schema import DenseTensorSchema, SparseTensorSchema, TensorSchema
-from .types.typing import ArrayParams
 
 
 def TensorflowTileDBDataset(
@@ -20,8 +21,8 @@ def TensorflowTileDBDataset(
 ) -> tf.data.Dataset:
     """Return a tf.data.Dataset for loading data from TileDB arrays.
 
-    :param x_params: TileDB array of the features.
-    :param y_params: TileDB array of the labels.
+    :param x_params: TileDB ArrayParams of the features.
+    :param y_params: TileDB ArrayParams of the labels.
     :param batch_size: Size of each batch.
     :param shuffle_buffer_size: Number of elements from which this dataset will sample.
     :param prefetch: Maximum number of batches that will be buffered when prefetching.
@@ -84,8 +85,7 @@ def _get_tensor_schema(array_params: ArrayParams) -> TensorSchema:
     if not array_params.array.schema.sparse:
         return DenseTensorSchema(array_params)
     else:
-        array_params.transform = _coo_to_sparse_tensor
-        return SparseTensorSchema(array_params)
+        return SparseTensorSchema(array_params, _coo_to_sparse_tensor)
 
 
 def _coo_to_sparse_tensor(coo: sparse.COO) -> tf.SparseTensor:
