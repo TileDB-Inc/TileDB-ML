@@ -48,12 +48,7 @@ class TensorSchema(ABC):
     @property
     def field_dtypes(self) -> Sequence[np.dtype]:
         """Dtypes of attributes and dimensions to read."""
-        return tuple(
-            map(
-                self._array.schema.attr_or_dim_dtype,
-                self._fields,
-            )
-        )
+        return tuple(map(self._array.schema.attr_or_dim_dtype, self._fields))
 
     @property
     def shape(self) -> Sequence[int]:
@@ -75,11 +70,7 @@ class TensorSchema(ABC):
     @property
     def query(self) -> KeyDimQuery:
         """A sliceable object for querying the TileDB array along the key dimension"""
-        return KeyDimQuery(
-            self._array,
-            self._key_dim_index,
-            **self._query_kwargs,
-        )
+        return KeyDimQuery(self._array, self._key_dim_index, **self._query_kwargs)
 
     @property
     @abstractmethod
@@ -204,7 +195,7 @@ class SparseTensorSchema(TensorSchema):
             key_counter.update(result[key_dim])
         self._key_range = InclusiveRange.factory(key_counter)
         self._query_kwargs["dims"] = self._all_dims
-        self.transform = transform
+        self._transform = transform
 
     @property
     def key_range(self) -> InclusiveRange[Any, int]:
@@ -219,7 +210,7 @@ class SparseTensorSchema(TensorSchema):
         single_field = len(self._fields) == 1
         key_dim, *non_key_dims = self._all_dims
         non_key_dim_starts = tuple(map(itemgetter(0), self._ned[1:]))
-        transform = self.transform or (lambda x: x)
+        transform = self._transform or (lambda x: x)
         for key_range in key_ranges:
             # Set the shape of the key dimension equal to the current key range length
             shape[0] = len(key_range)

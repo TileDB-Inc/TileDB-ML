@@ -47,7 +47,7 @@ class ArrayParams:
             "_tensor_schema_kwargs",
             dict(
                 array=self.array,
-                fields=final_fields,
+                fields=tuple(final_fields),
                 key_dim_index=key_dim_index,
                 ned=tuple(ned),
                 all_dims=tuple(all_dims),
