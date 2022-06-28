@@ -20,6 +20,7 @@ except AttributeError:
 import tiledb
 
 from ._tensor_schema import DenseTensorSchema, SparseTensorSchema, TensorSchema
+from .types import ArrayParams
 
 TensorLikeSequence = Union[
     Sequence[np.ndarray], Sequence[sparse.COO], Sequence[scipy.sparse.csr_matrix]
@@ -31,40 +32,30 @@ XY = Tuple[TensorLikeOrSequence, TensorLikeOrSequence]
 
 
 def PyTorchTileDBDataLoader(
-    x_array: tiledb.Array,
-    y_array: tiledb.Array,
+    x_params: ArrayParams,
+    y_params: ArrayParams,
     *,
     batch_size: int,
     shuffle_buffer_size: int = 0,
     prefetch: int = 2,
-    x_attrs: Sequence[str] = (),
-    y_attrs: Sequence[str] = (),
-    x_key_dim: Union[int, str] = 0,
-    y_key_dim: Union[int, str] = 0,
     num_workers: int = 0,
     csr: bool = True,
 ) -> torch.utils.data.DataLoader:
     """Return a DataLoader for loading data from TileDB arrays.
 
-    :param x_array: TileDB array of the features.
-    :param y_array: TileDB array of the labels.
+    :param x_params: TileDB ArrayParams of the features.
+    :param y_params: TileDB ArrayParams of the labels.
     :param batch_size: Size of each batch.
     :param shuffle_buffer_size: Number of elements from which this dataset will sample.
     :param prefetch: Number of samples loaded in advance by each worker. Not applicable
         (and should not be given) when `num_workers` is 0.
-    :param x_attrs: Attribute and/or dimension names of the x_array to read. Defaults to
-        all attributes.
-    :param y_attrs: Attribute and/or dimension names of the y_array to read. Defaults to
-        all attributes.
-    :param x_key_dim: Name or index of the key dimension of x_array.
-    :param y_key_dim: Name or index of the key dimension of y_array.
     :param num_workers: how many subprocesses to use for data loading. 0 means that the
         data will be loaded in the main process. Note: when `num_workers` > 1
         yielded batches may be shuffled even if `shuffle_buffer_size` is zero.
     :param csr: For sparse 2D arrays, whether to return CSR tensors instead of COO.
     """
-    x_schema = _get_tensor_schema(x_array, x_key_dim, x_attrs)
-    y_schema = _get_tensor_schema(y_array, y_key_dim, y_attrs)
+    x_schema = _get_tensor_schema(x_params)
+    y_schema = _get_tensor_schema(y_params)
     if not x_schema.key_range.equal_values(y_schema.key_range):
         raise ValueError(
             f"X and Y arrays have different key range: {x_schema.key_range} != {y_schema.key_range}"
@@ -81,8 +72,8 @@ def PyTorchTileDBDataLoader(
         num_workers=num_workers,
         worker_init_fn=_worker_init,
         collate_fn=_CompositeCollator(
-            _get_tensor_collator(x_array, csr, len(x_schema.fields)),
-            _get_tensor_collator(y_array, csr, len(y_schema.fields)),
+            _get_tensor_collator(x_params.array, csr, len(x_schema.fields)),
+            _get_tensor_collator(y_params.array, csr, len(y_schema.fields)),
         ),
     )
 
@@ -127,17 +118,13 @@ def _worker_init(worker_id: int) -> None:
     dataset.key_range = key_ranges[worker_id]
 
 
-def _get_tensor_schema(
-    array: tiledb.Array,
-    key_dim: Union[int, str],
-    fields: Sequence[str],
-) -> TensorSchema:
-    if not array.schema.sparse:
-        return DenseTensorSchema(array, key_dim, fields)
-    elif array.ndim == 2:
-        return SparseTensorSchema(array, key_dim, fields, methodcaller("tocsr"))
+def _get_tensor_schema(array_params: ArrayParams) -> TensorSchema:
+    if not array_params.array.schema.sparse:
+        return DenseTensorSchema(array_params)
+    elif array_params.array.ndim == 2:
+        return SparseTensorSchema(array_params, methodcaller("tocsr"))
     else:
-        return SparseTensorSchema(array, key_dim, fields)
+        return SparseTensorSchema(array_params)
 
 
 _SingleCollator = Callable[[TensorLikeSequence], torch.Tensor]

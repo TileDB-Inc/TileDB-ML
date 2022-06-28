@@ -5,44 +5,33 @@ from typing import Sequence, Union
 import sparse
 import tensorflow as tf
 
-import tiledb
-
 from ._tensor_schema import DenseTensorSchema, SparseTensorSchema, TensorSchema
+from .types import ArrayParams
 
 
 def TensorflowTileDBDataset(
-    x_array: tiledb.Array,
-    y_array: tiledb.Array,
+    x_params: ArrayParams,
+    y_params: ArrayParams,
     *,
     batch_size: int,
     shuffle_buffer_size: int = 0,
     prefetch: int = tf.data.AUTOTUNE,
-    x_attrs: Sequence[str] = (),
-    y_attrs: Sequence[str] = (),
-    x_key_dim: Union[int, str] = 0,
-    y_key_dim: Union[int, str] = 0,
     num_workers: int = 0,
 ) -> tf.data.Dataset:
     """Return a tf.data.Dataset for loading data from TileDB arrays.
 
-    :param x_array: TileDB array of the features.
-    :param y_array: TileDB array of the labels.
+    :param x_params: TileDB ArrayParams of the features.
+    :param y_params: TileDB ArrayParams of the labels.
     :param batch_size: Size of each batch.
     :param shuffle_buffer_size: Number of elements from which this dataset will sample.
     :param prefetch: Maximum number of batches that will be buffered when prefetching.
         By default, the buffer size is dynamically tuned.
-    :param x_attrs: Attribute and/or dimension names of the x_array to read. Defaults to
-        all attributes.
-    :param y_attrs: Attribute and/or dimension names of the y_array to read. Defaults to
-        all attributes.
-    :param x_key_dim: Name or index of the key dimension of x_array.
-    :param y_key_dim: Name or index of the key dimension of y_array.
     :param num_workers: If greater than zero, create a threadpool of `num_workers` threads
         used to fetch inputs asynchronously and in parallel. Note: when `num_workers` > 1
         yielded batches may be shuffled even if `shuffle_buffer_size` is zero.
     """
-    x_schema = _get_tensor_schema(x_array, x_key_dim, x_attrs)
-    y_schema = _get_tensor_schema(y_array, y_key_dim, y_attrs)
+    x_schema = _get_tensor_schema(x_params)
+    y_schema = _get_tensor_schema(y_params)
     if not x_schema.key_range.equal_values(y_schema.key_range):
         raise ValueError(
             f"X and Y arrays have different key range: {x_schema.key_range} != {y_schema.key_range}"
@@ -91,15 +80,11 @@ def _get_tensor_specs(schema: TensorSchema) -> Union[TensorSpec, Sequence[Tensor
     return specs if len(specs) > 1 else specs[0]
 
 
-def _get_tensor_schema(
-    array: tiledb.Array,
-    key_dim: Union[int, str],
-    fields: Sequence[str],
-) -> TensorSchema:
-    if not array.schema.sparse:
-        return DenseTensorSchema(array, key_dim, fields)
+def _get_tensor_schema(array_params: ArrayParams) -> TensorSchema:
+    if not array_params.array.schema.sparse:
+        return DenseTensorSchema(array_params)
     else:
-        return SparseTensorSchema(array, key_dim, fields, _coo_to_sparse_tensor)
+        return SparseTensorSchema(array_params, _coo_to_sparse_tensor)
 
 
 def _coo_to_sparse_tensor(coo: sparse.COO) -> tf.SparseTensor:

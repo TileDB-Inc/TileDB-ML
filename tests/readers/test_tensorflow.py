@@ -5,6 +5,7 @@ import pytest
 import tensorflow as tf
 
 from tiledb.ml.readers.tensorflow import TensorflowTileDBDataset
+from tiledb.ml.readers.types import ArrayParams
 
 from .utils import ingest_in_tiledb, parametrize_for_dataset, validate_tensor_generator
 
@@ -32,12 +33,12 @@ class TestTensorflowTileDBDataset:
             tmpdir, y_shape, y_sparse, key_dim_dtype, y_key_dim, num_fields
         ) as y_kwargs:
             dataset = TensorflowTileDBDataset(
-                x_array=x_kwargs["array"],
-                y_array=y_kwargs["array"],
-                x_attrs=x_kwargs["fields"],
-                y_attrs=y_kwargs["fields"],
-                x_key_dim=x_kwargs["key_dim"],
-                y_key_dim=y_kwargs["key_dim"],
+                x_params=ArrayParams(
+                    x_kwargs["array"], x_kwargs["key_dim"], x_kwargs["fields"]
+                ),
+                y_params=ArrayParams(
+                    y_kwargs["array"], y_kwargs["key_dim"], y_kwargs["fields"]
+                ),
                 batch_size=batch_size,
                 shuffle_buffer_size=shuffle_buffer_size,
                 num_workers=num_workers,
@@ -74,12 +75,12 @@ class TestTensorflowTileDBDataset:
         ) as y_kwargs:
             with pytest.raises(ValueError) as ex:
                 TensorflowTileDBDataset(
-                    x_array=x_kwargs["array"],
-                    y_array=y_kwargs["array"],
-                    x_attrs=x_kwargs["fields"],
-                    y_attrs=y_kwargs["fields"],
-                    x_key_dim=x_kwargs["key_dim"],
-                    y_key_dim=y_kwargs["key_dim"],
+                    x_params=ArrayParams(
+                        x_kwargs["array"], x_kwargs["key_dim"], x_kwargs["fields"]
+                    ),
+                    y_params=ArrayParams(
+                        y_kwargs["array"], y_kwargs["key_dim"], y_kwargs["fields"]
+                    ),
                     batch_size=batch_size,
                     shuffle_buffer_size=shuffle_buffer_size,
                     num_workers=num_workers,
@@ -113,12 +114,12 @@ class TestTensorflowTileDBDataset:
             tmpdir, y_shape, y_sparse, key_dim_dtype, y_key_dim, num_fields
         ) as y_kwargs:
             dataset = TensorflowTileDBDataset(
-                x_array=x_kwargs["array"],
-                y_array=y_kwargs["array"],
-                x_attrs=x_kwargs["fields"],
-                y_attrs=y_kwargs["fields"],
-                x_key_dim=x_kwargs["key_dim"],
-                y_key_dim=y_kwargs["key_dim"],
+                x_params=ArrayParams(
+                    x_kwargs["array"], x_kwargs["key_dim"], x_kwargs["fields"]
+                ),
+                y_params=ArrayParams(
+                    y_kwargs["array"], y_kwargs["key_dim"], y_kwargs["fields"]
+                ),
                 batch_size=batch_size,
                 shuffle_buffer_size=shuffle_buffer_size,
                 num_workers=num_workers,

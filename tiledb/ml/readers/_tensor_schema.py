@@ -22,6 +22,7 @@ import sparse
 import tiledb
 
 from ._ranges import InclusiveRange
+from .types import ArrayParams
 
 Tensor = TypeVar("Tensor")
 
@@ -31,55 +32,18 @@ class TensorSchema(ABC):
     A class to encapsulate the information needed for mapping a TileDB array to tensors.
     """
 
-    def __init__(
-        self,
-        array: tiledb.Array,
-        key_dim: Union[int, str] = 0,
-        fields: Sequence[str] = (),
-        transform: Optional[Callable[[Tensor], Tensor]] = None,
-    ):
-        """Create a TensorSchema.
-
-        :param array: TileDB array to read from.
-        :param key_dim: Name or index of the key dimension. Defaults to the first dimension.
-        :param fields: Attribute and/or dimension names of the array to read. Defaults to
-            all attributes.
-        :param transform: Function to transform tensors.
-        """
-        all_attrs = [array.attr(i).name for i in range(array.nattr)]
-        all_dims = [array.dim(i).name for i in range(array.ndim)]
-        dims = []
-        if fields:
-            attrs = []
-            for field in fields:
-                if field in all_attrs:
-                    attrs.append(field)
-                elif field in all_dims:
-                    dims.append(field)
-                else:
-                    raise ValueError(f"Unknown attribute or dimension '{field}'")
-        else:
-            fields = attrs = all_attrs
-
-        ned = list(array.nonempty_domain())
-        key_dim_index = key_dim if isinstance(key_dim, int) else all_dims.index(key_dim)
-        if key_dim_index > 0:
-            # Swap key dimension to first position
-            all_dims[0], all_dims[key_dim_index] = all_dims[key_dim_index], all_dims[0]
-            ned[0], ned[key_dim_index] = ned[key_dim_index], ned[0]
-
-        self._array = array
-        self._key_dim_index = key_dim_index
-        self._ned = tuple(ned)
-        self._all_dims = tuple(all_dims)
-        self._fields = tuple(fields)
-        self._query_kwargs = {"attrs": tuple(attrs), "dims": tuple(dims)}
-        self._transform = transform
+    def __init__(self, array_params: ArrayParams):
+        self._array = array_params._tensor_schema_kwargs["array"]
+        self._fields = array_params._tensor_schema_kwargs["fields"]
+        self._key_dim_index = array_params._tensor_schema_kwargs["key_dim_index"]
+        self._ned = array_params._tensor_schema_kwargs["ned"]
+        self._all_dims = array_params._tensor_schema_kwargs["all_dims"]
+        self._query_kwargs = array_params._tensor_schema_kwargs["query_kwargs"]
 
     @property
     def fields(self) -> Sequence[str]:
         """Names of attributes and dimensions to read."""
-        return self._fields
+        return cast(Sequence[str], self._fields)
 
     @property
     def field_dtypes(self) -> Sequence[np.dtype]:
@@ -220,12 +184,10 @@ class SparseTensorSchema(TensorSchema):
 
     def __init__(
         self,
-        array: tiledb.Array,
-        key_dim: Union[int, str] = 0,
-        fields: Sequence[str] = (),
+        array_params: ArrayParams,
         transform: Optional[Callable[[Tensor], Tensor]] = None,
     ):
-        super().__init__(array, key_dim, fields, transform)
+        super().__init__(array_params)
         key_counter: Counter[Any] = Counter()
         key_dim = self._all_dims[0]
         query = self._array.query(dims=(key_dim,), attrs=(), return_incomplete=True)
@@ -233,6 +195,7 @@ class SparseTensorSchema(TensorSchema):
             key_counter.update(result[key_dim])
         self._key_range = InclusiveRange.factory(key_counter)
         self._query_kwargs["dims"] = self._all_dims
+        self._transform = transform
 
     @property
     def key_range(self) -> InclusiveRange[Any, int]:
