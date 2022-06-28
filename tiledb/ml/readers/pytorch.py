@@ -120,11 +120,11 @@ def _worker_init(worker_id: int) -> None:
 
 def _get_tensor_schema(array_params: ArrayParams) -> TensorSchema:
     if not array_params.array.schema.sparse:
-        return DenseTensorSchema(array_params)
+        return DenseTensorSchema.from_array_params(array_params)
     elif array_params.array.ndim == 2:
-        return SparseTensorSchema(array_params, methodcaller("tocsr"))
+        return SparseTensorSchema.from_array_params(array_params, methodcaller("tocsr"))
     else:
-        return SparseTensorSchema(array_params)
+        return SparseTensorSchema.from_array_params(array_params)
 
 
 _SingleCollator = Callable[[TensorLikeSequence], torch.Tensor]

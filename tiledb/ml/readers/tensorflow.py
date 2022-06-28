@@ -82,9 +82,9 @@ def _get_tensor_specs(schema: TensorSchema) -> Union[TensorSpec, Sequence[Tensor
 
 def _get_tensor_schema(array_params: ArrayParams) -> TensorSchema:
     if not array_params.array.schema.sparse:
-        return DenseTensorSchema(array_params)
+        return DenseTensorSchema.from_array_params(array_params)
     else:
-        return SparseTensorSchema(array_params, _coo_to_sparse_tensor)
+        return SparseTensorSchema.from_array_params(array_params, _coo_to_sparse_tensor)
 
 
 def _coo_to_sparse_tensor(coo: sparse.COO) -> tf.SparseTensor:
