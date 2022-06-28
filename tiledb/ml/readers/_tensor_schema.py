@@ -201,6 +201,10 @@ class SparseTensorSchema(TensorSchema):
     def key_range(self) -> InclusiveRange[Any, int]:
         return self._key_range
 
+    @property
+    def key_range(self) -> InclusiveRange[Any, int]:
+        return self._key_range
+
     def iter_tensors(
         self, key_ranges: Iterable[InclusiveRange[Any, int]]
     ) -> Union[Iterable[Tensor], Iterable[Sequence[Tensor]]]:
