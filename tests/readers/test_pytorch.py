@@ -36,12 +36,8 @@ class TestPyTorchTileDBDataLoader:
             tmpdir, y_shape, y_sparse, key_dim_dtype, y_key_dim, num_fields
         ) as y_kwargs:
             dataloader = PyTorchTileDBDataLoader(
-                x_params=ArrayParams(
-                    x_kwargs["array"], x_kwargs["key_dim"], x_kwargs["fields"]
-                ),
-                y_params=ArrayParams(
-                    y_kwargs["array"], y_kwargs["key_dim"], y_kwargs["fields"]
-                ),
+                ArrayParams(x_kwargs["array"], x_kwargs["key_dim"], x_kwargs["fields"]),
+                ArrayParams(y_kwargs["array"], y_kwargs["key_dim"], y_kwargs["fields"]),
                 batch_size=batch_size,
                 shuffle_buffer_size=shuffle_buffer_size,
                 num_workers=num_workers,
@@ -78,10 +74,10 @@ class TestPyTorchTileDBDataLoader:
         ) as y_kwargs:
             with pytest.raises(ValueError) as ex:
                 PyTorchTileDBDataLoader(
-                    x_params=ArrayParams(
+                    ArrayParams(
                         x_kwargs["array"], x_kwargs["key_dim"], x_kwargs["fields"]
                     ),
-                    y_params=ArrayParams(
+                    ArrayParams(
                         y_kwargs["array"], y_kwargs["key_dim"], y_kwargs["fields"]
                     ),
                     batch_size=batch_size,
@@ -119,12 +115,8 @@ class TestPyTorchTileDBDataLoader:
             tmpdir, y_shape, y_sparse, key_dim_dtype, y_key_dim, num_fields
         ) as y_kwargs:
             dataloader = PyTorchTileDBDataLoader(
-                x_params=ArrayParams(
-                    x_kwargs["array"], x_kwargs["key_dim"], x_kwargs["fields"]
-                ),
-                y_params=ArrayParams(
-                    y_kwargs["array"], y_kwargs["key_dim"], y_kwargs["fields"]
-                ),
+                ArrayParams(x_kwargs["array"], x_kwargs["key_dim"], x_kwargs["fields"]),
+                ArrayParams(y_kwargs["array"], y_kwargs["key_dim"], y_kwargs["fields"]),
                 batch_size=batch_size,
                 shuffle_buffer_size=shuffle_buffer_size,
                 num_workers=num_workers,
