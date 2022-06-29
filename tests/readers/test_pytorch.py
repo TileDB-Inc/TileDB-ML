@@ -84,7 +84,7 @@ class TestPyTorchTileDBDataLoader:
                     shuffle_buffer_size=shuffle_buffer_size,
                     num_workers=num_workers,
                 )
-            assert "X and Y arrays have different key range" in str(ex.value)
+            assert "All arrays must have the same key range" in str(ex.value)
 
     @parametrize_for_dataset(num_fields=[0], shuffle_buffer_size=[0], num_workers=[0])
     @pytest.mark.parametrize("csr", [True, False])
