@@ -10,9 +10,7 @@ from .types import ArrayParams
 
 
 def TensorflowTileDBDataset(
-    x_params: ArrayParams,
-    y_params: ArrayParams,
-    *,
+    *array_params: ArrayParams,
     batch_size: int,
     shuffle_buffer_size: int = 0,
     prefetch: int = tf.data.AUTOTUNE,
@@ -20,8 +18,7 @@ def TensorflowTileDBDataset(
 ) -> tf.data.Dataset:
     """Return a tf.data.Dataset for loading data from TileDB arrays.
 
-    :param x_params: TileDB ArrayParams of the features.
-    :param y_params: TileDB ArrayParams of the labels.
+    :param array_params: One or more `ArrayParams` instances, one per TileDB array.
     :param batch_size: Size of each batch.
     :param shuffle_buffer_size: Number of elements from which this dataset will sample.
     :param prefetch: Maximum number of batches that will be buffered when prefetching.
@@ -30,36 +27,30 @@ def TensorflowTileDBDataset(
         used to fetch inputs asynchronously and in parallel. Note: when `num_workers` > 1
         yielded batches may be shuffled even if `shuffle_buffer_size` is zero.
     """
-    x_schema = _get_tensor_schema(x_params)
-    y_schema = _get_tensor_schema(y_params)
-    if not x_schema.key_range.equal_values(y_schema.key_range):
-        raise ValueError(
-            f"X and Y arrays have different key range: {x_schema.key_range} != {y_schema.key_range}"
-        )
+    schemas = tuple(map(_get_tensor_schema, array_params))
+    key_range = schemas[0].key_range
+    if not all(key_range.equal_values(schema.key_range) for schema in schemas[1:]):
+        raise ValueError(f"All arrays must have the same key range: {key_range}")
 
-    x_max_weight = x_schema.max_partition_weight
-    y_max_weight = y_schema.max_partition_weight
-    key_ranges = list(x_schema.key_range.partition_by_count(num_workers or 1))
+    max_weights = tuple(schema.max_partition_weight for schema in schemas)
+    key_subranges = tuple(key_range.partition_by_count(num_workers or 1))
 
     def key_range_dataset(key_range_idx: int) -> tf.data.Dataset:
-        x_dataset = tf.data.Dataset.from_generator(
-            lambda i: x_schema.iter_tensors(
-                key_ranges[i].partition_by_weight(x_max_weight)
-            ),
-            args=(key_range_idx,),
-            output_signature=_get_tensor_specs(x_schema),
+        datasets = tuple(
+            tf.data.Dataset.from_generator(
+                lambda i, schema=schema, max_weight=max_weight: schema.iter_tensors(
+                    key_subranges[i].partition_by_weight(max_weight)
+                ),
+                args=(key_range_idx,),
+                output_signature=_get_tensor_specs(schema),
+            ).unbatch()
+            for schema, max_weight in zip(schemas, max_weights)
         )
-        y_dataset = tf.data.Dataset.from_generator(
-            lambda i: y_schema.iter_tensors(
-                key_ranges[i].partition_by_weight(y_max_weight)
-            ),
-            args=(key_range_idx,),
-            output_signature=_get_tensor_specs(y_schema),
-        )
-        return tf.data.Dataset.zip((x_dataset.unbatch(), y_dataset.unbatch()))
+        return tf.data.Dataset.zip(datasets) if len(datasets) > 1 else datasets[0]
 
     if num_workers:
-        dataset = tf.data.Dataset.from_tensor_slices(range(len(key_ranges))).interleave(
+        dataset = tf.data.Dataset.from_tensor_slices(range(len(key_subranges)))
+        dataset = dataset.interleave(
             key_range_dataset, num_parallel_calls=num_workers, deterministic=False
         )
     else:

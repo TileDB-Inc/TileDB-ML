@@ -9,6 +9,7 @@ import numpy as np
 import scipy.sparse
 import sparse
 import torch
+from torch.utils.data import DataLoader, IterableDataset, get_worker_info
 
 try:
     # torch>=1.10
@@ -22,29 +23,25 @@ import tiledb
 from ._tensor_schema import DenseTensorSchema, SparseTensorSchema, TensorSchema
 from .types import ArrayParams
 
-TensorLikeSequence = Union[
+Tensor = Union[np.ndarray, sparse.COO, scipy.sparse.csr_matrix]
+TensorSequence = Union[
     Sequence[np.ndarray], Sequence[sparse.COO], Sequence[scipy.sparse.csr_matrix]
 ]
-TensorLikeOrSequence = Union[
-    np.ndarray, sparse.COO, scipy.sparse.csr_matrix, TensorLikeSequence
-]
-XY = Tuple[TensorLikeOrSequence, TensorLikeOrSequence]
+TensorOrSequence = Union[Tensor, TensorSequence]
+OneOrMoreTensorsOrSequences = Union[TensorOrSequence, Tuple[TensorOrSequence, ...]]
 
 
 def PyTorchTileDBDataLoader(
-    x_params: ArrayParams,
-    y_params: ArrayParams,
-    *,
+    *array_params: ArrayParams,
     batch_size: int,
     shuffle_buffer_size: int = 0,
     prefetch: int = 2,
     num_workers: int = 0,
     csr: bool = True,
-) -> torch.utils.data.DataLoader:
+) -> DataLoader:
     """Return a DataLoader for loading data from TileDB arrays.
 
-    :param x_params: TileDB ArrayParams of the features.
-    :param y_params: TileDB ArrayParams of the labels.
+    :param array_params: One or more `ArrayParams` instances, one per TileDB array.
     :param batch_size: Size of each batch.
     :param shuffle_buffer_size: Number of elements from which this dataset will sample.
     :param prefetch: Number of samples loaded in advance by each worker. Not applicable
@@ -54,55 +51,45 @@ def PyTorchTileDBDataLoader(
         yielded batches may be shuffled even if `shuffle_buffer_size` is zero.
     :param csr: For sparse 2D arrays, whether to return CSR tensors instead of COO.
     """
-    x_schema = _get_tensor_schema(x_params)
-    y_schema = _get_tensor_schema(y_params)
-    if not x_schema.key_range.equal_values(y_schema.key_range):
-        raise ValueError(
-            f"X and Y arrays have different key range: {x_schema.key_range} != {y_schema.key_range}"
-        )
+    schemas = tuple(map(_get_tensor_schema, array_params))
+    collators = tuple(
+        _get_tensor_collator(params.array, csr, len(schema.fields))
+        for params, schema in zip(array_params, schemas)
+    )
+    collate_fn = _CompositeCollator(*collators) if len(collators) > 1 else collators[0]
 
-    return torch.utils.data.DataLoader(
-        dataset=_PyTorchTileDBDataset(
-            x_schema=x_schema,
-            y_schema=y_schema,
-            shuffle_buffer_size=shuffle_buffer_size,
-        ),
+    return DataLoader(
+        dataset=_PyTorchTileDBDataset(schemas, shuffle_buffer_size=shuffle_buffer_size),
         batch_size=batch_size,
         prefetch_factor=prefetch,
         num_workers=num_workers,
         worker_init_fn=_worker_init,
-        collate_fn=_CompositeCollator(
-            _get_tensor_collator(x_params.array, csr, len(x_schema.fields)),
-            _get_tensor_collator(y_params.array, csr, len(y_schema.fields)),
-        ),
+        collate_fn=collate_fn,
     )
 
 
-class _PyTorchTileDBDataset(torch.utils.data.IterableDataset[XY]):
-    def __init__(
-        self,
-        x_schema: TensorSchema,
-        y_schema: TensorSchema,
-        shuffle_buffer_size: int = 0,
-    ):
+class _PyTorchTileDBDataset(IterableDataset[OneOrMoreTensorsOrSequences]):
+    def __init__(self, schemas: Sequence[TensorSchema], shuffle_buffer_size: int = 0):
         super().__init__()
-        self.x_schema = x_schema
-        self.y_schema = y_schema
-        self.key_range = x_schema.key_range
+        key_range = schemas[0].key_range
+        if not all(key_range.equal_values(schema.key_range) for schema in schemas[1:]):
+            raise ValueError(f"All arrays must have the same key range: {key_range}")
+        self.schemas = schemas
+        self.key_range = key_range
         self._shuffle_buffer_size = shuffle_buffer_size
 
-    def __iter__(self) -> Iterator[XY]:
-        rows: Iterator[XY] = zip(
-            self._iter_rows(self.x_schema), self._iter_rows(self.y_schema)
-        )
+    def __iter__(self) -> Iterator[OneOrMoreTensorsOrSequences]:
+        rows: Iterator[OneOrMoreTensorsOrSequences]
+        it_rows = tuple(map(self._iter_rows, self.schemas))
+        rows = zip(*it_rows) if len(it_rows) > 1 else it_rows[0]
         if self._shuffle_buffer_size > 0:
             rows = _iter_shuffled(rows, self._shuffle_buffer_size)
         return rows
 
-    def _iter_rows(self, schema: TensorSchema) -> Iterator[TensorLikeOrSequence]:
+    def _iter_rows(self, schema: TensorSchema) -> Iterator[TensorOrSequence]:
         max_weight = schema.max_partition_weight
         key_subranges = self.key_range.partition_by_weight(max_weight)
-        batches: Iterable[TensorLikeOrSequence] = schema.iter_tensors(key_subranges)
+        batches: Iterable[TensorOrSequence] = schema.iter_tensors(key_subranges)
         if len(schema.fields) == 1:
             return (tensor for batch in batches for tensor in batch)
         else:
@@ -110,9 +97,9 @@ class _PyTorchTileDBDataset(torch.utils.data.IterableDataset[XY]):
 
 
 def _worker_init(worker_id: int) -> None:
-    worker_info = torch.utils.data.get_worker_info()
+    worker_info = get_worker_info()
     dataset = worker_info.dataset
-    if dataset.x_schema.sparse or dataset.y_schema.sparse:
+    if any(schema.sparse for schema in dataset.schemas):
         raise NotImplementedError("https://github.com/pytorch/pytorch/issues/20248")
     key_ranges = list(dataset.key_range.partition_by_count(worker_info.num_workers))
     dataset.key_range = key_ranges[worker_id]
@@ -127,7 +114,7 @@ def _get_tensor_schema(array_params: ArrayParams) -> TensorSchema:
         return SparseTensorSchema.from_array_params(array_params)
 
 
-_SingleCollator = Callable[[TensorLikeSequence], torch.Tensor]
+_SingleCollator = Callable[[TensorSequence], torch.Tensor]
 
 
 class _CompositeCollator:
@@ -139,7 +126,7 @@ class _CompositeCollator:
     def __init__(self, *collators: _SingleCollator):
         self._collators = collators
 
-    def __call__(self, rows: Sequence[TensorLikeSequence]) -> Sequence[torch.Tensor]:
+    def __call__(self, rows: Sequence[TensorSequence]) -> Sequence[torch.Tensor]:
         columns = tuple(zip(*rows))
         collators = self._collators
         assert len(columns) == len(collators)
