@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections import Counter
+from dataclasses import dataclass
 from math import ceil
 from operator import itemgetter
 from typing import (
@@ -11,6 +12,7 @@ from typing import (
     Iterable,
     Optional,
     Sequence,
+    Tuple,
     TypeVar,
     Union,
     cast,
@@ -27,23 +29,33 @@ from .types import ArrayParams
 Tensor = TypeVar("Tensor")
 
 
+@dataclass(frozen=True)  # type: ignore
 class TensorSchema(ABC):
     """
     A class to encapsulate the information needed for mapping a TileDB array to tensors.
     """
 
-    def __init__(self, array_params: ArrayParams):
-        self._array = array_params._tensor_schema_kwargs["array"]
-        self._fields = array_params._tensor_schema_kwargs["fields"]
-        self._key_dim_index = array_params._tensor_schema_kwargs["key_dim_index"]
-        self._ned = array_params._tensor_schema_kwargs["ned"]
-        self._all_dims = array_params._tensor_schema_kwargs["all_dims"]
-        self._query_kwargs = array_params._tensor_schema_kwargs["query_kwargs"]
+    _array: tiledb.Array
+    _key_dim_index: int
+    _fields: Sequence[str]
+    _all_dims: Sequence[str]
+    _ned: Sequence[Tuple[Any, Any]]
+    _query_kwargs: Dict[str, Any]
+    _transform: Optional[Callable[[Tensor], Tensor]]
+
+    @classmethod
+    def from_array_params(
+        cls,
+        array_params: ArrayParams,
+        transform: Optional[Callable[[Tensor], Tensor]] = None,
+    ) -> TensorSchema:
+        kwargs = {"_" + k: v for k, v in array_params._tensor_schema_kwargs.items()}
+        return cls(_transform=transform, **kwargs)
 
     @property
     def fields(self) -> Sequence[str]:
         """Names of attributes and dimensions to read."""
-        return cast(Sequence[str], self._fields)
+        return self._fields
 
     @property
     def field_dtypes(self) -> Sequence[np.dtype]:
@@ -182,20 +194,15 @@ class DenseTensorSchema(TensorSchema):
 class SparseTensorSchema(TensorSchema):
     sparse = True
 
-    def __init__(
-        self,
-        array_params: ArrayParams,
-        transform: Optional[Callable[[Tensor], Tensor]] = None,
-    ):
-        super().__init__(array_params)
+    def __init__(self, **kwargs: Any):
+        super().__init__(**kwargs)
+        self._query_kwargs["dims"] = self._all_dims
         key_counter: Counter[Any] = Counter()
         key_dim = self._all_dims[0]
         query = self._array.query(dims=(key_dim,), attrs=(), return_incomplete=True)
         for result in query.multi_index[:]:
             key_counter.update(result[key_dim])
         self._key_range = InclusiveRange.factory(key_counter)
-        self._query_kwargs["dims"] = self._all_dims
-        self._transform = transform
 
     @property
     def key_range(self) -> InclusiveRange[Any, int]:
