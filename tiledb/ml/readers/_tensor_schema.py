@@ -23,8 +23,8 @@ import sparse
 
 import tiledb
 
+from . import ArrayParams
 from ._ranges import InclusiveRange
-from .types import ArrayParams
 
 Tensor = TypeVar("Tensor")
 
