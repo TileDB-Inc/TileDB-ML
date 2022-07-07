@@ -20,8 +20,8 @@ except AttributeError:
 
 import tiledb
 
-from . import ArrayParams
 from ._tensor_schema import DenseTensorSchema, SparseTensorSchema, TensorSchema
+from .types import ArrayParams
 
 Tensor = Union[np.ndarray, sparse.COO, scipy.sparse.csr_matrix]
 TensorSequence = Union[

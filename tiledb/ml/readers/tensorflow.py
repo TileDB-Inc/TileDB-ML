@@ -5,8 +5,8 @@ from typing import Sequence, Union
 import sparse
 import tensorflow as tf
 
-from . import ArrayParams
 from ._tensor_schema import DenseTensorSchema, SparseTensorSchema, TensorSchema
+from .types import ArrayParams
 
 
 def TensorflowTileDBDataset(
