@@ -4,8 +4,7 @@ import numpy as np
 import pytest
 import torch
 
-from tiledb.ml.readers import ArrayParams
-from tiledb.ml.readers.pytorch import PyTorchTileDBDataLoader
+from tiledb.ml.readers.pytorch import ArrayParams, PyTorchTileDBDataLoader
 
 from .utils import ingest_in_tiledb, parametrize_for_dataset, validate_tensor_generator
 
