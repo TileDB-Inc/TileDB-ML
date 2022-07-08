@@ -53,9 +53,9 @@ class TensorSchema(ABC):
         return cls(_transform=transform, **kwargs)
 
     @property
-    def fields(self) -> Sequence[str]:
-        """Names of attributes and dimensions to read."""
-        return self._fields
+    def num_fields(self) -> int:
+        """Number of attributes and dimensions to read."""
+        return len(self._fields)
 
     @property
     def field_dtypes(self) -> Sequence[np.dtype]:
@@ -77,17 +77,12 @@ class TensorSchema(ABC):
                 shape.append(stop - start + 1)
             else:
                 raise ValueError("Shape not defined for non-integer domain")
-        return shape
+        return tuple(shape)
 
     @property
     def query(self) -> KeyDimQuery:
         """A sliceable object for querying the TileDB array along the key dimension"""
         return KeyDimQuery(self._array, self._key_dim_index, **self._query_kwargs)
-
-    @property
-    @abstractmethod
-    def sparse(self) -> bool:
-        """Whether the underlying TileDB array is sparse"""
 
     @property
     @abstractmethod
@@ -121,7 +116,7 @@ class TensorSchema(ABC):
         Generate batches of dense or sparse tensors.
 
         Each yielded batch is either:
-        - a sequence of N tensors if N > 1, where `N == len(self.fields)`, or
+        - a sequence of N tensors if N > 1, where `N == self.num_fields`, or
         - a single tensor if N == 1.
         where each tensor has shape `(len(key_range), *self.shape[1:])`.
 
@@ -130,8 +125,6 @@ class TensorSchema(ABC):
 
 
 class DenseTensorSchema(TensorSchema):
-    sparse = False
-
     @property
     def key_range(self) -> InclusiveRange[int, int]:
         key_dim_min, key_dim_max = self._ned[0]
@@ -143,7 +136,7 @@ class DenseTensorSchema(TensorSchema):
         """
         Generate batches of Numpy arrays.
 
-        If `key_dim_index > 0`, the generated arrays will ve reshaped so that the key_dim
+        If `key_dim_index > 0`, the generated arrays will be reshaped so that the key_dim
         axes is first. For example, if the TileDB array `a` has shape (5, 12, 20) and
         `key_dim_index == 1`, then `a[:, 4:8, :]` returns arrays of shape (5, 4, 20) but
         this method yields arrays of shape (4, 5, 20).
@@ -192,8 +185,6 @@ class DenseTensorSchema(TensorSchema):
 
 
 class SparseTensorSchema(TensorSchema):
-    sparse = True
-
     def __init__(self, **kwargs: Any):
         super().__init__(**kwargs)
         self._query_kwargs["dims"] = self._all_dims
