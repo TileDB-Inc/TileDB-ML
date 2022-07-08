@@ -86,11 +86,6 @@ class TensorSchema(ABC):
 
     @property
     @abstractmethod
-    def sparse(self) -> bool:
-        """Whether the underlying TileDB array is sparse"""
-
-    @property
-    @abstractmethod
     def key_range(self) -> InclusiveRange[Any, int]:
         """Inclusive range of the key dimension.
 
@@ -130,8 +125,6 @@ class TensorSchema(ABC):
 
 
 class DenseTensorSchema(TensorSchema):
-    sparse = False
-
     @property
     def key_range(self) -> InclusiveRange[int, int]:
         key_dim_min, key_dim_max = self._ned[0]
@@ -192,7 +185,6 @@ class DenseTensorSchema(TensorSchema):
 
 
 class SparseTensorSchema(TensorSchema):
-    sparse = True
 
     def __init__(self, **kwargs: Any):
         super().__init__(**kwargs)

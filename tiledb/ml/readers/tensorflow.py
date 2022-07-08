@@ -65,7 +65,9 @@ TensorSpec = Union[tf.TensorSpec, tf.SparseTensorSpec]
 
 
 def _get_tensor_specs(schema: TensorSchema) -> Union[TensorSpec, Sequence[TensorSpec]]:
-    cls = tf.SparseTensorSpec if schema.sparse else tf.TensorSpec
+    cls = (
+        tf.SparseTensorSpec if isinstance(schema, SparseTensorSchema) else tf.TensorSpec
+    )
     shape = (None, *schema.shape[1:])
     specs = tuple(cls(shape=shape, dtype=dtype) for dtype in schema.field_dtypes)
     return specs if len(specs) > 1 else specs[0]

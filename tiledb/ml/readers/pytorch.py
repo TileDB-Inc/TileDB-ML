@@ -18,8 +18,6 @@ except AttributeError:
     # torch=1.9
     sparse_csr_tensor = torch._sparse_csr_tensor
 
-import tiledb
-
 from ._tensor_schema import DenseTensorSchema, SparseTensorSchema, TensorSchema
 from .types import ArrayParams
 
@@ -52,10 +50,7 @@ def PyTorchTileDBDataLoader(
     :param csr: For sparse 2D arrays, whether to return CSR tensors instead of COO.
     """
     schemas = tuple(map(_get_tensor_schema, array_params))
-    collators = tuple(
-        _get_tensor_collator(params.array, csr, len(schema.fields))
-        for params, schema in zip(array_params, schemas)
-    )
+    collators = tuple(_get_tensor_collator(schema, csr) for schema in schemas)
     collate_fn = _CompositeCollator(*collators) if len(collators) > 1 else collators[0]
 
     return DataLoader(
@@ -99,7 +94,7 @@ class _PyTorchTileDBDataset(IterableDataset[OneOrMoreTensorsOrSequences]):
 def _worker_init(worker_id: int) -> None:
     worker_info = get_worker_info()
     dataset = worker_info.dataset
-    if any(schema.sparse for schema in dataset.schemas):
+    if any(isinstance(schema, SparseTensorSchema) for schema in dataset.schemas):
         raise NotImplementedError("https://github.com/pytorch/pytorch/issues/20248")
     key_ranges = list(dataset.key_range.partition_by_count(worker_info.num_workers))
     dataset.key_range = key_ranges[worker_id]
@@ -166,17 +161,18 @@ def _csr_collate(arrays: Sequence[scipy.sparse.csr_matrix]) -> torch.Tensor:
 
 
 def _get_tensor_collator(
-    array: tiledb.Array, csr: bool, num_fields: int
+    schema: TensorSchema, csr: bool
 ) -> Union[_SingleCollator, _CompositeCollator]:
-    if not array.schema.sparse:
+    if not isinstance(schema, SparseTensorSchema):
         collator = _ndarray_collate
-    elif array.ndim != 2:
+    elif len(schema.shape) != 2:
         collator = _sparse_coo_collate
     elif csr:
         collator = _csr_collate
     else:
         collator = _csr_to_coo_collate
 
+    num_fields = len(schema.fields)
     if num_fields == 1:
         return collator
     else:
