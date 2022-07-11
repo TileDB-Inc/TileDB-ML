@@ -85,6 +85,11 @@ class TensorSchema(ABC):
         return KeyDimQuery(self._array, self._key_dim_index, **self._query_kwargs)
 
     @property
+    def key_dim(self) -> str:
+        """Key dimension of the array."""
+        return self._all_dims[0]
+
+    @property
     @abstractmethod
     def key_range(self) -> InclusiveRange[Any, int]:
         """Inclusive range of the key dimension.
@@ -188,16 +193,20 @@ class SparseTensorSchema(TensorSchema):
     def __init__(self, **kwargs: Any):
         super().__init__(**kwargs)
         self._query_kwargs["dims"] = self._all_dims
-        key_counter: Counter[Any] = Counter()
-        key_dim = self._all_dims[0]
-        query = self._array.query(dims=(key_dim,), attrs=(), return_incomplete=True)
-        for result in query.multi_index[:]:
-            key_counter.update(result[key_dim])
-        self._key_range = InclusiveRange.factory(key_counter)
 
     @property
     def key_range(self) -> InclusiveRange[Any, int]:
-        return self._key_range
+        self._key_range: InclusiveRange[Any, int]
+        try:
+            return self._key_range
+        except AttributeError:
+            key_counter: Counter[Any] = Counter()
+            key_dim = self.key_dim
+            query = self._array.query(dims=(key_dim,), attrs=(), return_incomplete=True)
+            for result in query.multi_index[:]:
+                key_counter.update(result[key_dim])
+            self._key_range = InclusiveRange.factory(key_counter)
+            return self._key_range
 
     def iter_tensors(
         self, key_ranges: Iterable[InclusiveRange[Any, int]]
