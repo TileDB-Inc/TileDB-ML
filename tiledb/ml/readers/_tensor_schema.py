@@ -77,12 +77,16 @@ class TensorSchema(ABC):
                 shape.append(stop - start + 1)
             else:
                 raise ValueError("Shape not defined for non-integer domain")
-        return shape
+        return tuple(shape)
 
     @property
     def query(self) -> KeyDimQuery:
         """A sliceable object for querying the TileDB array along the key dimension"""
         return KeyDimQuery(self._array, self._key_dim_index, **self._query_kwargs)
+
+    @property
+    def key_dim(self) -> str:
+        return self._all_dims[0]
 
     @property
     @abstractmethod
@@ -136,7 +140,7 @@ class DenseTensorSchema(TensorSchema):
         """
         Generate batches of Numpy arrays.
 
-        If `key_dim_index > 0`, the generated arrays will ve reshaped so that the key_dim
+        If `key_dim_index > 0`, the generated arrays will be reshaped so that the key_dim
         axes is first. For example, if the TileDB array `a` has shape (5, 12, 20) and
         `key_dim_index == 1`, then `a[:, 4:8, :]` returns arrays of shape (5, 4, 20) but
         this method yields arrays of shape (4, 5, 20).
@@ -185,20 +189,24 @@ class DenseTensorSchema(TensorSchema):
 
 
 class SparseTensorSchema(TensorSchema):
+    _key_range: InclusiveRange[Any, int]
 
     def __init__(self, **kwargs: Any):
         super().__init__(**kwargs)
         self._query_kwargs["dims"] = self._all_dims
-        key_counter: Counter[Any] = Counter()
-        key_dim = self._all_dims[0]
-        query = self._array.query(dims=(key_dim,), attrs=(), return_incomplete=True)
-        for result in query.multi_index[:]:
-            key_counter.update(result[key_dim])
-        self._key_range = InclusiveRange.factory(key_counter)
 
     @property
     def key_range(self) -> InclusiveRange[Any, int]:
-        return self._key_range
+        try:
+            return self._key_range
+        except AttributeError:
+            key_counter: Counter[Any] = Counter()
+            key_dim = self.key_dim
+            query = self._array.query(dims=(key_dim,), attrs=(), return_incomplete=True)
+            for result in query.multi_index[:]:
+                key_counter.update(result[key_dim])
+            self._key_range = InclusiveRange.factory(key_counter)
+            return self._key_range
 
     def iter_tensors(
         self, key_ranges: Iterable[InclusiveRange[Any, int]]
