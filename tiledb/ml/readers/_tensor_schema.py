@@ -247,12 +247,27 @@ class SparseTensorSchema(TensorSchema):
         except KeyError:
             memory_budget = 10 * 1024**2
 
-        # The memory budget should be large enough to read the cells of the largest field
-        bytes_per_cell = max(
-            self._array.schema.attr_or_dim_dtype(field).itemsize
-            for field in self._query_kwargs["dims"] + self._query_kwargs["attrs"]
-        )
-        return max(1, memory_budget // int(bytes_per_cell))
+        # Determine the bytes per (non-empty) cell for each field.
+        # - For fixed size fields, this is just the `dtype.itemsize` of the field.
+        # - For variable size fields, the best we can do is to estimate the average bytes
+        #   size. We also need to take into account the (fixed) offset buffer size per
+        #   cell (=8 bytes).
+        offset_itemsize = np.dtype(np.uint64).itemsize
+        attr_or_dim_dtype = self._array.schema.attr_or_dim_dtype
+        query = self._array.query(return_incomplete=True, **self._query_kwargs)
+        est_sizes = query.multi_index[:].estimated_result_sizes()
+        bytes_per_cell = []
+        for field, est_result_size in est_sizes.items():
+            if est_result_size.offsets_bytes == 0:
+                bytes_per_cell.append(attr_or_dim_dtype(field).itemsize)
+            else:
+                num_cells = est_result_size.offsets_bytes / offset_itemsize
+                avg_itemsize = est_result_size.data_bytes / num_cells
+                bytes_per_cell.append(max(avg_itemsize, offset_itemsize))
+
+        # Finally, the number of cells that can fit in the memory_budget depends on the
+        # maximum bytes_per_cell
+        return max(1, memory_budget // ceil(max(bytes_per_cell)))
 
 
 class KeyDimQuery:

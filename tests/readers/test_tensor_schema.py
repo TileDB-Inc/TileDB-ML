@@ -71,7 +71,8 @@ def sparse_uri(tmp_path_factory, non_zero_per_row=3):
         d2 = np.random.uniform(domains[2][0], domains[2][1], num_cells)
         d3_days = (domains[3][1] - domains[3][0]).astype(int)
         d3 = domains[3][0] + np.random.randint(0, d3_days, num_cells)
-        d4 = np.random.choice(list(string.ascii_lowercase), num_cells)
+        # TODO: increase 8 to something larger after sh-19349 is fixed
+        d4 = np.random.choice([c * 8 for c in string.ascii_lowercase], num_cells)
         a[d0, d1, d2, d3, d4] = {
             "af8": np.random.rand(num_cells),
             "af4": np.random.rand(num_cells).astype(np.float32),
