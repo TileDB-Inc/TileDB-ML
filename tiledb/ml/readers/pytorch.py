@@ -50,12 +50,22 @@ def PyTorchTileDBDataLoader(
     """Return a DataLoader for loading data from TileDB arrays.
 
     :param array_params: One or more `ArrayParams` instances, one per TileDB array.
-    :param dataloader_params: Dictionary. Should contain all parameters for PyTorch Dataloader. At the moment TileDB-ML
-        supports the following PyTorch Dataloader arguments:
-            prefetch: Number of samples loaded in advance by each worker. Not applicable (and should not be given) when
-            `num_workers` is 0.
-            num_workers: how many subprocesses to use for data loading. 0 means that the data will be loaded in the main
+    :param dataloader_params: Should contain all parameters for PyTorch Dataloader. At the moment TileDB-ML can support
+        ONLY the following PyTorch Dataloader arguments:
+            batch_size: How many samples per batch to load (default: ``1``).
+            prefetch_factor: Number of batches loaded in advance by each worker. Not applicable (and should not be
+            given) when `num_workers` is 0.
+            num_workers: How many subprocesses to use for data loading. 0 means that the data will be loaded in the main
             process. Note: when `num_workers` > 1 yielded batches may be shuffled even if `shuffle_buffer_size` is zero.
+            persistent_workers: If ``True``, the data loader will not shutdown the worker processes after a dataset has
+            been consumed once. This allows to maintain the workers `Dataset` instances alive. (default: ``False``)
+            timeout: if positive, the timeout value for collecting a batch from workers. Should always be non-negative.
+            (default: ``0``)
+            drop_last: Set to ``True`` to drop the last incomplete batch, if the dataset size is not divisible by the
+            batch size. If ``False`` and the size of dataset is not divisible by the batch size, then the last batch
+            will be smaller. (default: ``False``)
+        Moreover, TileDB-ML internally implements 'worker_init_fn' and 'collate_fn', i.e., users should not pass these
+        arguments for PyTorch Dataloader.
     :param shuffle_buffer_size: Number of elements from which this dataset will sample.
     :param csr: For sparse 2D arrays, whether to return CSR tensors instead of COO.
     """
