@@ -1,9 +1,7 @@
 from dataclasses import dataclass, field
-from typing import Any, Mapping, Sequence, TypeVar, Union
+from typing import Any, Mapping, Sequence, Union
 
 import tiledb
-
-Tensor = TypeVar("Tensor")
 
 
 @dataclass(frozen=True)
@@ -11,7 +9,7 @@ class ArrayParams:
     array: tiledb.Array
     key_dim: Union[int, str] = 0
     fields: Sequence[str] = ()
-    _tensor_schema_kwargs: Mapping[str, Any] = field(init=False, repr=False)
+    tensor_schema_kwargs: Mapping[str, Any] = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         all_attrs = [self.array.attr(i).name for i in range(self.array.nattr)]
@@ -42,15 +40,12 @@ class ArrayParams:
             all_dims[0], all_dims[key_dim_index] = all_dims[key_dim_index], all_dims[0]
             ned[0], ned[key_dim_index] = ned[key_dim_index], ned[0]
 
-        object.__setattr__(
-            self,
-            "_tensor_schema_kwargs",
-            dict(
-                array=self.array,
-                fields=tuple(final_fields),
-                key_dim_index=key_dim_index,
-                ned=tuple(ned),
-                all_dims=tuple(all_dims),
-                query_kwargs={"attrs": tuple(attrs), "dims": tuple(dims)},
-            ),
+        tensor_schema_kwargs = dict(
+            _array=self.array,
+            _key_dim_index=key_dim_index,
+            _fields=tuple(final_fields),
+            _all_dims=tuple(all_dims),
+            _ned=tuple(ned),
+            _query_kwargs={"attrs": tuple(attrs), "dims": tuple(dims)},
         )
+        object.__setattr__(self, "tensor_schema_kwargs", tensor_schema_kwargs)
