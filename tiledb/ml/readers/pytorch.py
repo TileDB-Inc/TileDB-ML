@@ -35,14 +35,12 @@ OneOrMoreTensorsOrSequences = Union[TensorOrSequence, Tuple[TensorOrSequence, ..
 def PyTorchTileDBDataLoader(
     *array_params: ArrayParams,
     shuffle_buffer_size: int = 0,
-    csr: bool = True,
     **kwargs: Dict[str, Any],
 ) -> DataLoader:
     """Return a DataLoader for loading data from TileDB arrays.
 
     :param array_params: One or more `ArrayParams` instances, one per TileDB array.
     :param shuffle_buffer_size: Number of elements from which this dataset will sample.
-    :param csr: For sparse 2D arrays, whether to return CSR tensors instead of COO.
     **kwargs: Should contain all parameters for PyTorch Dataloader. At the moment TileDB-ML can support ONLY the
     following PyTorch Dataloader arguments:
         batch_size: How many samples per batch to load (default: ``1``).
@@ -62,7 +60,7 @@ def PyTorchTileDBDataLoader(
     the following arguments: 'shuffle', 'sampler', 'batch_sampler', 'worker_init_fn' and 'collate_fn'.
     """
     schemas = tuple(map(_get_tensor_schema, array_params))
-    collators = tuple(_get_tensor_collator(schema, csr) for schema in schemas)
+    collators = tuple(map(_get_tensor_collator, schemas))
     collate_fn = _CompositeCollator(*collators) if len(collators) > 1 else collators[0]
 
     return DataLoader(
@@ -152,14 +150,7 @@ def _sparse_coo_collate(arrays: Sequence[sparse.COO]) -> torch.Tensor:
     return torch.sparse_coo_tensor(stacked.coords, stacked.data, stacked.shape)
 
 
-def _csr_to_coo_collate(arrays: Sequence[scipy.sparse.csr_matrix]) -> torch.Tensor:
-    """Collate multiple Scipy CSR matrices to a torch.Tensor with sparse_coo layout."""
-    stacked = scipy.sparse.vstack(arrays).tocoo()
-    coords = np.stack((stacked.row, stacked.col))
-    return torch.sparse_coo_tensor(coords, stacked.data, stacked.shape)
-
-
-def _csr_collate(arrays: Sequence[scipy.sparse.csr_matrix]) -> torch.Tensor:
+def _sparse_csr_collate(arrays: Sequence[scipy.sparse.csr_matrix]) -> torch.Tensor:
     """Collate multiple Scipy CSR matrices to a torch.Tensor with sparse_csr layout."""
     stacked = scipy.sparse.vstack(arrays)
     return torch.sparse_csr_tensor(
@@ -171,16 +162,14 @@ def _csr_collate(arrays: Sequence[scipy.sparse.csr_matrix]) -> torch.Tensor:
 
 
 def _get_tensor_collator(
-    schema: TensorSchema, csr: bool
+    schema: TensorSchema,
 ) -> Union[_SingleCollator, _CompositeCollator]:
     if not isinstance(schema, SparseTensorSchema):
         collator = _ndarray_collate
     elif len(schema.shape) != 2:
         collator = _sparse_coo_collate
-    elif csr:
-        collator = _csr_collate
     else:
-        collator = _csr_to_coo_collate
+        collator = _sparse_csr_collate
 
     num_fields = schema.num_fields
     if num_fields == 1:
