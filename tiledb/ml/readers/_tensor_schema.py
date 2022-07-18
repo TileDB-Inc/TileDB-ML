@@ -9,6 +9,7 @@ from typing import (
     Any,
     Callable,
     Dict,
+    Generic,
     Iterable,
     Optional,
     Sequence,
@@ -20,6 +21,7 @@ from typing import (
 
 import numpy as np
 import sparse
+import wrapt
 
 import tiledb
 
@@ -41,7 +43,6 @@ class TensorSchema(ABC):
     _all_dims: Sequence[str]
     _ned: Sequence[Tuple[Any, Any]]
     _query_kwargs: Dict[str, Any]
-    _transform: Optional[Callable[[Tensor], Tensor]]
 
     @classmethod
     def from_array_params(
@@ -50,7 +51,10 @@ class TensorSchema(ABC):
         transform: Optional[Callable[[Tensor], Tensor]] = None,
     ) -> TensorSchema:
         kwargs = {"_" + k: v for k, v in array_params._tensor_schema_kwargs.items()}
-        return cls(_transform=transform, **kwargs)
+        tensor_schema = cls(**kwargs)
+        if transform is not None:
+            tensor_schema = MappedTensorSchema(tensor_schema, transform)
+        return tensor_schema
 
     @property
     def num_fields(self) -> int:
@@ -127,6 +131,38 @@ class TensorSchema(ABC):
 
         :param key_ranges: Inclusive ranges along the key dimension.
         """
+
+
+MappedTensor = TypeVar("MappedTensor")
+
+
+class MappedTensorSchema(wrapt.ObjectProxy, Generic[Tensor, MappedTensor]):
+    """
+    Proxy class that wraps a TensorSchema and applies a mapping function to each tensor
+    yielded by `iter_tensors`.
+    """
+
+    def __init__(
+        self,
+        wrapped: TensorSchema,
+        map_tensor: Callable[[Tensor], MappedTensor],
+    ):
+        super().__init__(wrapped)
+
+        def map_tensors(tensors: Sequence[Tensor]) -> Sequence[MappedTensor]:
+            return tuple(map(map_tensor, tensors))
+
+        self._self_map_tensor = map_tensor
+        self._self_map_tensors = map_tensors
+
+    def iter_tensors(
+        self, key_ranges: Iterable[InclusiveRange[Any, int]]
+    ) -> Union[Iterable[MappedTensor], Iterable[Sequence[MappedTensor]]]:
+        wrapped_iter_tensors = self.__wrapped__.iter_tensors(key_ranges)
+        if self.num_fields == 1:
+            return map(self._self_map_tensor, wrapped_iter_tensors)
+        else:
+            return map(self._self_map_tensors, wrapped_iter_tensors)
 
 
 class DenseTensorSchema(TensorSchema):
@@ -210,14 +246,13 @@ class SparseTensorSchema(TensorSchema):
 
     def iter_tensors(
         self, key_ranges: Iterable[InclusiveRange[Any, int]]
-    ) -> Union[Iterable[Tensor], Iterable[Sequence[Tensor]]]:
+    ) -> Union[Iterable[sparse.COO], Iterable[Sequence[sparse.COO]]]:
         shape = list(self.shape)
         query = self.query
         get_data = itemgetter(*self._fields)
         single_field = len(self._fields) == 1
         key_dim, *non_key_dims = self._all_dims
         non_key_dim_starts = tuple(map(itemgetter(0), self._ned[1:]))
-        transform = self._transform or (lambda x: x)
         for key_range in key_ranges:
             # Set the shape of the key dimension equal to the current key range length
             shape[0] = len(key_range)
@@ -236,9 +271,9 @@ class SparseTensorSchema(TensorSchema):
 
             # yield either a single tensor or a sequence of tensors, one for each field
             if single_field:
-                yield transform(sparse.COO(coords, data, shape))
+                yield sparse.COO(coords, data, shape)
             else:
-                yield tuple(transform(sparse.COO(coords, d, shape)) for d in data)
+                yield tuple(sparse.COO(coords, d, shape) for d in data)
 
     @property
     def max_partition_weight(self) -> int:
