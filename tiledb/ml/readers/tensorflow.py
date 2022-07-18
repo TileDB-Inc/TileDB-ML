@@ -1,16 +1,18 @@
 """Functionality for loading data from TileDB arrays to the Tensorflow Data API."""
 
-from typing import Sequence, Union
+from typing import Any, Callable, Mapping, Sequence, Union
 
-import sparse
+import numpy as np
 import tensorflow as tf
 
-from ._tensor_schema import DenseTensorSchema, SparseTensorSchema, TensorSchema
+from ._tensor_schema import TensorKind, TensorSchema
 from .types import ArrayParams
+
+Tensor = Union[np.ndarray, tf.SparseTensor]
 
 
 def TensorflowTileDBDataset(
-    *array_params: ArrayParams,
+    *all_array_params: ArrayParams,
     batch_size: int,
     shuffle_buffer_size: int = 0,
     prefetch: int = tf.data.AUTOTUNE,
@@ -18,7 +20,7 @@ def TensorflowTileDBDataset(
 ) -> tf.data.Dataset:
     """Return a tf.data.Dataset for loading data from TileDB arrays.
 
-    :param array_params: One or more `ArrayParams` instances, one per TileDB array.
+    :param all_array_params: One or more `ArrayParams` instances, one per TileDB array.
     :param batch_size: Size of each batch.
     :param shuffle_buffer_size: Number of elements from which this dataset will sample.
     :param prefetch: Maximum number of batches that will be buffered when prefetching.
@@ -27,7 +29,9 @@ def TensorflowTileDBDataset(
         used to fetch inputs asynchronously and in parallel. Note: when `num_workers` > 1
         yielded batches may be shuffled even if `shuffle_buffer_size` is zero.
     """
-    schemas = tuple(map(_get_tensor_schema, array_params))
+    schemas = tuple(
+        array_params.to_tensor_schema(_transforms) for array_params in all_array_params
+    )
     key_range = schemas[0].key_range
     if not all(key_range.equal_values(schema.key_range) for schema in schemas[1:]):
         raise ValueError(f"All arrays must have the same key range: {key_range}")
@@ -61,24 +65,25 @@ def TensorflowTileDBDataset(
     return dataset.batch(batch_size).prefetch(prefetch)
 
 
-TensorSpec = Union[tf.TensorSpec, tf.SparseTensorSpec]
+_tensor_specs = {
+    TensorKind.DENSE: tf.TensorSpec,
+    TensorKind.SPARSE_COO: tf.SparseTensorSpec,
+}
 
 
-def _get_tensor_specs(schema: TensorSchema) -> Union[TensorSpec, Sequence[TensorSpec]]:
-    spec_cls = (
-        tf.SparseTensorSpec if isinstance(schema, SparseTensorSchema) else tf.TensorSpec
-    )
+def _get_tensor_specs(
+    schema: TensorSchema[Tensor],
+) -> Union[tf.TypeSpec, Sequence[tf.TypeSpec]]:
+    spec_cls = _tensor_specs[schema.kind]
     shape = (None, *schema.shape[1:])
     specs = tuple(spec_cls(shape=shape, dtype=dtype) for dtype in schema.field_dtypes)
     return specs if len(specs) > 1 else specs[0]
 
 
-def _get_tensor_schema(array_params: ArrayParams) -> TensorSchema:
-    if not array_params.array.schema.sparse:
-        return DenseTensorSchema.from_array_params(array_params)
-    else:
-        return SparseTensorSchema.from_array_params(array_params, _coo_to_sparse_tensor)
-
-
-def _coo_to_sparse_tensor(coo: sparse.COO) -> tf.SparseTensor:
-    return tf.SparseTensor(coo.coords.T, coo.data, coo.shape)
+_transforms: Mapping[TensorKind, Union[Callable[[Any], Any], bool]] = {
+    TensorKind.DENSE: True,
+    TensorKind.SPARSE_COO: (
+        lambda coo: tf.SparseTensor(coo.coords.T, coo.data, coo.shape)
+    ),
+    TensorKind.SPARSE_CSR: False,
+}

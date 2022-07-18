@@ -1,17 +1,17 @@
 from __future__ import annotations
 
+import enum
 from abc import ABC, abstractmethod
 from collections import Counter
 from dataclasses import dataclass
 from math import ceil
-from operator import itemgetter
+from operator import itemgetter, methodcaller
 from typing import (
     Any,
     Callable,
     Dict,
     Generic,
     Iterable,
-    Optional,
     Sequence,
     Tuple,
     TypeVar,
@@ -20,41 +20,39 @@ from typing import (
 )
 
 import numpy as np
+import scipy.sparse
 import sparse
 import wrapt
 
 import tiledb
 
 from ._ranges import InclusiveRange
-from .types import ArrayParams
+
+
+class TensorKind(enum.Enum):
+    """Kind of tensor."""
+
+    DENSE = enum.auto()
+    SPARSE_COO = enum.auto()
+    SPARSE_CSR = enum.auto()
+
 
 Tensor = TypeVar("Tensor")
 
 
-@dataclass(frozen=True)  # type: ignore
-class TensorSchema(ABC):
+@dataclass(frozen=True)  # type: ignore  # https://github.com/python/mypy/issues/5374
+class TensorSchema(ABC, Generic[Tensor]):
     """
     A class to encapsulate the information needed for mapping a TileDB array to tensors.
     """
 
+    kind: TensorKind
     _array: tiledb.Array
     _key_dim_index: int
     _fields: Sequence[str]
     _all_dims: Sequence[str]
     _ned: Sequence[Tuple[Any, Any]]
     _query_kwargs: Dict[str, Any]
-
-    @classmethod
-    def from_array_params(
-        cls,
-        array_params: ArrayParams,
-        transform: Optional[Callable[[Tensor], Tensor]] = None,
-    ) -> TensorSchema:
-        kwargs = {"_" + k: v for k, v in array_params._tensor_schema_kwargs.items()}
-        tensor_schema = cls(**kwargs)
-        if transform is not None:
-            tensor_schema = MappedTensorSchema(tensor_schema, transform)
-        return tensor_schema
 
     @property
     def num_fields(self) -> int:
@@ -144,7 +142,7 @@ class MappedTensorSchema(wrapt.ObjectProxy, Generic[Tensor, MappedTensor]):
 
     def __init__(
         self,
-        wrapped: TensorSchema,
+        wrapped: TensorSchema[Tensor],
         map_tensor: Callable[[Tensor], MappedTensor],
     ):
         super().__init__(wrapped)
@@ -165,7 +163,18 @@ class MappedTensorSchema(wrapt.ObjectProxy, Generic[Tensor, MappedTensor]):
             return map(self._self_map_tensors, wrapped_iter_tensors)
 
 
-class DenseTensorSchema(TensorSchema):
+class DenseTensorSchema(TensorSchema[np.ndarray]):
+    """
+    TensorSchema for reading dense TileDB arrays as (dense) Numpy arrays.
+    """
+
+    def __init__(self, **kwargs: Any):
+        super().__init__(**kwargs)
+        if self._array.schema.sparse:
+            raise NotImplementedError(
+                "Mapping a sparse TileDB array to dense tensors is not implemented"
+            )
+
     @property
     def key_range(self) -> InclusiveRange[int, int]:
         key_dim_min, key_dim_max = self._ned[0]
@@ -225,9 +234,17 @@ class DenseTensorSchema(TensorSchema):
         return max(1, int(rows_per_slice * num_slices))
 
 
-class SparseTensorSchema(TensorSchema):
+class SparseTensorSchema(TensorSchema[sparse.COO]):
+    """
+    TensorSchema for reading sparse TileDB arrays as sparse.COO instances.
+    """
+
     def __init__(self, **kwargs: Any):
         super().__init__(**kwargs)
+        if not self._array.schema.sparse:
+            raise NotImplementedError(
+                "Mapping a dense TileDB array to sparse tensors is not implemented"
+            )
         self._query_kwargs["dims"] = self._all_dims
 
     @property
@@ -303,6 +320,21 @@ class SparseTensorSchema(TensorSchema):
         # Finally, the number of cells that can fit in the memory_budget depends on the
         # maximum bytes_per_cell
         return max(1, memory_budget // ceil(max(bytes_per_cell)))
+
+
+def SparseCSRTensorSchema(**kwargs: Any) -> TensorSchema[scipy.sparse.csr_matrix]:
+    """
+    Return a TensorSchema for reading sparse 2D TileDB arrays as scipy.sparse.csr_matrix
+    instances.
+    """
+    return MappedTensorSchema(SparseTensorSchema(**kwargs), methodcaller("tocsr"))
+
+
+TensorSchemaFactories = {
+    TensorKind.DENSE: DenseTensorSchema,
+    TensorKind.SPARSE_COO: SparseTensorSchema,
+    TensorKind.SPARSE_CSR: SparseCSRTensorSchema,
+}
 
 
 class KeyDimQuery:

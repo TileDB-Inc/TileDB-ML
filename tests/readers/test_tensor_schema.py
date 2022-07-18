@@ -5,7 +5,6 @@ import numpy as np
 import pytest
 
 import tiledb
-from tiledb.ml.readers._tensor_schema import DenseTensorSchema, SparseTensorSchema
 from tiledb.ml.readers.types import ArrayParams
 
 
@@ -96,8 +95,7 @@ def parametrize_fields(*fields):
 def test_max_partition_weight_dense(dense_uri, fields, key_dim_index, memory_budget):
     config = {"py.max_incomplete_retries": 0, "sm.memory_budget": memory_budget}
     with tiledb.open(dense_uri, config=config) as a:
-        params = ArrayParams(a, key_dim_index, fields)
-        schema = DenseTensorSchema.from_array_params(params)
+        schema = ArrayParams(a, key_dim_index, fields).to_tensor_schema()
         max_weight = schema.max_partition_weight
         for key_range in schema.key_range.partition_by_weight(max_weight):
             # query succeeds without incomplete retries
@@ -120,8 +118,7 @@ def test_max_partition_weight_sparse(sparse_uri, fields, key_dim_index, memory_b
     }
     with tiledb.open(sparse_uri, config=config) as a:
         key_dim = a.dim(key_dim_index)
-        params = ArrayParams(a, key_dim_index, fields)
-        schema = SparseTensorSchema.from_array_params(params)
+        schema = ArrayParams(a, key_dim_index, fields).to_tensor_schema()
         max_weight = schema.max_partition_weight
         for key_range in schema.key_range.partition_by_weight(max_weight):
             # query succeeds without incomplete retries
