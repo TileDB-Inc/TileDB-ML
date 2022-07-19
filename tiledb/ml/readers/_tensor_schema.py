@@ -235,23 +235,8 @@ class DenseTensorSchema(TensorSchema[np.ndarray]):
         return max(1, int(rows_per_slice * num_slices))
 
 
-@dataclass(frozen=True)
-class SparseData:
-    coords: np.ndarray
-    data: np.ndarray
-    shape: Sequence[int]
-
-    def to_sparse_array(self) -> Union[scipy.sparse.csr_matrix, sparse.COO]:
-        if len(self.shape) == 2:
-            return scipy.sparse.csr_matrix((self.data, self.coords), self.shape)
-        else:
-            return sparse.COO(self.coords, self.data, self.shape)
-
-
-class SparseTensorSchema(TensorSchema[SparseData]):
-    """
-    TensorSchema for reading sparse TileDB arrays as SparseData instances.
-    """
+class BaseSparseTensorSchema(TensorSchema[Tensor]):
+    """Abstract base class for reading sparse TileDB arrays."""
 
     def __init__(self, **kwargs: Any):
         super().__init__(**kwargs)
@@ -259,7 +244,6 @@ class SparseTensorSchema(TensorSchema[SparseData]):
             raise NotImplementedError(
                 "Mapping a dense TileDB array to sparse tensors is not implemented"
             )
-        self._query_kwargs["dims"] = self._all_dims
 
     @property
     def key_range(self) -> InclusiveRange[Any, int]:
@@ -274,6 +258,58 @@ class SparseTensorSchema(TensorSchema[SparseData]):
                 key_counter.update(result[key_dim])
             self._key_range = InclusiveRange.factory(key_counter)
             return self._key_range
+
+    @property
+    def max_partition_weight(self) -> int:
+        try:
+            memory_budget = int(self._array._ctx_().config()["py.init_buffer_bytes"])
+        except KeyError:
+            memory_budget = 10 * 1024**2
+
+        # Determine the bytes per (non-empty) cell for each field.
+        # - For fixed size fields, this is just the `dtype.itemsize` of the field.
+        # - For variable size fields, the best we can do is to estimate the average bytes
+        #   size. We also need to take into account the (fixed) offset buffer size per
+        #   cell (=8 bytes).
+        offset_itemsize = np.dtype(np.uint64).itemsize
+        attr_or_dim_dtype = self._array.schema.attr_or_dim_dtype
+        query = self._array.query(return_incomplete=True, **self._query_kwargs)
+        est_sizes = query.multi_index[:].estimated_result_sizes()
+        bytes_per_cell = []
+        for field, est_result_size in est_sizes.items():
+            if est_result_size.offsets_bytes == 0:
+                bytes_per_cell.append(attr_or_dim_dtype(field).itemsize)
+            else:
+                num_cells = est_result_size.offsets_bytes / offset_itemsize
+                avg_itemsize = est_result_size.data_bytes / num_cells
+                bytes_per_cell.append(max(avg_itemsize, offset_itemsize))
+
+        # Finally, the number of cells that can fit in the memory_budget depends on the
+        # maximum bytes_per_cell
+        return max(1, memory_budget // ceil(max(bytes_per_cell)))
+
+
+@dataclass(frozen=True)
+class SparseData:
+    coords: np.ndarray
+    data: np.ndarray
+    shape: Sequence[int]
+
+    def to_sparse_array(self) -> Union[scipy.sparse.csr_matrix, sparse.COO]:
+        if len(self.shape) == 2:
+            return scipy.sparse.csr_matrix((self.data, self.coords), self.shape)
+        else:
+            return sparse.COO(self.coords, self.data, self.shape)
+
+
+class SparseTensorSchema(BaseSparseTensorSchema[SparseData]):
+    """
+    TensorSchema for reading sparse TileDB arrays as SparseData instances.
+    """
+
+    def __init__(self, **kwargs: Any):
+        super().__init__(**kwargs)
+        self._query_kwargs["dims"] = self._all_dims
 
     def iter_tensors(
         self, key_ranges: Iterable[InclusiveRange[Any, int]]
@@ -306,35 +342,6 @@ class SparseTensorSchema(TensorSchema[SparseData]):
                 yield SparseData(coords, data, shape)
             else:
                 yield tuple(SparseData(coords, d, shape) for d in data)
-
-    @property
-    def max_partition_weight(self) -> int:
-        try:
-            memory_budget = int(self._array._ctx_().config()["py.init_buffer_bytes"])
-        except KeyError:
-            memory_budget = 10 * 1024**2
-
-        # Determine the bytes per (non-empty) cell for each field.
-        # - For fixed size fields, this is just the `dtype.itemsize` of the field.
-        # - For variable size fields, the best we can do is to estimate the average bytes
-        #   size. We also need to take into account the (fixed) offset buffer size per
-        #   cell (=8 bytes).
-        offset_itemsize = np.dtype(np.uint64).itemsize
-        attr_or_dim_dtype = self._array.schema.attr_or_dim_dtype
-        query = self._array.query(return_incomplete=True, **self._query_kwargs)
-        est_sizes = query.multi_index[:].estimated_result_sizes()
-        bytes_per_cell = []
-        for field, est_result_size in est_sizes.items():
-            if est_result_size.offsets_bytes == 0:
-                bytes_per_cell.append(attr_or_dim_dtype(field).itemsize)
-            else:
-                num_cells = est_result_size.offsets_bytes / offset_itemsize
-                avg_itemsize = est_result_size.data_bytes / num_cells
-                bytes_per_cell.append(max(avg_itemsize, offset_itemsize))
-
-        # Finally, the number of cells that can fit in the memory_budget depends on the
-        # maximum bytes_per_cell
-        return max(1, memory_budget // ceil(max(bytes_per_cell)))
 
 
 TensorSchemaFactories: Dict[TensorKind, Type[TensorSchema[Any]]] = {
