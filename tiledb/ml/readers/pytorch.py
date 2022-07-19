@@ -3,7 +3,17 @@
 import itertools
 import random
 from operator import methodcaller
-from typing import Any, Callable, Iterable, Iterator, Sequence, Tuple, TypeVar, Union
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    Iterator,
+    Sequence,
+    Tuple,
+    TypeVar,
+    Union,
+)
 
 import numpy as np
 import scipy.sparse
@@ -35,7 +45,7 @@ def PyTorchTileDBDataLoader(
     *array_params: ArrayParams,
     shuffle_buffer_size: int = 0,
     csr: bool = True,
-    **kwargs: dict[str, Any],
+    **kwargs: Dict[str, Any],
 ) -> DataLoader:
     """Return a DataLoader for loading data from TileDB arrays.
 
