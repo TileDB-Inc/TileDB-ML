@@ -1,7 +1,7 @@
 import setuptools
 
-tensorflow = ["tensorflow>=2.5"]
-pytorch = ["torch>=1.9"]
+tensorflow = ["tensorflow>=2.6"]
+pytorch = ["torch>=1.10"]
 sklearn = ["scikit-learn>=1.0"]
 cloud = ["tiledb-cloud"]
 full = sorted({"torchvision", *tensorflow, *pytorch, *sklearn, *cloud})
