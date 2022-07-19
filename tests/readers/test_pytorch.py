@@ -43,7 +43,7 @@ class TestPyTorchTileDBDataLoader:
             dataloader = PyTorchTileDBDataLoader(
                 ArrayParams(x_kwargs["array"], x_kwargs["key_dim"], x_kwargs["fields"]),
                 ArrayParams(y_kwargs["array"], y_kwargs["key_dim"], y_kwargs["fields"]),
-                dataloader_params=dataloader_params,
+                **dataloader_params,
                 shuffle_buffer_size=shuffle_buffer_size,
             )
             assert isinstance(dataloader, torch.utils.data.DataLoader)
@@ -90,7 +90,7 @@ class TestPyTorchTileDBDataLoader:
                     ArrayParams(
                         y_kwargs["array"], y_kwargs["key_dim"], y_kwargs["fields"]
                     ),
-                    dataloader_params=dataloader_params,
+                    **dataloader_params,
                     shuffle_buffer_size=shuffle_buffer_size,
                 )
             assert "All arrays must have the same key range" in str(ex.value)
@@ -132,7 +132,7 @@ class TestPyTorchTileDBDataLoader:
             dataloader = PyTorchTileDBDataLoader(
                 ArrayParams(x_kwargs["array"], x_kwargs["key_dim"], x_kwargs["fields"]),
                 ArrayParams(y_kwargs["array"], y_kwargs["key_dim"], y_kwargs["fields"]),
-                dataloader_params=dataloader_params,
+                **dataloader_params,
                 shuffle_buffer_size=shuffle_buffer_size,
                 csr=csr,
             )
