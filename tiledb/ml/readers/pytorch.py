@@ -11,13 +11,6 @@ import sparse
 import torch
 from torch.utils.data import DataLoader, IterableDataset, get_worker_info
 
-try:
-    # torch>=1.10
-    sparse_csr_tensor = torch.sparse_csr_tensor
-except AttributeError:
-    # torch=1.9
-    sparse_csr_tensor = torch._sparse_csr_tensor
-
 import tiledb
 
 from ._tensor_schema import DenseTensorSchema, SparseTensorSchema, TensorSchema
@@ -157,7 +150,7 @@ def _csr_to_coo_collate(arrays: Sequence[scipy.sparse.csr_matrix]) -> torch.Tens
 def _csr_collate(arrays: Sequence[scipy.sparse.csr_matrix]) -> torch.Tensor:
     """Collate multiple Scipy CSR matrices to a torch.Tensor with sparse_csr layout."""
     stacked = scipy.sparse.vstack(arrays)
-    return sparse_csr_tensor(
+    return torch.sparse_csr_tensor(
         torch.from_numpy(stacked.indptr),
         torch.from_numpy(stacked.indices),
         stacked.data,
