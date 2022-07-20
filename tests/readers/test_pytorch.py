@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 import torch
 
-from tiledb.ml.readers.pytorch import ArrayParams, PyTorchTileDBDataLoader
+from tiledb.ml.readers.pytorch import PyTorchTileDBDataLoader
 
 from .utils import ingest_in_tiledb, parametrize_for_dataset, validate_tensor_generator
 
@@ -12,44 +12,22 @@ from .utils import ingest_in_tiledb, parametrize_for_dataset, validate_tensor_ge
 class TestPyTorchTileDBDataLoader:
     @parametrize_for_dataset()
     def test_dataloader(
-        self,
-        tmpdir,
-        x_shape,
-        y_shape,
-        x_sparse,
-        y_sparse,
-        key_dim_dtype,
-        x_key_dim,
-        y_key_dim,
-        num_fields,
-        batch_size,
-        shuffle_buffer_size,
-        num_workers,
+        self, tmpdir, x_spec, y_spec, batch_size, shuffle_buffer_size, num_workers
     ):
-        if num_workers and (x_sparse or y_sparse):
+        if num_workers and (x_spec.sparse or y_spec.sparse):
             pytest.skip("multiple workers not supported with sparse arrays")
 
-        with ingest_in_tiledb(
-            tmpdir, x_shape, x_sparse, key_dim_dtype, x_key_dim, num_fields
-        ) as x_kwargs, ingest_in_tiledb(
-            tmpdir, y_shape, y_sparse, key_dim_dtype, y_key_dim, num_fields
-        ) as y_kwargs:
-
-            dataloader_params = {
-                "batch_size": batch_size,
-                "num_workers": num_workers,
-            }
-
-            dataloader = PyTorchTileDBDataLoader(
-                ArrayParams(x_kwargs["array"], x_kwargs["key_dim"], x_kwargs["fields"]),
-                ArrayParams(y_kwargs["array"], y_kwargs["key_dim"], y_kwargs["fields"]),
-                **dataloader_params,
-                shuffle_buffer_size=shuffle_buffer_size,
-            )
-            assert isinstance(dataloader, torch.utils.data.DataLoader)
-            validate_tensor_generator(
-                dataloader, num_fields, x_sparse, y_sparse, x_shape, y_shape, batch_size
-            )
+        with ingest_in_tiledb(tmpdir, x_spec) as (x_params, x_data):
+            with ingest_in_tiledb(tmpdir, y_spec) as (y_params, y_data):
+                dataloader = PyTorchTileDBDataLoader(
+                    x_params,
+                    y_params,
+                    shuffle_buffer_size=shuffle_buffer_size,
+                    batch_size=batch_size,
+                    num_workers=num_workers,
+                )
+                assert isinstance(dataloader, torch.utils.data.DataLoader)
+                validate_tensor_generator(dataloader, x_spec, y_spec, batch_size)
 
     @parametrize_for_dataset(
         # Add one extra key on X
@@ -57,99 +35,55 @@ class TestPyTorchTileDBDataLoader:
         y_shape=((107, 5), (107, 5, 2)),
     )
     def test_unequal_num_keys(
-        self,
-        tmpdir,
-        x_shape,
-        y_shape,
-        x_sparse,
-        y_sparse,
-        key_dim_dtype,
-        x_key_dim,
-        y_key_dim,
-        num_fields,
-        batch_size,
-        shuffle_buffer_size,
-        num_workers,
+        self, tmpdir, x_spec, y_spec, batch_size, shuffle_buffer_size, num_workers
     ):
-        with ingest_in_tiledb(
-            tmpdir, x_shape, x_sparse, key_dim_dtype, x_key_dim, num_fields
-        ) as x_kwargs, ingest_in_tiledb(
-            tmpdir, y_shape, y_sparse, key_dim_dtype, y_key_dim, num_fields
-        ) as y_kwargs:
-            with pytest.raises(ValueError) as ex:
-
-                dataloader_params = {
-                    "batch_size": batch_size,
-                    "num_workers": num_workers,
-                }
-
-                PyTorchTileDBDataLoader(
-                    ArrayParams(
-                        x_kwargs["array"], x_kwargs["key_dim"], x_kwargs["fields"]
-                    ),
-                    ArrayParams(
-                        y_kwargs["array"], y_kwargs["key_dim"], y_kwargs["fields"]
-                    ),
-                    **dataloader_params,
-                    shuffle_buffer_size=shuffle_buffer_size,
-                )
-            assert "All arrays must have the same key range" in str(ex.value)
+        with ingest_in_tiledb(tmpdir, x_spec) as (x_params, x_data):
+            with ingest_in_tiledb(tmpdir, y_spec) as (y_params, y_data):
+                with pytest.raises(ValueError) as ex:
+                    PyTorchTileDBDataLoader(
+                        x_params,
+                        y_params,
+                        shuffle_buffer_size=shuffle_buffer_size,
+                        batch_size=batch_size,
+                        num_workers=num_workers,
+                    )
+                assert "All arrays must have the same key range" in str(ex.value)
 
     @parametrize_for_dataset(num_fields=[0], shuffle_buffer_size=[0], num_workers=[0])
     def test_dataloader_order(
-        self,
-        tmpdir,
-        x_shape,
-        y_shape,
-        x_sparse,
-        y_sparse,
-        key_dim_dtype,
-        x_key_dim,
-        y_key_dim,
-        num_fields,
-        batch_size,
-        shuffle_buffer_size,
-        num_workers,
+        self, tmpdir, x_spec, y_spec, batch_size, shuffle_buffer_size, num_workers
     ):
         """Test we can read the data in the same order as written.
 
         The order is guaranteed only for sequential processing (num_workers=0) and
         no shuffling (shuffle_buffer_size=0).
         """
-        with ingest_in_tiledb(
-            tmpdir, x_shape, x_sparse, key_dim_dtype, x_key_dim, num_fields
-        ) as x_kwargs, ingest_in_tiledb(
-            tmpdir, y_shape, y_sparse, key_dim_dtype, y_key_dim, num_fields
-        ) as y_kwargs:
+        with ingest_in_tiledb(tmpdir, x_spec) as (x_params, x_data):
+            with ingest_in_tiledb(tmpdir, y_spec) as (y_params, y_data):
+                dataloader = PyTorchTileDBDataLoader(
+                    x_params,
+                    y_params,
+                    shuffle_buffer_size=shuffle_buffer_size,
+                    batch_size=batch_size,
+                    num_workers=num_workers,
+                )
+                # since num_fields is 0, fields are all the array attributes of each array
+                # the first item of each batch corresponds to the first attribute (="data")
+                x_data_batches, y_data_batches = [], []
+                for x_tensors, y_tensors in dataloader:
+                    x_data_batch = x_tensors[0]
+                    if x_spec.sparse:
+                        x_data_batch = x_data_batch.to_dense()
+                    x_data_batches.append(x_data_batch)
 
-            dataloader_params = {
-                "batch_size": batch_size,
-                "num_workers": num_workers,
-            }
+                    y_data_batch = y_tensors[0]
+                    if y_spec.sparse:
+                        y_data_batch = y_data_batch.to_dense()
+                    y_data_batches.append(y_data_batch)
 
-            dataloader = PyTorchTileDBDataLoader(
-                ArrayParams(x_kwargs["array"], x_kwargs["key_dim"], x_kwargs["fields"]),
-                ArrayParams(y_kwargs["array"], y_kwargs["key_dim"], y_kwargs["fields"]),
-                **dataloader_params,
-                shuffle_buffer_size=shuffle_buffer_size,
-            )
-            # since num_fields is 0, fields are all the array attributes of each array
-            # the first item of each batch corresponds to the first attribute (="data")
-            x_data_batches, y_data_batches = [], []
-            for x_tensors, y_tensors in dataloader:
-                x_data_batch = x_tensors[0]
-                if x_sparse:
-                    x_data_batch = x_data_batch.to_dense()
-                x_data_batches.append(x_data_batch)
-
-                y_data_batch = y_tensors[0]
-                if y_sparse:
-                    y_data_batch = y_data_batch.to_dense()
-                y_data_batches.append(y_data_batch)
-
-            np.testing.assert_array_almost_equal(
-                np.concatenate(x_data_batches), x_kwargs["data"]
-            )
-            np.testing.assert_array_almost_equal(
-                np.concatenate(y_data_batches), y_kwargs["data"]
-            )
+                np.testing.assert_array_almost_equal(
+                    np.concatenate(x_data_batches), x_data
+                )
+                np.testing.assert_array_almost_equal(
+                    np.concatenate(y_data_batches), y_data
+                )
