@@ -3,7 +3,17 @@
 import itertools
 import random
 from operator import methodcaller
-from typing import Callable, Iterable, Iterator, Sequence, Tuple, TypeVar, Union
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    Iterator,
+    Sequence,
+    Tuple,
+    TypeVar,
+    Union,
+)
 
 import numpy as np
 import scipy.sparse
@@ -26,23 +36,32 @@ OneOrMoreTensorsOrSequences = Union[TensorOrSequence, Tuple[TensorOrSequence, ..
 
 def PyTorchTileDBDataLoader(
     *array_params: ArrayParams,
-    batch_size: int,
     shuffle_buffer_size: int = 0,
-    prefetch: int = 2,
-    num_workers: int = 0,
     csr: bool = True,
+    **kwargs: Dict[str, Any],
 ) -> DataLoader:
     """Return a DataLoader for loading data from TileDB arrays.
 
     :param array_params: One or more `ArrayParams` instances, one per TileDB array.
-    :param batch_size: Size of each batch.
     :param shuffle_buffer_size: Number of elements from which this dataset will sample.
-    :param prefetch: Number of samples loaded in advance by each worker. Not applicable
-        (and should not be given) when `num_workers` is 0.
-    :param num_workers: how many subprocesses to use for data loading. 0 means that the
-        data will be loaded in the main process. Note: when `num_workers` > 1
-        yielded batches may be shuffled even if `shuffle_buffer_size` is zero.
     :param csr: For sparse 2D arrays, whether to return CSR tensors instead of COO.
+    **kwargs: Should contain all parameters for PyTorch Dataloader. At the moment TileDB-ML can support ONLY the
+    following PyTorch Dataloader arguments:
+        batch_size: How many samples per batch to load (default: ``1``).
+        prefetch_factor: Number of batches loaded in advance by each worker. Not applicable (and should not be
+        given) when `num_workers` is 0.
+        num_workers: How many subprocesses to use for data loading. 0 means that the data will be loaded in the main
+        process. Note: when `num_workers` > 1 yielded batches may be shuffled even if `shuffle_buffer_size` is zero.
+        persistent_workers: If ``True``, the data loader will not shutdown the worker processes after a dataset has
+        been consumed once. This allows to maintain the workers `Dataset` instances alive. (default: ``False``)
+        timeout: if positive, the timeout value for collecting a batch from workers. Should always be non-negative.
+        (default: ``0``)
+        drop_last: Set to ``True`` to drop the last incomplete batch, if the dataset size is not divisible by the
+        batch size. If ``False`` and the size of dataset is not divisible by the batch size, then the last batch
+        will be smaller. (default: ``False``)
+
+    Users should NOT pass (TileDB-ML either doesn't support or implements internally the corresponding functionality)
+    the following arguments: 'shuffle', 'sampler', 'batch_sampler', 'worker_init_fn' and 'collate_fn'.
     """
     schemas = tuple(map(_get_tensor_schema, array_params))
     collators = tuple(
@@ -53,9 +72,7 @@ def PyTorchTileDBDataLoader(
 
     return DataLoader(
         dataset=_PyTorchTileDBDataset(schemas, shuffle_buffer_size=shuffle_buffer_size),
-        batch_size=batch_size,
-        prefetch_factor=prefetch,
-        num_workers=num_workers,
+        **kwargs,
         worker_init_fn=_worker_init,
         collate_fn=collate_fn,
     )

@@ -34,12 +34,17 @@ class TestPyTorchTileDBDataLoader:
         ) as x_kwargs, ingest_in_tiledb(
             tmpdir, y_shape, y_sparse, key_dim_dtype, y_key_dim, num_fields
         ) as y_kwargs:
+
+            dataloader_params = {
+                "batch_size": batch_size,
+                "num_workers": num_workers,
+            }
+
             dataloader = PyTorchTileDBDataLoader(
                 ArrayParams(x_kwargs["array"], x_kwargs["key_dim"], x_kwargs["fields"]),
                 ArrayParams(y_kwargs["array"], y_kwargs["key_dim"], y_kwargs["fields"]),
-                batch_size=batch_size,
+                **dataloader_params,
                 shuffle_buffer_size=shuffle_buffer_size,
-                num_workers=num_workers,
             )
             assert isinstance(dataloader, torch.utils.data.DataLoader)
             validate_tensor_generator(
@@ -72,6 +77,12 @@ class TestPyTorchTileDBDataLoader:
             tmpdir, y_shape, y_sparse, key_dim_dtype, y_key_dim, num_fields
         ) as y_kwargs:
             with pytest.raises(ValueError) as ex:
+
+                dataloader_params = {
+                    "batch_size": batch_size,
+                    "num_workers": num_workers,
+                }
+
                 PyTorchTileDBDataLoader(
                     ArrayParams(
                         x_kwargs["array"], x_kwargs["key_dim"], x_kwargs["fields"]
@@ -79,9 +90,8 @@ class TestPyTorchTileDBDataLoader:
                     ArrayParams(
                         y_kwargs["array"], y_kwargs["key_dim"], y_kwargs["fields"]
                     ),
-                    batch_size=batch_size,
+                    **dataloader_params,
                     shuffle_buffer_size=shuffle_buffer_size,
-                    num_workers=num_workers,
                 )
             assert "All arrays must have the same key range" in str(ex.value)
 
@@ -113,12 +123,17 @@ class TestPyTorchTileDBDataLoader:
         ) as x_kwargs, ingest_in_tiledb(
             tmpdir, y_shape, y_sparse, key_dim_dtype, y_key_dim, num_fields
         ) as y_kwargs:
+
+            dataloader_params = {
+                "batch_size": batch_size,
+                "num_workers": num_workers,
+            }
+
             dataloader = PyTorchTileDBDataLoader(
                 ArrayParams(x_kwargs["array"], x_kwargs["key_dim"], x_kwargs["fields"]),
                 ArrayParams(y_kwargs["array"], y_kwargs["key_dim"], y_kwargs["fields"]),
-                batch_size=batch_size,
+                **dataloader_params,
                 shuffle_buffer_size=shuffle_buffer_size,
-                num_workers=num_workers,
                 csr=csr,
             )
             # since num_fields is 0, fields are all the array attributes of each array
