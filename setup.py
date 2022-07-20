@@ -13,7 +13,7 @@ setuptools.setup(
         "local_scheme": "dirty-tag",
         "write_to": "tiledb/ml/version.py",
     },
-    install_requires=["sparse", "tiledb>=0.14"],
+    install_requires=["sparse", "tiledb>=0.14", "wrapt"],
     extras_require={
         "tensorflow": tensorflow,
         "pytorch": pytorch,

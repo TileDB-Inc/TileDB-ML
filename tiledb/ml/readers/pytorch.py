@@ -2,7 +2,6 @@
 
 import itertools
 import random
-from operator import methodcaller
 from typing import (
     Any,
     Callable,
@@ -21,9 +20,7 @@ import sparse
 import torch
 from torch.utils.data import DataLoader, IterableDataset, get_worker_info
 
-import tiledb
-
-from ._tensor_schema import DenseTensorSchema, SparseTensorSchema, TensorSchema
+from ._tensor_schema import TensorKind, TensorSchema
 from .types import ArrayParams
 
 Tensor = Union[np.ndarray, sparse.COO, scipy.sparse.csr_matrix]
@@ -35,16 +32,14 @@ OneOrMoreTensorsOrSequences = Union[TensorOrSequence, Tuple[TensorOrSequence, ..
 
 
 def PyTorchTileDBDataLoader(
-    *array_params: ArrayParams,
+    *all_array_params: ArrayParams,
     shuffle_buffer_size: int = 0,
-    csr: bool = True,
     **kwargs: Dict[str, Any],
 ) -> DataLoader:
     """Return a DataLoader for loading data from TileDB arrays.
 
-    :param array_params: One or more `ArrayParams` instances, one per TileDB array.
+    :param all_array_params: One or more `ArrayParams` instances, one per TileDB array.
     :param shuffle_buffer_size: Number of elements from which this dataset will sample.
-    :param csr: For sparse 2D arrays, whether to return CSR tensors instead of COO.
     **kwargs: Should contain all parameters for PyTorch Dataloader. At the moment TileDB-ML can support ONLY the
     following PyTorch Dataloader arguments:
         batch_size: How many samples per batch to load (default: ``1``).
@@ -63,11 +58,10 @@ def PyTorchTileDBDataLoader(
     Users should NOT pass (TileDB-ML either doesn't support or implements internally the corresponding functionality)
     the following arguments: 'shuffle', 'sampler', 'batch_sampler', 'worker_init_fn' and 'collate_fn'.
     """
-    schemas = tuple(map(_get_tensor_schema, array_params))
-    collators = tuple(
-        _get_tensor_collator(params.array, csr, len(schema.fields))
-        for params, schema in zip(array_params, schemas)
+    schemas = tuple(
+        array_params.to_tensor_schema() for array_params in all_array_params
     )
+    collators = tuple(map(_get_tensor_collator, schemas))
     collate_fn = _CompositeCollator(*collators) if len(collators) > 1 else collators[0]
 
     return DataLoader(
@@ -79,7 +73,9 @@ def PyTorchTileDBDataLoader(
 
 
 class _PyTorchTileDBDataset(IterableDataset[OneOrMoreTensorsOrSequences]):
-    def __init__(self, schemas: Sequence[TensorSchema], shuffle_buffer_size: int = 0):
+    def __init__(
+        self, schemas: Sequence[TensorSchema[Tensor]], shuffle_buffer_size: int = 0
+    ):
         super().__init__()
         key_range = schemas[0].key_range
         if not all(key_range.equal_values(schema.key_range) for schema in schemas[1:]):
@@ -89,18 +85,17 @@ class _PyTorchTileDBDataset(IterableDataset[OneOrMoreTensorsOrSequences]):
         self._shuffle_buffer_size = shuffle_buffer_size
 
     def __iter__(self) -> Iterator[OneOrMoreTensorsOrSequences]:
-        rows: Iterator[OneOrMoreTensorsOrSequences]
         it_rows = tuple(map(self._iter_rows, self.schemas))
         rows = zip(*it_rows) if len(it_rows) > 1 else it_rows[0]
         if self._shuffle_buffer_size > 0:
             rows = _iter_shuffled(rows, self._shuffle_buffer_size)
         return rows
 
-    def _iter_rows(self, schema: TensorSchema) -> Iterator[TensorOrSequence]:
+    def _iter_rows(self, schema: TensorSchema[Tensor]) -> Iterator[TensorOrSequence]:
         max_weight = schema.max_partition_weight
         key_subranges = self.key_range.partition_by_weight(max_weight)
-        batches: Iterable[TensorOrSequence] = schema.iter_tensors(key_subranges)
-        if len(schema.fields) == 1:
+        batches = schema.iter_tensors(key_subranges)
+        if schema.num_fields == 1:
             return (tensor for batch in batches for tensor in batch)
         else:
             return (tensors for batch in batches for tensors in zip(*batch))
@@ -109,19 +104,10 @@ class _PyTorchTileDBDataset(IterableDataset[OneOrMoreTensorsOrSequences]):
 def _worker_init(worker_id: int) -> None:
     worker_info = get_worker_info()
     dataset = worker_info.dataset
-    if any(schema.sparse for schema in dataset.schemas):
+    if any(schema.kind is not TensorKind.DENSE for schema in dataset.schemas):
         raise NotImplementedError("https://github.com/pytorch/pytorch/issues/20248")
     key_ranges = list(dataset.key_range.partition_by_count(worker_info.num_workers))
     dataset.key_range = key_ranges[worker_id]
-
-
-def _get_tensor_schema(array_params: ArrayParams) -> TensorSchema:
-    if not array_params.array.schema.sparse:
-        return DenseTensorSchema.from_array_params(array_params)
-    elif array_params.array.ndim == 2:
-        return SparseTensorSchema.from_array_params(array_params, methodcaller("tocsr"))
-    else:
-        return SparseTensorSchema.from_array_params(array_params)
 
 
 _SingleCollator = Callable[[TensorSequence], torch.Tensor]
@@ -157,14 +143,7 @@ def _sparse_coo_collate(arrays: Sequence[sparse.COO]) -> torch.Tensor:
     return torch.sparse_coo_tensor(stacked.coords, stacked.data, stacked.shape)
 
 
-def _csr_to_coo_collate(arrays: Sequence[scipy.sparse.csr_matrix]) -> torch.Tensor:
-    """Collate multiple Scipy CSR matrices to a torch.Tensor with sparse_coo layout."""
-    stacked = scipy.sparse.vstack(arrays).tocoo()
-    coords = np.stack((stacked.row, stacked.col))
-    return torch.sparse_coo_tensor(coords, stacked.data, stacked.shape)
-
-
-def _csr_collate(arrays: Sequence[scipy.sparse.csr_matrix]) -> torch.Tensor:
+def _sparse_csr_collate(arrays: Sequence[scipy.sparse.csr_matrix]) -> torch.Tensor:
     """Collate multiple Scipy CSR matrices to a torch.Tensor with sparse_csr layout."""
     stacked = scipy.sparse.vstack(arrays)
     return torch.sparse_csr_tensor(
@@ -175,18 +154,18 @@ def _csr_collate(arrays: Sequence[scipy.sparse.csr_matrix]) -> torch.Tensor:
     )
 
 
-def _get_tensor_collator(
-    array: tiledb.Array, csr: bool, num_fields: int
-) -> Union[_SingleCollator, _CompositeCollator]:
-    if not array.schema.sparse:
-        collator = _ndarray_collate
-    elif array.ndim != 2:
-        collator = _sparse_coo_collate
-    elif csr:
-        collator = _csr_collate
-    else:
-        collator = _csr_to_coo_collate
+_collators = {
+    TensorKind.DENSE: _ndarray_collate,
+    TensorKind.SPARSE_COO: _sparse_coo_collate,
+    TensorKind.SPARSE_CSR: _sparse_csr_collate,
+}
 
+
+def _get_tensor_collator(
+    schema: TensorSchema[Tensor],
+) -> Union[_SingleCollator, _CompositeCollator]:
+    collator = _collators[schema.kind]
+    num_fields = schema.num_fields
     if num_fields == 1:
         return collator
     else:
@@ -212,5 +191,4 @@ def _iter_shuffled(iterable: Iterable[_T], buffer_size: int) -> Iterator[_T]:
         yield buffer[idx]
         buffer[idx] = x
     random.shuffle(buffer)
-    while buffer:
-        yield buffer.pop()
+    yield from buffer

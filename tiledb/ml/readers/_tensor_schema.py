@@ -1,16 +1,17 @@
 from __future__ import annotations
 
+import enum
 from abc import ABC, abstractmethod
 from collections import Counter
 from dataclasses import dataclass
 from math import ceil
-from operator import itemgetter
+from operator import itemgetter, methodcaller
 from typing import (
     Any,
     Callable,
     Dict,
+    Generic,
     Iterable,
-    Optional,
     Sequence,
     Tuple,
     TypeVar,
@@ -19,43 +20,44 @@ from typing import (
 )
 
 import numpy as np
+import scipy.sparse
 import sparse
+import wrapt
 
 import tiledb
 
 from ._ranges import InclusiveRange
-from .types import ArrayParams
+
+
+class TensorKind(enum.Enum):
+    """Kind of tensor."""
+
+    DENSE = enum.auto()
+    SPARSE_COO = enum.auto()
+    SPARSE_CSR = enum.auto()
+
 
 Tensor = TypeVar("Tensor")
 
 
-@dataclass(frozen=True)  # type: ignore
-class TensorSchema(ABC):
+@dataclass(frozen=True)  # type: ignore  # https://github.com/python/mypy/issues/5374
+class TensorSchema(ABC, Generic[Tensor]):
     """
     A class to encapsulate the information needed for mapping a TileDB array to tensors.
     """
 
+    kind: TensorKind
     _array: tiledb.Array
     _key_dim_index: int
     _fields: Sequence[str]
     _all_dims: Sequence[str]
     _ned: Sequence[Tuple[Any, Any]]
     _query_kwargs: Dict[str, Any]
-    _transform: Optional[Callable[[Tensor], Tensor]]
-
-    @classmethod
-    def from_array_params(
-        cls,
-        array_params: ArrayParams,
-        transform: Optional[Callable[[Tensor], Tensor]] = None,
-    ) -> TensorSchema:
-        kwargs = {"_" + k: v for k, v in array_params._tensor_schema_kwargs.items()}
-        return cls(_transform=transform, **kwargs)
 
     @property
-    def fields(self) -> Sequence[str]:
-        """Names of attributes and dimensions to read."""
-        return self._fields
+    def num_fields(self) -> int:
+        """Number of attributes and dimensions to read."""
+        return len(self._fields)
 
     @property
     def field_dtypes(self) -> Sequence[np.dtype]:
@@ -77,7 +79,7 @@ class TensorSchema(ABC):
                 shape.append(stop - start + 1)
             else:
                 raise ValueError("Shape not defined for non-integer domain")
-        return shape
+        return tuple(shape)
 
     @property
     def query(self) -> KeyDimQuery:
@@ -85,9 +87,9 @@ class TensorSchema(ABC):
         return KeyDimQuery(self._array, self._key_dim_index, **self._query_kwargs)
 
     @property
-    @abstractmethod
-    def sparse(self) -> bool:
-        """Whether the underlying TileDB array is sparse"""
+    def key_dim(self) -> str:
+        """Key dimension of the array."""
+        return self._all_dims[0]
 
     @property
     @abstractmethod
@@ -121,7 +123,7 @@ class TensorSchema(ABC):
         Generate batches of dense or sparse tensors.
 
         Each yielded batch is either:
-        - a sequence of N tensors if N > 1, where `N == len(self.fields)`, or
+        - a sequence of N tensors if N > 1, where `N == self.num_fields`, or
         - a single tensor if N == 1.
         where each tensor has shape `(len(key_range), *self.shape[1:])`.
 
@@ -129,8 +131,49 @@ class TensorSchema(ABC):
         """
 
 
-class DenseTensorSchema(TensorSchema):
-    sparse = False
+MappedTensor = TypeVar("MappedTensor")
+
+
+class MappedTensorSchema(wrapt.ObjectProxy, Generic[Tensor, MappedTensor]):
+    """
+    Proxy class that wraps a TensorSchema and applies a mapping function to each tensor
+    yielded by `iter_tensors`.
+    """
+
+    def __init__(
+        self,
+        wrapped: TensorSchema[Tensor],
+        map_tensor: Callable[[Tensor], MappedTensor],
+    ):
+        super().__init__(wrapped)
+
+        def map_tensors(tensors: Sequence[Tensor]) -> Sequence[MappedTensor]:
+            return tuple(map(map_tensor, tensors))
+
+        self._self_map_tensor = map_tensor
+        self._self_map_tensors = map_tensors
+
+    def iter_tensors(
+        self, key_ranges: Iterable[InclusiveRange[Any, int]]
+    ) -> Union[Iterable[MappedTensor], Iterable[Sequence[MappedTensor]]]:
+        wrapped_iter_tensors = self.__wrapped__.iter_tensors(key_ranges)
+        if self.num_fields == 1:
+            return map(self._self_map_tensor, wrapped_iter_tensors)
+        else:
+            return map(self._self_map_tensors, wrapped_iter_tensors)
+
+
+class DenseTensorSchema(TensorSchema[np.ndarray]):
+    """
+    TensorSchema for reading dense TileDB arrays as (dense) Numpy arrays.
+    """
+
+    def __init__(self, **kwargs: Any):
+        super().__init__(**kwargs)
+        if self._array.schema.sparse:
+            raise NotImplementedError(
+                "Mapping a sparse TileDB array to dense tensors is not implemented"
+            )
 
     @property
     def key_range(self) -> InclusiveRange[int, int]:
@@ -143,7 +186,7 @@ class DenseTensorSchema(TensorSchema):
         """
         Generate batches of Numpy arrays.
 
-        If `key_dim_index > 0`, the generated arrays will ve reshaped so that the key_dim
+        If `key_dim_index > 0`, the generated arrays will be reshaped so that the key_dim
         axes is first. For example, if the TileDB array `a` has shape (5, 12, 20) and
         `key_dim_index == 1`, then `a[:, 4:8, :]` returns arrays of shape (5, 4, 20) but
         this method yields arrays of shape (4, 5, 20).
@@ -191,33 +234,42 @@ class DenseTensorSchema(TensorSchema):
         return max(1, int(rows_per_slice * num_slices))
 
 
-class SparseTensorSchema(TensorSchema):
-    sparse = True
+class SparseTensorSchema(TensorSchema[sparse.COO]):
+    """
+    TensorSchema for reading sparse TileDB arrays as sparse.COO instances.
+    """
 
     def __init__(self, **kwargs: Any):
         super().__init__(**kwargs)
+        if not self._array.schema.sparse:
+            raise NotImplementedError(
+                "Mapping a dense TileDB array to sparse tensors is not implemented"
+            )
         self._query_kwargs["dims"] = self._all_dims
-        key_counter: Counter[Any] = Counter()
-        key_dim = self._all_dims[0]
-        query = self._array.query(dims=(key_dim,), attrs=(), return_incomplete=True)
-        for result in query.multi_index[:]:
-            key_counter.update(result[key_dim])
-        self._key_range = InclusiveRange.factory(key_counter)
 
     @property
     def key_range(self) -> InclusiveRange[Any, int]:
-        return self._key_range
+        self._key_range: InclusiveRange[Any, int]
+        try:
+            return self._key_range
+        except AttributeError:
+            key_counter: Counter[Any] = Counter()
+            key_dim = self.key_dim
+            query = self._array.query(dims=(key_dim,), attrs=(), return_incomplete=True)
+            for result in query.multi_index[:]:
+                key_counter.update(result[key_dim])
+            self._key_range = InclusiveRange.factory(key_counter)
+            return self._key_range
 
     def iter_tensors(
         self, key_ranges: Iterable[InclusiveRange[Any, int]]
-    ) -> Union[Iterable[Tensor], Iterable[Sequence[Tensor]]]:
+    ) -> Union[Iterable[sparse.COO], Iterable[Sequence[sparse.COO]]]:
         shape = list(self.shape)
         query = self.query
         get_data = itemgetter(*self._fields)
         single_field = len(self._fields) == 1
         key_dim, *non_key_dims = self._all_dims
         non_key_dim_starts = tuple(map(itemgetter(0), self._ned[1:]))
-        transform = self._transform or (lambda x: x)
         for key_range in key_ranges:
             # Set the shape of the key dimension equal to the current key range length
             shape[0] = len(key_range)
@@ -236,9 +288,9 @@ class SparseTensorSchema(TensorSchema):
 
             # yield either a single tensor or a sequence of tensors, one for each field
             if single_field:
-                yield transform(sparse.COO(coords, data, shape))
+                yield sparse.COO(coords, data, shape)
             else:
-                yield tuple(transform(sparse.COO(coords, d, shape)) for d in data)
+                yield tuple(sparse.COO(coords, d, shape) for d in data)
 
     @property
     def max_partition_weight(self) -> int:
@@ -268,6 +320,21 @@ class SparseTensorSchema(TensorSchema):
         # Finally, the number of cells that can fit in the memory_budget depends on the
         # maximum bytes_per_cell
         return max(1, memory_budget // ceil(max(bytes_per_cell)))
+
+
+def SparseCSRTensorSchema(**kwargs: Any) -> TensorSchema[scipy.sparse.csr_matrix]:
+    """
+    Return a TensorSchema for reading sparse 2D TileDB arrays as scipy.sparse.csr_matrix
+    instances.
+    """
+    return MappedTensorSchema(SparseTensorSchema(**kwargs), methodcaller("tocsr"))
+
+
+TensorSchemaFactories = {
+    TensorKind.DENSE: DenseTensorSchema,
+    TensorKind.SPARSE_COO: SparseTensorSchema,
+    TensorKind.SPARSE_CSR: SparseCSRTensorSchema,
+}
 
 
 class KeyDimQuery:

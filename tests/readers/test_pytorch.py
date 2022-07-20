@@ -96,7 +96,6 @@ class TestPyTorchTileDBDataLoader:
             assert "All arrays must have the same key range" in str(ex.value)
 
     @parametrize_for_dataset(num_fields=[0], shuffle_buffer_size=[0], num_workers=[0])
-    @pytest.mark.parametrize("csr", [True, False])
     def test_dataloader_order(
         self,
         tmpdir,
@@ -111,7 +110,6 @@ class TestPyTorchTileDBDataLoader:
         batch_size,
         shuffle_buffer_size,
         num_workers,
-        csr,
     ):
         """Test we can read the data in the same order as written.
 
@@ -134,7 +132,6 @@ class TestPyTorchTileDBDataLoader:
                 ArrayParams(y_kwargs["array"], y_kwargs["key_dim"], y_kwargs["fields"]),
                 **dataloader_params,
                 shuffle_buffer_size=shuffle_buffer_size,
-                csr=csr,
             )
             # since num_fields is 0, fields are all the array attributes of each array
             # the first item of each batch corresponds to the first attribute (="data")
