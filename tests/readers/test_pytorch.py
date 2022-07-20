@@ -14,20 +14,21 @@ class TestPyTorchTileDBDataLoader:
     def test_dataloader(
         self, tmpdir, x_spec, y_spec, batch_size, shuffle_buffer_size, num_workers
     ):
-        if num_workers and (x_spec.sparse or y_spec.sparse):
-            pytest.skip("multiple workers not supported with sparse arrays")
-
         with ingest_in_tiledb(tmpdir, x_spec) as (x_params, x_data):
             with ingest_in_tiledb(tmpdir, y_spec) as (y_params, y_data):
-                dataloader = PyTorchTileDBDataLoader(
-                    x_params,
-                    y_params,
-                    shuffle_buffer_size=shuffle_buffer_size,
-                    batch_size=batch_size,
-                    num_workers=num_workers,
-                )
-                assert isinstance(dataloader, torch.utils.data.DataLoader)
-                validate_tensor_generator(dataloader, x_spec, y_spec, batch_size)
+                try:
+                    dataloader = PyTorchTileDBDataLoader(
+                        x_params,
+                        y_params,
+                        shuffle_buffer_size=shuffle_buffer_size,
+                        batch_size=batch_size,
+                        num_workers=num_workers,
+                    )
+                except NotImplementedError:
+                    assert num_workers and (x_spec.sparse or y_spec.sparse)
+                else:
+                    assert isinstance(dataloader, torch.utils.data.DataLoader)
+                    validate_tensor_generator(dataloader, x_spec, y_spec, batch_size)
 
     @parametrize_for_dataset(
         # Add one extra key on X
