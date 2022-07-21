@@ -22,11 +22,14 @@ class ArraySpec:
     shape: Sequence[int]
     key_dim: int
     key_dim_dtype: np.dtype
+    non_key_dim_dtype: np.dtype
     num_fields: int
 
     def tensor_kind(self, supports_csr: bool) -> TensorKind:
         if not self.sparse:
             return TensorKind.DENSE
+        elif not np.issubdtype(self.non_key_dim_dtype, np.integer):
+            return TensorKind.RAGGED
         elif len(self.shape) == 2 and supports_csr:
             return TensorKind.SPARSE_CSR
         else:
@@ -42,6 +45,7 @@ def parametrize_for_dataset(
     x_key_dim=(0, 1),
     y_key_dim=(0, 1),
     key_dim_dtype=(np.dtype(np.int32), np.dtype("datetime64[D]"), np.dtype(np.bytes_)),
+    non_key_dim_dtype=(np.dtype(np.int32), np.dtype(np.float32)),
     num_fields=(0, 1, 2),
     batch_size=(8,),
     shuffle_buffer_size=(16,),
@@ -57,6 +61,7 @@ def parametrize_for_dataset(
         x_key_dim_,
         y_key_dim_,
         key_dim_dtype_,
+        non_key_dim_dtype_,
         num_fields_,
         batch_size_,
         shuffle_buffer_size_,
@@ -69,6 +74,7 @@ def parametrize_for_dataset(
         x_key_dim,
         y_key_dim,
         key_dim_dtype,
+        non_key_dim_dtype,
         num_fields,
         batch_size,
         shuffle_buffer_size,
@@ -78,9 +84,12 @@ def parametrize_for_dataset(
         if not x_sparse_ or not y_sparse_:
             if not np.issubdtype(key_dim_dtype_, np.integer):
                 continue
+            if not np.issubdtype(non_key_dim_dtype_, np.integer):
+                continue
 
-        x_spec = ArraySpec(x_sparse_, x_shape_, x_key_dim_, key_dim_dtype_, num_fields_)
-        y_spec = ArraySpec(y_sparse_, y_shape_, y_key_dim_, key_dim_dtype_, num_fields_)
+        common_args = (key_dim_dtype_, non_key_dim_dtype_, num_fields_)
+        x_spec = ArraySpec(x_sparse_, x_shape_, x_key_dim_, *common_args)
+        y_spec = ArraySpec(y_sparse_, y_shape_, y_key_dim_, *common_args)
         argvalues.append(
             (x_spec, y_spec, batch_size_, shuffle_buffer_size_, num_workers_)
         )
@@ -101,7 +110,7 @@ def ingest_in_tiledb(tmpdir, spec: ArraySpec):
     transforms = []
     for i in range(data.ndim):
         n = data.shape[i]
-        dtype = spec.key_dim_dtype if i == spec.key_dim else np.dtype("int32")
+        dtype = spec.key_dim_dtype if i == spec.key_dim else spec.non_key_dim_dtype
         if np.issubdtype(dtype, np.number):
             # set the domain to (-n/2, n/2) to test negative domain indexing
             min_value = -(n // 2)
@@ -216,16 +225,28 @@ def validate_tensor_generator(generator, x_spec, y_spec, batch_size, supports_cs
 def _validate_tensor(tensor, spec, batch_size, supports_csr):
     tensor_kind = _get_tensor_kind(tensor)
     assert tensor_kind is spec.tensor_kind(supports_csr)
-    num_rows, *row_shape = tensor.shape
+
+    spec_row_shape = spec.shape[1:]
+    if tensor_kind is not TensorKind.RAGGED:
+        num_rows, *row_shape = tensor.shape
+        assert tuple(row_shape) == spec_row_shape
+    else:
+        # every ragged array row has at most `np.prod(spec_row_shape)` elements,
+        # the product of all non-key dimension sizes
+        row_lengths = tuple(map(len, tensor))
+        assert all(row_length <= np.prod(spec_row_shape) for row_length in row_lengths)
+        num_rows = len(row_lengths)
+
     # num_rows may be less than batch_size
     assert num_rows <= batch_size, (num_rows, batch_size)
-    assert tuple(row_shape) == spec.shape[1:]
 
 
 def _get_tensor_kind(tensor) -> TensorKind:
     if isinstance(tensor, tf.Tensor):
         return TensorKind.DENSE
     if isinstance(tensor, torch.Tensor):
+        if getattr(tensor, "is_nested", False):
+            return TensorKind.RAGGED
         return _torch_tensor_layout_to_kind[tensor.layout]
     return _tensor_type_to_kind[type(tensor)]
 
@@ -236,6 +257,7 @@ _tensor_type_to_kind = {
     scipy.sparse.coo_matrix: TensorKind.SPARSE_COO,
     scipy.sparse.csr_matrix: TensorKind.SPARSE_CSR,
     tf.SparseTensor: TensorKind.SPARSE_COO,
+    tf.RaggedTensor: TensorKind.RAGGED,
 }
 
 _torch_tensor_layout_to_kind = {
