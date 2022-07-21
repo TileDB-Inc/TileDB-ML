@@ -24,7 +24,9 @@ class TestTensorflowTileDBDataset:
                     num_workers=num_workers,
                 )
                 assert isinstance(dataset, tf.data.Dataset)
-                validate_tensor_generator(dataset, x_spec, y_spec, batch_size)
+                validate_tensor_generator(
+                    dataset, x_spec, y_spec, batch_size, supports_csr=False
+                )
 
     @parametrize_for_dataset(
         # Add one extra key on X

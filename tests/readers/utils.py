@@ -13,7 +13,7 @@ import tensorflow as tf
 import torch
 
 import tiledb
-from tiledb.ml.readers.types import ArrayParams
+from tiledb.ml.readers.types import ArrayParams, TensorKind
 
 
 @dataclass(frozen=True)
@@ -24,16 +24,21 @@ class ArraySpec:
     key_dim_dtype: np.dtype
     num_fields: int
 
-
-NUM_ROWS = 107
+    def tensor_kind(self, supports_csr: bool) -> TensorKind:
+        if not self.sparse:
+            return TensorKind.DENSE
+        elif len(self.shape) == 2 and supports_csr:
+            return TensorKind.SPARSE_CSR
+        else:
+            return TensorKind.SPARSE_COO
 
 
 def parametrize_for_dataset(
     *,
     x_sparse=(True, False),
     y_sparse=(True, False),
-    x_shape=((NUM_ROWS, 10), (NUM_ROWS, 10, 3)),
-    y_shape=((NUM_ROWS, 5), (NUM_ROWS, 5, 2)),
+    x_shape=((107, 10), (107, 10, 3)),
+    y_shape=((107, 5), (107, 5, 2)),
     x_key_dim=(0, 1),
     y_key_dim=(0, 1),
     key_dim_dtype=(np.dtype(np.int32), np.dtype("datetime64[D]"), np.dtype(np.bytes_)),
@@ -200,27 +205,41 @@ def _int_to_bytes(n: int) -> bytes:
     return bytes(s)
 
 
-def validate_tensor_generator(generator, x_spec, y_spec, batch_size):
+def validate_tensor_generator(generator, x_spec, y_spec, batch_size, supports_csr):
     for x_tensors, y_tensors in generator:
         for x_tensor in x_tensors if isinstance(x_tensors, Sequence) else [x_tensors]:
-            _validate_tensor(x_tensor, x_spec.sparse, x_spec.shape[1:], batch_size)
+            _validate_tensor(x_tensor, x_spec, batch_size, supports_csr)
         for y_tensor in y_tensors if isinstance(y_tensors, Sequence) else [y_tensors]:
-            _validate_tensor(y_tensor, y_spec.sparse, y_spec.shape[1:], batch_size)
+            _validate_tensor(y_tensor, y_spec, batch_size, supports_csr)
 
 
-def _validate_tensor(tensor, expected_sparse, expected_row_shape, batch_size):
+def _validate_tensor(tensor, spec, batch_size, supports_csr):
+    tensor_kind = _get_tensor_kind(tensor)
+    assert tensor_kind is spec.tensor_kind(supports_csr)
     num_rows, *row_shape = tensor.shape
     # num_rows may be less than batch_size
     assert num_rows <= batch_size, (num_rows, batch_size)
-    assert tuple(row_shape) == expected_row_shape
-    assert _is_sparse(tensor) == expected_sparse
+    assert tuple(row_shape) == spec.shape[1:]
 
 
-def _is_sparse(tensor):
+def _get_tensor_kind(tensor) -> TensorKind:
+    if isinstance(tensor, tf.Tensor):
+        return TensorKind.DENSE
     if isinstance(tensor, torch.Tensor):
-        return tensor.layout in (torch.sparse_coo, torch.sparse_csr)
-    if isinstance(tensor, (scipy.sparse.spmatrix, sparse.SparseArray, tf.SparseTensor)):
-        return True
-    if isinstance(tensor, (np.ndarray, tf.Tensor)):
-        return False
-    assert False, f"Unknown tensor type: {type(tensor)}"
+        return _torch_tensor_layout_to_kind[tensor.layout]
+    return _tensor_type_to_kind[type(tensor)]
+
+
+_tensor_type_to_kind = {
+    np.ndarray: TensorKind.DENSE,
+    sparse.COO: TensorKind.SPARSE_COO,
+    scipy.sparse.coo_matrix: TensorKind.SPARSE_COO,
+    scipy.sparse.csr_matrix: TensorKind.SPARSE_CSR,
+    tf.SparseTensor: TensorKind.SPARSE_COO,
+}
+
+_torch_tensor_layout_to_kind = {
+    torch.strided: TensorKind.DENSE,
+    torch.sparse_coo: TensorKind.SPARSE_COO,
+    torch.sparse_csr: TensorKind.SPARSE_CSR,
+}

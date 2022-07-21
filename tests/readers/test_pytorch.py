@@ -28,7 +28,9 @@ class TestPyTorchTileDBDataLoader:
                     assert num_workers and (x_spec.sparse or y_spec.sparse)
                 else:
                     assert isinstance(dataloader, torch.utils.data.DataLoader)
-                    validate_tensor_generator(dataloader, x_spec, y_spec, batch_size)
+                    validate_tensor_generator(
+                        dataloader, x_spec, y_spec, batch_size, supports_csr=True
+                    )
 
     @parametrize_for_dataset(
         # Add one extra key on X
