@@ -3,12 +3,14 @@
 import itertools
 import random
 from dataclasses import dataclass
+from operator import methodcaller
 from typing import (
     Any,
     Callable,
     Dict,
     Iterable,
     Iterator,
+    Mapping,
     Sequence,
     Tuple,
     TypeVar,
@@ -61,7 +63,7 @@ def PyTorchTileDBDataLoader(
     the following arguments: 'shuffle', 'sampler', 'batch_sampler', 'worker_init_fn' and 'collate_fn'.
     """
     schemas = tuple(
-        array_params.to_tensor_schema() for array_params in all_array_params
+        array_params.to_tensor_schema(_transforms) for array_params in all_array_params
     )
     key_range = schemas[0].key_range
     if not all(key_range.equal_values(schema.key_range) for schema in schemas[1:]):
@@ -140,13 +142,20 @@ def _ndarray_collate(arrays: Sequence[np.ndarray]) -> torch.Tensor:
     return torch.from_numpy(np.stack(arrays))
 
 
-def _sparse_coo_collate(arrays: Sequence[sparse.COO]) -> torch.Tensor:
+def _coo_collate(arrays: Sequence[sparse.COO]) -> torch.Tensor:
     """Collate multiple sparse.COO arrays to a torch.Tensor with sparse_coo layout."""
     stacked = sparse.stack(arrays)
     return torch.sparse_coo_tensor(stacked.coords, stacked.data, stacked.shape)
 
 
-def _sparse_csr_collate(arrays: Sequence[scipy.sparse.csr_matrix]) -> torch.Tensor:
+def _csr_to_coo_collate(arrays: Sequence[scipy.sparse.csr_matrix]) -> torch.Tensor:
+    """Collate multiple Scipy CSR matrices to a torch.Tensor with sparse_coo layout."""
+    stacked = scipy.sparse.vstack(arrays).tocoo()
+    coords = np.stack((stacked.row, stacked.col))
+    return torch.sparse_coo_tensor(coords, stacked.data, stacked.shape)
+
+
+def _csr_collate(arrays: Sequence[scipy.sparse.csr_matrix]) -> torch.Tensor:
     """Collate multiple Scipy CSR matrices to a torch.Tensor with sparse_csr layout."""
     stacked = scipy.sparse.vstack(arrays)
     return torch.sparse_csr_tensor(
@@ -157,22 +166,35 @@ def _sparse_csr_collate(arrays: Sequence[scipy.sparse.csr_matrix]) -> torch.Tens
     )
 
 
-_collators = {
-    TensorKind.DENSE: _ndarray_collate,
-    TensorKind.SPARSE_COO: _sparse_coo_collate,
-    TensorKind.SPARSE_CSR: _sparse_csr_collate,
-}
-
-
 def _get_tensor_collator(
     schema: TensorSchema[Tensor],
 ) -> Union[_SingleCollator, _CompositeCollator]:
-    collator = _collators[schema.kind]
+    if schema.kind is TensorKind.DENSE:
+        collator = _ndarray_collate
+    elif schema.kind is TensorKind.SPARSE_COO:
+        if len(schema.shape) != 2:
+            collator = _coo_collate
+        else:
+            collator = _csr_to_coo_collate
+    elif schema.kind is TensorKind.SPARSE_CSR:
+        if len(schema.shape) != 2:
+            raise ValueError(f"SPARSE_CSR is supported only for 2D tensors")
+        collator = _csr_collate
+    else:
+        assert False, schema.kind
+
     num_fields = schema.num_fields
     if num_fields == 1:
         return collator
     else:
         return _CompositeCollator(*itertools.repeat(collator, num_fields))
+
+
+_transforms: Mapping[TensorKind, Union[Callable[[Any], Any], bool]] = {
+    TensorKind.DENSE: True,
+    TensorKind.SPARSE_COO: methodcaller("to_array"),
+    TensorKind.SPARSE_CSR: methodcaller("to_array"),
+}
 
 
 _T = TypeVar("_T")

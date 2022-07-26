@@ -5,7 +5,7 @@ from typing import Any, Callable, Mapping, Sequence, Union
 import numpy as np
 import tensorflow as tf
 
-from ._tensor_schema import TensorKind, TensorSchema
+from ._tensor_schema import SparseData, TensorKind, TensorSchema
 from .types import ArrayParams
 
 Tensor = Union[np.ndarray, tf.SparseTensor]
@@ -70,10 +70,18 @@ def _get_tensor_specs(
     return specs if len(specs) > 1 else specs[0]
 
 
+def _to_sparse_tensor(sd: SparseData) -> tf.SparseTensor:
+    sa = sd.to_array()
+    coords = getattr(sa, "coords", None)
+    if coords is None:
+        # sa is a scipy.sparse.csr_matrix
+        coo = sa.tocoo()
+        coords = np.array((coo.row, coo.col))
+    return tf.SparseTensor(coords.T, sa.data, sa.shape)
+
+
 _transforms: Mapping[TensorKind, Union[Callable[[Any], Any], bool]] = {
     TensorKind.DENSE: True,
-    TensorKind.SPARSE_COO: (
-        lambda coo: tf.SparseTensor(coo.coords.T, coo.data, coo.shape)
-    ),
+    TensorKind.SPARSE_COO: _to_sparse_tensor,
     TensorKind.SPARSE_CSR: False,
 }
