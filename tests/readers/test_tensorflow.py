@@ -6,11 +6,7 @@ import tensorflow as tf
 
 from tiledb.ml.readers.tensorflow import TensorflowTileDBDataset
 
-from .utils import (
-    ingest_in_tiledb,
-    parametrize_for_dataset,
-    validate_tensor_generator,
-)
+from .utils import ingest_in_tiledb, parametrize_for_dataset, validate_tensor_generator
 
 
 def dataset_batching_shuffling(dataset: tf.data.Dataset, batch_size: int, shuffle_buffer_size: int) -> tf.data.Dataset:
