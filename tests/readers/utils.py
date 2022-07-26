@@ -13,86 +13,104 @@ import tensorflow as tf
 import torch
 
 import tiledb
+from tiledb.ml.readers.types import ArrayParams, TensorKind
 
-NUM_ROWS = 107
+
+@dataclass(frozen=True)
+class ArraySpec:
+    sparse: bool
+    shape: Sequence[int]
+    key_dim: int
+    key_dim_dtype: np.dtype
+    num_fields: int
+
+    def tensor_kind(self, supports_csr: bool) -> TensorKind:
+        if not self.sparse:
+            return TensorKind.DENSE
+        elif len(self.shape) == 2 and supports_csr:
+            return TensorKind.SPARSE_CSR
+        else:
+            return TensorKind.SPARSE_COO
 
 
 def parametrize_for_dataset(
     *,
-    x_shape=((NUM_ROWS, 10), (NUM_ROWS, 10, 3)),
-    y_shape=((NUM_ROWS, 5), (NUM_ROWS, 5, 2)),
     x_sparse=(True, False),
     y_sparse=(True, False),
-    key_dim_dtype=(np.dtype(np.int32), np.dtype("datetime64[D]"), np.dtype(np.bytes_)),
+    x_shape=((107, 10), (107, 10, 3)),
+    y_shape=((107, 5), (107, 5, 2)),
     x_key_dim=(0, 1),
     y_key_dim=(0, 1),
+    key_dim_dtype=(np.dtype(np.int32), np.dtype("datetime64[D]"), np.dtype(np.bytes_)),
     num_fields=(0, 1, 2),
     batch_size=(8,),
     shuffle_buffer_size=(16,),
     num_workers=(0, 2),
 ):
-    def is_valid_combination(t):
-        _, _, x_sparse_, y_sparse_, key_dim_dtype_, *_ = t
-        return bool(
-            np.issubdtype(key_dim_dtype_, np.integer) or (x_sparse_ and y_sparse_)
-        )
-
-    argnames = [
-        "x_shape",
-        "y_shape",
-        "x_sparse",
-        "y_sparse",
-        "key_dim_dtype",
-        "x_key_dim",
-        "y_key_dim",
-        "num_fields",
-        "batch_size",
-        "shuffle_buffer_size",
-        "num_workers",
-    ]
-    argvalues = it.product(
-        x_shape,
-        y_shape,
+    argnames = ("x_spec", "y_spec", "batch_size", "shuffle_buffer_size", "num_workers")
+    argvalues = []
+    for (
+        x_sparse_,
+        y_sparse_,
+        x_shape_,
+        y_shape_,
+        x_key_dim_,
+        y_key_dim_,
+        key_dim_dtype_,
+        num_fields_,
+        batch_size_,
+        shuffle_buffer_size_,
+        num_workers_,
+    ) in it.product(
         x_sparse,
         y_sparse,
-        key_dim_dtype,
+        x_shape,
+        y_shape,
         x_key_dim,
         y_key_dim,
+        key_dim_dtype,
         num_fields,
         batch_size,
         shuffle_buffer_size,
         num_workers,
-    )
-    return pytest.mark.parametrize(argnames, filter(is_valid_combination, argvalues))
+    ):
+        # if x and/or y is dense, all dtypes must be integer
+        if not x_sparse_ or not y_sparse_:
+            if not np.issubdtype(key_dim_dtype_, np.integer):
+                continue
+
+        x_spec = ArraySpec(x_sparse_, x_shape_, x_key_dim_, key_dim_dtype_, num_fields_)
+        y_spec = ArraySpec(y_sparse_, y_shape_, y_key_dim_, key_dim_dtype_, num_fields_)
+        argvalues.append(
+            (x_spec, y_spec, batch_size_, shuffle_buffer_size_, num_workers_)
+        )
+
+    return pytest.mark.parametrize(argnames, argvalues)
 
 
 @contextmanager
-def ingest_in_tiledb(tmpdir, shape, sparse, key_dim_dtype, key_dim, num_fields):
+def ingest_in_tiledb(tmpdir, spec: ArraySpec):
     """Context manager for ingesting data into TileDB."""
     array_uuid = str(uuid.uuid4())
     uri = os.path.join(tmpdir, array_uuid)
-    data = original_data = _rand_array(shape, sparse)
-    if key_dim > 0:
-        data = np.moveaxis(data, 0, key_dim)
+    data = original_data = _rand_array(spec.shape, spec.sparse)
+    if spec.key_dim > 0:
+        data = np.moveaxis(data, 0, spec.key_dim)
     data_idx = np.arange(data.size).reshape(data.shape)
 
     transforms = []
     for i in range(data.ndim):
         n = data.shape[i]
-        dtype = key_dim_dtype
-        if i != key_dim:
-            dtype = np.dtype("int32")
+        dtype = spec.key_dim_dtype if i == spec.key_dim else np.dtype("int32")
+        if np.issubdtype(dtype, np.number):
             # set the domain to (-n/2, n/2) to test negative domain indexing
             min_value = -(n // 2)
-        elif np.issubdtype(key_dim_dtype, np.integer):
-            # set the domain to (-n/2, n/2) to test negative domain indexing
-            min_value = -(n // 2)
-        elif np.issubdtype(key_dim_dtype, np.datetime64):
+        elif np.issubdtype(dtype, np.datetime64):
             min_value = np.datetime64("2022-06-15")
-        elif np.issubdtype(key_dim_dtype, np.bytes_):
+        elif np.issubdtype(dtype, np.bytes_):
             min_value = b"a"
         else:
-            assert False, key_dim_dtype
+            assert False, dtype
         transforms.append(_IndexTransformer(f"dim_{i}", n, min_value, dtype))
 
     dims = [transform.dim for transform in transforms]
@@ -100,11 +118,13 @@ def ingest_in_tiledb(tmpdir, shape, sparse, key_dim_dtype, key_dim, num_fields):
         tiledb.Attr(name="data", dtype=np.float32),
         tiledb.Attr(name="idx", dtype=np.int16),
     ]
-    schema = tiledb.ArraySchema(domain=tiledb.Domain(*dims), attrs=attrs, sparse=sparse)
+    schema = tiledb.ArraySchema(
+        domain=tiledb.Domain(*dims), attrs=attrs, sparse=spec.sparse
+    )
     tiledb.Array.create(uri, schema)
 
     with tiledb.open(uri, "w") as tiledb_array:
-        if sparse:
+        if spec.sparse:
             nz_idxs = np.nonzero(data)
             dim_idxs = tuple(
                 transform(idx) for transform, idx in zip(transforms, nz_idxs)
@@ -115,17 +135,12 @@ def ingest_in_tiledb(tmpdir, shape, sparse, key_dim_dtype, key_dim, num_fields):
 
     all_fields = [f.name for f in dims + attrs]
     # exclude the key dimension from the fields if it is not an integer
-    if not np.issubdtype(key_dim_dtype, np.integer):
-        del all_fields[key_dim]
-    fields = np.random.choice(all_fields, size=num_fields, replace=False).tolist()
+    if not np.issubdtype(spec.key_dim_dtype, np.integer):
+        del all_fields[spec.key_dim]
+    fields = np.random.choice(all_fields, size=spec.num_fields, replace=False).tolist()
 
     with tiledb.open(uri) as array:
-        yield {
-            "data": original_data,
-            "array": array,
-            "key_dim": key_dim,
-            "fields": fields,
-        }
+        yield ArrayParams(array, spec.key_dim, fields), original_data
 
 
 def _rand_array(shape: Sequence[int], sparse: bool = False) -> np.ndarray:
@@ -190,36 +205,41 @@ def _int_to_bytes(n: int) -> bytes:
     return bytes(s)
 
 
-def validate_tensor_generator(
-    generator, num_fields, x_sparse, y_sparse, x_shape, y_shape, batch_size=None
-):
+def validate_tensor_generator(generator, x_spec, y_spec, batch_size, supports_csr):
     for x_tensors, y_tensors in generator:
-        for x_tensor in x_tensors if num_fields != 1 else [x_tensors]:
-            _validate_tensor(x_tensor, x_sparse, x_shape[1:], batch_size)
-        for y_tensor in y_tensors if num_fields != 1 else [y_tensors]:
-            _validate_tensor(y_tensor, y_sparse, y_shape[1:], batch_size)
+        for x_tensor in x_tensors if isinstance(x_tensors, Sequence) else [x_tensors]:
+            _validate_tensor(x_tensor, x_spec, batch_size, supports_csr)
+        for y_tensor in y_tensors if isinstance(y_tensors, Sequence) else [y_tensors]:
+            _validate_tensor(y_tensor, y_spec, batch_size, supports_csr)
 
 
-def _validate_tensor(tensor, expected_sparse, expected_row_shape, batch_size=None):
-    if batch_size is None and not isinstance(tensor, scipy.sparse.spmatrix):
-        row_shape = tensor.shape
-    else:
-        num_rows, *row_shape = tensor.shape
-        if batch_size is None:
-            assert isinstance(tensor, scipy.sparse.spmatrix)
-            assert num_rows == 1
-        else:
-            # num_rows may be less than batch_size
-            assert num_rows <= batch_size, (num_rows, batch_size)
-    assert tuple(row_shape) == expected_row_shape
-    assert _is_sparse(tensor) == expected_sparse
+def _validate_tensor(tensor, spec, batch_size, supports_csr):
+    tensor_kind = _get_tensor_kind(tensor)
+    assert tensor_kind is spec.tensor_kind(supports_csr)
+    num_rows, *row_shape = tensor.shape
+    # num_rows may be less than batch_size
+    assert num_rows <= batch_size, (num_rows, batch_size)
+    assert tuple(row_shape) == spec.shape[1:]
 
 
-def _is_sparse(tensor):
+def _get_tensor_kind(tensor) -> TensorKind:
+    if isinstance(tensor, tf.Tensor):
+        return TensorKind.DENSE
     if isinstance(tensor, torch.Tensor):
-        return tensor.layout in (torch.sparse_coo, torch.sparse_csr)
-    if isinstance(tensor, (scipy.sparse.spmatrix, sparse.SparseArray, tf.SparseTensor)):
-        return True
-    if isinstance(tensor, (np.ndarray, tf.Tensor)):
-        return False
-    assert False, f"Unknown tensor type: {type(tensor)}"
+        return _torch_tensor_layout_to_kind[tensor.layout]
+    return _tensor_type_to_kind[type(tensor)]
+
+
+_tensor_type_to_kind = {
+    np.ndarray: TensorKind.DENSE,
+    sparse.COO: TensorKind.SPARSE_COO,
+    scipy.sparse.coo_matrix: TensorKind.SPARSE_COO,
+    scipy.sparse.csr_matrix: TensorKind.SPARSE_CSR,
+    tf.SparseTensor: TensorKind.SPARSE_COO,
+}
+
+_torch_tensor_layout_to_kind = {
+    torch.strided: TensorKind.DENSE,
+    torch.sparse_coo: TensorKind.SPARSE_COO,
+    torch.sparse_csr: TensorKind.SPARSE_CSR,
+}

@@ -2,6 +2,7 @@
 
 import itertools
 import random
+from dataclasses import dataclass
 from typing import (
     Any,
     Callable,
@@ -20,6 +21,7 @@ import sparse
 import torch
 from torch.utils.data import DataLoader, IterableDataset, get_worker_info
 
+from ._ranges import InclusiveRange
 from ._tensor_schema import TensorKind, TensorSchema
 from .types import ArrayParams
 
@@ -61,34 +63,37 @@ def PyTorchTileDBDataLoader(
     schemas = tuple(
         array_params.to_tensor_schema() for array_params in all_array_params
     )
+    key_range = schemas[0].key_range
+    if not all(key_range.equal_values(schema.key_range) for schema in schemas[1:]):
+        raise ValueError(f"All arrays must have the same key range: {key_range}")
+
+    if kwargs.get("num_workers") and any(
+        schema.kind is not TensorKind.DENSE for schema in schemas
+    ):
+        raise NotImplementedError("https://github.com/pytorch/pytorch/issues/20248")
+
     collators = tuple(map(_get_tensor_collator, schemas))
     collate_fn = _CompositeCollator(*collators) if len(collators) > 1 else collators[0]
 
     return DataLoader(
-        dataset=_PyTorchTileDBDataset(schemas, shuffle_buffer_size=shuffle_buffer_size),
-        **kwargs,
+        dataset=_PyTorchTileDBDataset(schemas, key_range, shuffle_buffer_size),
         worker_init_fn=_worker_init,
         collate_fn=collate_fn,
+        **kwargs,
     )
 
 
+@dataclass
 class _PyTorchTileDBDataset(IterableDataset[OneOrMoreTensorsOrSequences]):
-    def __init__(
-        self, schemas: Sequence[TensorSchema[Tensor]], shuffle_buffer_size: int = 0
-    ):
-        super().__init__()
-        key_range = schemas[0].key_range
-        if not all(key_range.equal_values(schema.key_range) for schema in schemas[1:]):
-            raise ValueError(f"All arrays must have the same key range: {key_range}")
-        self.schemas = schemas
-        self.key_range = key_range
-        self._shuffle_buffer_size = shuffle_buffer_size
+    schemas: Sequence[TensorSchema[Tensor]]
+    key_range: InclusiveRange[Any, int]
+    shuffle_buffer_size: int
 
     def __iter__(self) -> Iterator[OneOrMoreTensorsOrSequences]:
         it_rows = tuple(map(self._iter_rows, self.schemas))
         rows = zip(*it_rows) if len(it_rows) > 1 else it_rows[0]
-        if self._shuffle_buffer_size > 0:
-            rows = _iter_shuffled(rows, self._shuffle_buffer_size)
+        if self.shuffle_buffer_size > 0:
+            rows = _iter_shuffled(rows, self.shuffle_buffer_size)
         return rows
 
     def _iter_rows(self, schema: TensorSchema[Tensor]) -> Iterator[TensorOrSequence]:
@@ -104,9 +109,7 @@ class _PyTorchTileDBDataset(IterableDataset[OneOrMoreTensorsOrSequences]):
 def _worker_init(worker_id: int) -> None:
     worker_info = get_worker_info()
     dataset = worker_info.dataset
-    if any(schema.kind is not TensorKind.DENSE for schema in dataset.schemas):
-        raise NotImplementedError("https://github.com/pytorch/pytorch/issues/20248")
-    key_ranges = list(dataset.key_range.partition_by_count(worker_info.num_workers))
+    key_ranges = tuple(dataset.key_range.partition_by_count(worker_info.num_workers))
     dataset.key_range = key_ranges[worker_id]
 
 
