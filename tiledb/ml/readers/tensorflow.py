@@ -13,18 +13,10 @@ Tensor = Union[np.ndarray, tf.SparseTensor]
 
 def TensorflowTileDBDataset(
     *all_array_params: ArrayParams,
-    batch_size: int,
-    shuffle_buffer_size: int = 0,
-    prefetch: int = tf.data.AUTOTUNE,
     num_workers: int = 0,
 ) -> tf.data.Dataset:
     """Return a tf.data.Dataset for loading data from TileDB arrays.
-
     :param all_array_params: One or more `ArrayParams` instances, one per TileDB array.
-    :param batch_size: Size of each batch.
-    :param shuffle_buffer_size: Number of elements from which this dataset will sample.
-    :param prefetch: Maximum number of batches that will be buffered when prefetching.
-        By default, the buffer size is dynamically tuned.
     :param num_workers: If greater than zero, create a threadpool of `num_workers` threads
         used to fetch inputs asynchronously and in parallel. Note: when `num_workers` > 1
         yielded batches may be shuffled even if `shuffle_buffer_size` is zero.
@@ -60,9 +52,7 @@ def TensorflowTileDBDataset(
     else:
         dataset = key_range_dataset(0)
 
-    if shuffle_buffer_size > 0:
-        dataset = dataset.shuffle(shuffle_buffer_size)
-    return dataset.batch(batch_size).prefetch(prefetch)
+    return dataset
 
 
 _tensor_specs = {

@@ -9,6 +9,12 @@ from tiledb.ml.readers.tensorflow import TensorflowTileDBDataset
 from .utils import ingest_in_tiledb, parametrize_for_dataset, validate_tensor_generator
 
 
+def dataset_batching_shuffling(dataset: tf.data.Dataset, batch_size: int, shuffle_buffer_size: int) -> tf.data.Dataset:
+    if shuffle_buffer_size > 0:
+        dataset = dataset.shuffle(shuffle_buffer_size)
+    return dataset.batch(batch_size)
+
+
 class TestTensorflowTileDBDataset:
     @parametrize_for_dataset()
     def test_dataset(
@@ -19,9 +25,12 @@ class TestTensorflowTileDBDataset:
                 dataset = TensorflowTileDBDataset(
                     x_params,
                     y_params,
+                    num_workers=num_workers,
+                )
+                dataset = dataset_batching_shuffling(
+                    dataset=dataset,
                     batch_size=batch_size,
                     shuffle_buffer_size=shuffle_buffer_size,
-                    num_workers=num_workers,
                 )
                 assert isinstance(dataset, tf.data.Dataset)
                 validate_tensor_generator(
@@ -42,8 +51,6 @@ class TestTensorflowTileDBDataset:
                     TensorflowTileDBDataset(
                         x_params,
                         y_params,
-                        batch_size=batch_size,
-                        shuffle_buffer_size=shuffle_buffer_size,
                         num_workers=num_workers,
                     )
                 assert "All arrays must have the same key range" in str(ex.value)
@@ -62,9 +69,12 @@ class TestTensorflowTileDBDataset:
                 dataset = TensorflowTileDBDataset(
                     x_params,
                     y_params,
+                    num_workers=num_workers,
+                )
+                dataset = dataset_batching_shuffling(
+                    dataset=dataset,
                     batch_size=batch_size,
                     shuffle_buffer_size=shuffle_buffer_size,
-                    num_workers=num_workers,
                 )
                 # since num_fields is 0, fields are all the array attributes of each array
                 # the first item of each batch corresponds to the first attribute (="data")
