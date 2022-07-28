@@ -1,27 +1,15 @@
 """Functionality for loading data from TileDB arrays to the PyTorch Dataloader API."""
 
-import itertools
-import random
-from dataclasses import dataclass
+from functools import partial
 from operator import methodcaller
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    Iterable,
-    Iterator,
-    Mapping,
-    Sequence,
-    Tuple,
-    TypeVar,
-    Union,
-)
+from typing import Any, Callable, Iterator, Mapping, Sequence, Union
 
 import numpy as np
 import scipy.sparse
 import sparse
 import torch
-from torch.utils.data import DataLoader, IterableDataset, get_worker_info
+from torch.utils.data import DataLoader, IterDataPipe
+from torchdata.datapipes.iter import IterableWrapper
 
 from ._ranges import InclusiveRange
 from ._tensor_schema import TensorKind, TensorSchema
@@ -32,13 +20,12 @@ TensorSequence = Union[
     Sequence[np.ndarray], Sequence[sparse.COO], Sequence[scipy.sparse.csr_matrix]
 ]
 TensorOrSequence = Union[Tensor, TensorSequence]
-OneOrMoreTensorsOrSequences = Union[TensorOrSequence, Tuple[TensorOrSequence, ...]]
 
 
 def PyTorchTileDBDataLoader(
     *all_array_params: ArrayParams,
     shuffle_buffer_size: int = 0,
-    **kwargs: Dict[str, Any],
+    **kwargs: Any,
 ) -> DataLoader:
     """Return a DataLoader for loading data from TileDB arrays.
 
@@ -69,50 +56,55 @@ def PyTorchTileDBDataLoader(
     if not all(key_range.equal_values(schema.key_range) for schema in schemas[1:]):
         raise ValueError(f"All arrays must have the same key range: {key_range}")
 
-    if kwargs.get("num_workers") and any(
-        schema.kind is not TensorKind.DENSE for schema in schemas
-    ):
-        raise NotImplementedError("https://github.com/pytorch/pytorch/issues/20248")
+    datapipe_for_key_range = partial(
+        _get_datapipe, schemas, shuffle_buffer_size=shuffle_buffer_size
+    )
+    num_workers = kwargs.get("num_workers", 0)
+    if num_workers:
+        if any(schema.kind is not TensorKind.DENSE for schema in schemas):
+            raise NotImplementedError("https://github.com/pytorch/pytorch/issues/20248")
+
+        worker_key_ranges = tuple(key_range.partition_by_count(num_workers))
+        datapipe = IterableWrapper(worker_key_ranges, deepcopy=False)
+        datapipe = datapipe.sharding_filter()
+        datapipe = datapipe.flatmap(datapipe_for_key_range)
+    else:
+        datapipe = datapipe_for_key_range(key_range)
 
     collators = tuple(map(_get_tensor_collator, schemas))
     collate_fn = _CompositeCollator(*collators) if len(collators) > 1 else collators[0]
 
-    return DataLoader(
-        dataset=_PyTorchTileDBDataset(schemas, key_range, shuffle_buffer_size),
-        worker_init_fn=_worker_init,
-        collate_fn=collate_fn,
-        **kwargs,
+    return DataLoader(dataset=datapipe, collate_fn=collate_fn, **kwargs)
+
+
+def _get_datapipe(
+    schemas: Sequence[TensorSchema[Tensor]],
+    key_range: InclusiveRange[Any, int],
+    shuffle_buffer_size: int = 0,
+) -> IterDataPipe:
+    schema_dps = [
+        IterableWrapper(_unbatch_tensors(schema, key_range), deepcopy=False)
+        for schema in schemas
+    ]
+    dp = schema_dps.pop(0)
+    if schema_dps:
+        dp = dp.zip(*schema_dps)
+    if shuffle_buffer_size > 0:
+        dp = dp.shuffle(buffer_size=shuffle_buffer_size)
+    return dp
+
+
+def _unbatch_tensors(
+    schema: TensorSchema[Tensor], key_range: InclusiveRange[Any, int]
+) -> Iterator[TensorOrSequence]:
+    batches = schema.iter_tensors(
+        key_range.partition_by_weight(schema.max_partition_weight)
     )
-
-
-@dataclass
-class _PyTorchTileDBDataset(IterableDataset[OneOrMoreTensorsOrSequences]):
-    schemas: Sequence[TensorSchema[Tensor]]
-    key_range: InclusiveRange[Any, int]
-    shuffle_buffer_size: int
-
-    def __iter__(self) -> Iterator[OneOrMoreTensorsOrSequences]:
-        it_rows = tuple(map(self._iter_rows, self.schemas))
-        rows = zip(*it_rows) if len(it_rows) > 1 else it_rows[0]
-        if self.shuffle_buffer_size > 0:
-            rows = _iter_shuffled(rows, self.shuffle_buffer_size)
-        return rows
-
-    def _iter_rows(self, schema: TensorSchema[Tensor]) -> Iterator[TensorOrSequence]:
-        max_weight = schema.max_partition_weight
-        key_subranges = self.key_range.partition_by_weight(max_weight)
-        batches = schema.iter_tensors(key_subranges)
-        if schema.num_fields == 1:
-            return (tensor for batch in batches for tensor in batch)
-        else:
-            return (tensors for batch in batches for tensors in zip(*batch))
-
-
-def _worker_init(worker_id: int) -> None:
-    worker_info = get_worker_info()
-    dataset = worker_info.dataset
-    key_ranges = tuple(dataset.key_range.partition_by_count(worker_info.num_workers))
-    dataset.key_range = key_ranges[worker_id]
+    if schema.num_fields > 1:
+        # convert batches of columns to batches of rows
+        batches = (zip(*batch) for batch in batches)
+    # flatten batches of rows
+    return (row for batch in batches for row in batch)
 
 
 _SingleCollator = Callable[[TensorSequence], torch.Tensor]
@@ -194,7 +186,7 @@ def _get_tensor_collator(
     if num_fields == 1:
         return collator
     else:
-        return _CompositeCollator(*itertools.repeat(collator, num_fields))
+        return _CompositeCollator(*(collator,) * num_fields)
 
 
 _transforms: Mapping[TensorKind, Union[Callable[[Any], Any], bool]] = {
@@ -203,25 +195,3 @@ _transforms: Mapping[TensorKind, Union[Callable[[Any], Any], bool]] = {
     TensorKind.SPARSE_CSR: methodcaller("to_sparse_array"),
     TensorKind.RAGGED: hasattr(torch, "nested_tensor"),
 }
-
-
-_T = TypeVar("_T")
-
-
-def _iter_shuffled(iterable: Iterable[_T], buffer_size: int) -> Iterator[_T]:
-    """
-    Shuffle the given iterable with a buffer.
-
-    The buffer with `buffer_size` is filled with elements from the iterable first.
-    Then, each item will be yielded from the buffer by reservoir sampling via iterator.
-
-    """
-    iterator = iter(iterable)
-    buffer = list(itertools.islice(iterator, buffer_size))
-    randrange = random.randrange
-    for x in iterator:
-        idx = randrange(0, buffer_size)
-        yield buffer[idx]
-        buffer[idx] = x
-    random.shuffle(buffer)
-    yield from buffer
