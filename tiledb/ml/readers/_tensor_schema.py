@@ -241,7 +241,7 @@ class SparseData:
     data: np.ndarray
     shape: Sequence[int]
 
-    def to_array(self) -> Union[scipy.sparse.csr_matrix, sparse.COO]:
+    def to_sparse_array(self) -> Union[scipy.sparse.csr_matrix, sparse.COO]:
         if len(self.shape) == 2:
             return scipy.sparse.csr_matrix((self.data, self.coords), self.shape)
         else:

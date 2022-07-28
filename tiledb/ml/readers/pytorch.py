@@ -178,7 +178,7 @@ def _get_tensor_collator(
             collator = _csr_to_coo_collate
     elif schema.kind is TensorKind.SPARSE_CSR:
         if len(schema.shape) != 2:
-            raise ValueError(f"SPARSE_CSR is supported only for 2D tensors")
+            raise ValueError("SPARSE_CSR is supported only for 2D tensors")
         collator = _csr_collate
     else:
         assert False, schema.kind
@@ -192,8 +192,8 @@ def _get_tensor_collator(
 
 _transforms: Mapping[TensorKind, Union[Callable[[Any], Any], bool]] = {
     TensorKind.DENSE: True,
-    TensorKind.SPARSE_COO: methodcaller("to_array"),
-    TensorKind.SPARSE_CSR: methodcaller("to_array"),
+    TensorKind.SPARSE_COO: methodcaller("to_sparse_array"),
+    TensorKind.SPARSE_CSR: methodcaller("to_sparse_array"),
 }
 
 

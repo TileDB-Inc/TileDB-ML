@@ -71,7 +71,7 @@ def _get_tensor_specs(
 
 
 def _to_sparse_tensor(sd: SparseData) -> tf.SparseTensor:
-    sa = sd.to_array()
+    sa = sd.to_sparse_array()
     coords = getattr(sa, "coords", None)
     if coords is None:
         # sa is a scipy.sparse.csr_matrix
