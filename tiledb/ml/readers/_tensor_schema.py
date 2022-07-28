@@ -386,7 +386,7 @@ class RaggedTensorSchema(BaseSparseTensorSchema[RaggedArray]):
         for key_range in key_ranges:
             field_arrays = query[key_range.min : key_range.max]
             # Sort the key dimension values and find the indices where the value changes
-            sort_idx = np.argsort(field_arrays[key_dim])
+            sort_idx = np.argsort(field_arrays[key_dim], kind="stable")
             split_idx = argdiff(field_arrays[key_dim][sort_idx])
             # apply the same sorting and splitting to all the field arrays
             for name, values in field_arrays.items():
