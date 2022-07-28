@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from collections import Counter
 from dataclasses import dataclass
 from math import ceil
-from operator import itemgetter, methodcaller
+from operator import itemgetter
 from typing import (
     Any,
     Callable,
@@ -14,6 +14,7 @@ from typing import (
     Iterable,
     Sequence,
     Tuple,
+    Type,
     TypeVar,
     Union,
     cast,
@@ -234,9 +235,22 @@ class DenseTensorSchema(TensorSchema[np.ndarray]):
         return max(1, int(rows_per_slice * num_slices))
 
 
-class SparseTensorSchema(TensorSchema[sparse.COO]):
+@dataclass(frozen=True)
+class SparseData:
+    coords: np.ndarray
+    data: np.ndarray
+    shape: Sequence[int]
+
+    def to_sparse_array(self) -> Union[scipy.sparse.csr_matrix, sparse.COO]:
+        if len(self.shape) == 2:
+            return scipy.sparse.csr_matrix((self.data, self.coords), self.shape)
+        else:
+            return sparse.COO(self.coords, self.data, self.shape)
+
+
+class SparseTensorSchema(TensorSchema[SparseData]):
     """
-    TensorSchema for reading sparse TileDB arrays as sparse.COO instances.
+    TensorSchema for reading sparse TileDB arrays as SparseData instances.
     """
 
     def __init__(self, **kwargs: Any):
@@ -263,7 +277,7 @@ class SparseTensorSchema(TensorSchema[sparse.COO]):
 
     def iter_tensors(
         self, key_ranges: Iterable[InclusiveRange[Any, int]]
-    ) -> Union[Iterable[sparse.COO], Iterable[Sequence[sparse.COO]]]:
+    ) -> Union[Iterable[SparseData], Iterable[Sequence[SparseData]]]:
         shape = list(self.shape)
         query = self.query
         get_data = itemgetter(*self._fields)
@@ -285,12 +299,13 @@ class SparseTensorSchema(TensorSchema[sparse.COO]):
                 field_arrays.pop(dim) - dim_start
                 for dim, dim_start in zip(non_key_dims, non_key_dim_starts)
             )
+            coords = np.array(coords)
 
-            # yield either a single tensor or a sequence of tensors, one for each field
+            # yield either a single SparseData or one SparseData per field
             if single_field:
-                yield sparse.COO(coords, data, shape)
+                yield SparseData(coords, data, shape)
             else:
-                yield tuple(sparse.COO(coords, d, shape) for d in data)
+                yield tuple(SparseData(coords, d, shape) for d in data)
 
     @property
     def max_partition_weight(self) -> int:
@@ -322,18 +337,10 @@ class SparseTensorSchema(TensorSchema[sparse.COO]):
         return max(1, memory_budget // ceil(max(bytes_per_cell)))
 
 
-def SparseCSRTensorSchema(**kwargs: Any) -> TensorSchema[scipy.sparse.csr_matrix]:
-    """
-    Return a TensorSchema for reading sparse 2D TileDB arrays as scipy.sparse.csr_matrix
-    instances.
-    """
-    return MappedTensorSchema(SparseTensorSchema(**kwargs), methodcaller("tocsr"))
-
-
-TensorSchemaFactories = {
+TensorSchemaFactories: Dict[TensorKind, Type[TensorSchema[Any]]] = {
     TensorKind.DENSE: DenseTensorSchema,
     TensorKind.SPARSE_COO: SparseTensorSchema,
-    TensorKind.SPARSE_CSR: SparseCSRTensorSchema,
+    TensorKind.SPARSE_CSR: SparseTensorSchema,
 }
 
 
