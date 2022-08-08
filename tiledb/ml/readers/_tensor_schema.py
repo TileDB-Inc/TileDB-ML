@@ -12,6 +12,7 @@ from typing import (
     Dict,
     Generic,
     Iterable,
+    Optional,
     Sequence,
     Tuple,
     Type,
@@ -36,6 +37,7 @@ class TensorKind(enum.Enum):
     DENSE = enum.auto()
     SPARSE_COO = enum.auto()
     SPARSE_CSR = enum.auto()
+    RAGGED = enum.auto()
 
 
 Tensor = TypeVar("Tensor")
@@ -66,7 +68,7 @@ class TensorSchema(ABC, Generic[Tensor]):
         return tuple(map(self._array.schema.attr_or_dim_dtype, self._fields))
 
     @property
-    def shape(self) -> Sequence[int]:
+    def shape(self) -> Sequence[Optional[int]]:
         """Shape of the array, with the key dimension moved first.
 
         **Note**: For sparse arrays, the returned shape reflects the non-empty domain of
@@ -121,7 +123,7 @@ class TensorSchema(ABC, Generic[Tensor]):
         self, key_ranges: Iterable[InclusiveRange[Any, int]]
     ) -> Union[Iterable[Tensor], Iterable[Sequence[Tensor]]]:
         """
-        Generate batches of dense or sparse tensors.
+        Generate batches of tensors.
 
         Each yielded batch is either:
         - a sequence of N tensors if N > 1, where `N == self.num_fields`, or
@@ -235,23 +237,8 @@ class DenseTensorSchema(TensorSchema[np.ndarray]):
         return max(1, int(rows_per_slice * num_slices))
 
 
-@dataclass(frozen=True)
-class SparseData:
-    coords: np.ndarray
-    data: np.ndarray
-    shape: Sequence[int]
-
-    def to_sparse_array(self) -> Union[scipy.sparse.csr_matrix, sparse.COO]:
-        if len(self.shape) == 2:
-            return scipy.sparse.csr_matrix((self.data, self.coords), self.shape)
-        else:
-            return sparse.COO(self.coords, self.data, self.shape)
-
-
-class SparseTensorSchema(TensorSchema[SparseData]):
-    """
-    TensorSchema for reading sparse TileDB arrays as SparseData instances.
-    """
+class BaseSparseTensorSchema(TensorSchema[Tensor]):
+    """Abstract base class for reading sparse TileDB arrays."""
 
     def __init__(self, **kwargs: Any):
         super().__init__(**kwargs)
@@ -259,7 +246,6 @@ class SparseTensorSchema(TensorSchema[SparseData]):
             raise NotImplementedError(
                 "Mapping a dense TileDB array to sparse tensors is not implemented"
             )
-        self._query_kwargs["dims"] = self._all_dims
 
     @property
     def key_range(self) -> InclusiveRange[Any, int]:
@@ -274,38 +260,6 @@ class SparseTensorSchema(TensorSchema[SparseData]):
                 key_counter.update(result[key_dim])
             self._key_range = InclusiveRange.factory(key_counter)
             return self._key_range
-
-    def iter_tensors(
-        self, key_ranges: Iterable[InclusiveRange[Any, int]]
-    ) -> Union[Iterable[SparseData], Iterable[Sequence[SparseData]]]:
-        shape = list(self.shape)
-        query = self.query
-        get_data = itemgetter(*self._fields)
-        single_field = len(self._fields) == 1
-        key_dim, *non_key_dims = self._all_dims
-        non_key_dim_starts = tuple(map(itemgetter(0), self._ned[1:]))
-        for key_range in key_ranges:
-            # Set the shape of the key dimension equal to the current key range length
-            shape[0] = len(key_range)
-            field_arrays = query[key_range.min : key_range.max]
-            data = get_data(field_arrays)
-
-            # Convert coordinates from the original domain to zero-based
-            # For the key (i.e. first) dimension get the indices of the keys
-            coords = [key_range.indices(field_arrays.pop(key_dim))]
-            # For every non-key dimension, subtract the minimum value of the dimension
-            # TODO: update this for non-integer non-key dimensions
-            coords.extend(
-                field_arrays.pop(dim) - dim_start
-                for dim, dim_start in zip(non_key_dims, non_key_dim_starts)
-            )
-            coords = np.array(coords)
-
-            # yield either a single SparseData or one SparseData per field
-            if single_field:
-                yield SparseData(coords, data, shape)
-            else:
-                yield tuple(SparseData(coords, d, shape) for d in data)
 
     @property
     def max_partition_weight(self) -> int:
@@ -337,8 +291,120 @@ class SparseTensorSchema(TensorSchema[SparseData]):
         return max(1, memory_budget // ceil(max(bytes_per_cell)))
 
 
+@dataclass(frozen=True)
+class SparseData:
+    coords: np.ndarray
+    data: np.ndarray
+    shape: Sequence[int]
+
+    def to_sparse_array(self) -> Union[scipy.sparse.csr_matrix, sparse.COO]:
+        if len(self.shape) == 2:
+            return scipy.sparse.csr_matrix((self.data, self.coords), self.shape)
+        else:
+            return sparse.COO(self.coords, self.data, self.shape)
+
+
+class SparseTensorSchema(BaseSparseTensorSchema[SparseData]):
+    """
+    TensorSchema for reading sparse TileDB arrays as SparseData instances.
+    """
+
+    def __init__(self, **kwargs: Any):
+        super().__init__(**kwargs)
+        self._query_kwargs["dims"] = self._all_dims
+
+    def iter_tensors(
+        self, key_ranges: Iterable[InclusiveRange[Any, int]]
+    ) -> Union[Iterable[SparseData], Iterable[Sequence[SparseData]]]:
+        shape = list(cast(Sequence[int], self.shape))
+        query = self.query
+        get_data = itemgetter(*self._fields)
+        single_field = len(self._fields) == 1
+        key_dim, *non_key_dims = self._all_dims
+        non_key_dim_starts = tuple(map(itemgetter(0), self._ned[1:]))
+        for key_range in key_ranges:
+            # Set the shape of the key dimension equal to the current key range length
+            shape[0] = len(key_range)
+            field_arrays = query[key_range.min : key_range.max]
+            data = get_data(field_arrays)
+
+            # Convert coordinates from the original domain to zero-based
+            # For the key (i.e. first) dimension get the indices of the keys
+            coords = [key_range.indices(field_arrays.pop(key_dim))]
+            # For every non-key dimension, subtract the minimum value of the dimension
+            # TODO: update this for non-integer non-key dimensions
+            coords.extend(
+                field_arrays.pop(dim) - dim_start
+                for dim, dim_start in zip(non_key_dims, non_key_dim_starts)
+            )
+            coords = np.array(coords)
+
+            # yield either a single SparseData or one SparseData per field
+            if single_field:
+                yield SparseData(coords, data, shape)
+            else:
+                yield tuple(SparseData(coords, d, shape) for d in data)
+
+
+RaggedArray = Sequence[np.ndarray]
+
+
+class RaggedTensorSchema(BaseSparseTensorSchema[RaggedArray]):
+    """TensorSchema for reading sparse TileDB arrays as ragged Numpy arrays.
+
+    Each ragged array is represented as a sequence of 1D Numpy arrays of the same dtype
+    but (in general) different size. Each item of the ragged array contains the values of
+    a given field for a given key (i.e. value along the key dimension). The items of the
+    ragged array are ordered by the key dimension but the values within each item are not
+    (meaningfully) ordered.
+
+    Example:
+    - (key, field1, field2) cells:
+        {('a', 3, 2.8), ('b', 1, 0.2), ('a', 7, 3.2), ('c', 5, 6.1), ('c', 2, 0.5), ('a', 2, 1.9)}
+
+    - Ragged arrays:
+        - key: [np.array(['a', 'a', 'a']), np.array(['b']), np.array(['c', 'c'])]
+        - field1: [np.array([3, 7, 2]), np.array([1]), np.array([5, 2])]
+        - field2: [np.array([2.8, 3.2, 1.9]), np.array([0.2]), np.array([6.1, 0.5])]
+    """
+
+    def __init__(self, **kwargs: Any):
+        super().__init__(**kwargs)
+        if self.key_dim not in self._query_kwargs["dims"]:
+            self._query_kwargs["dims"] += (self.key_dim,)
+
+    @property
+    def shape(self) -> Sequence[Optional[int]]:
+        return len(self.key_range), None
+
+    def iter_tensors(
+        self, key_ranges: Iterable[InclusiveRange[int, int]]
+    ) -> Union[Iterable[RaggedArray], Iterable[Sequence[RaggedArray]]]:
+        query = self.query
+        get_data = itemgetter(*self._fields)
+        key_dim = self.key_dim
+        for key_range in key_ranges:
+            field_arrays = query[key_range.min : key_range.max]
+            # Sort the key dimension values and find the indices where the value changes
+            sort_idx = np.argsort(field_arrays[key_dim], kind="stable")
+            split_idx = argdiff(field_arrays[key_dim][sort_idx])
+            # apply the same sorting and splitting to all the field arrays
+            for name, values in field_arrays.items():
+                field_arrays[name] = np.split(values[sort_idx], split_idx)
+            yield get_data(field_arrays)
+
+
+def argdiff(a: np.ndarray) -> np.ndarray:
+    """Return the indices `i` of the array `a` so that `a[i] != a[i-1]`."""
+    idx = np.nonzero(a[:-1] != a[1:])[0]
+    # the minimum diff index (if a[0] != a[1]) is 1, not 0
+    idx += 1
+    return idx
+
+
 TensorSchemaFactories: Dict[TensorKind, Type[TensorSchema[Any]]] = {
     TensorKind.DENSE: DenseTensorSchema,
+    TensorKind.RAGGED: RaggedTensorSchema,
     TensorKind.SPARSE_COO: SparseTensorSchema,
     TensorKind.SPARSE_CSR: SparseTensorSchema,
 }

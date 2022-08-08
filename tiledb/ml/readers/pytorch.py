@@ -142,6 +142,11 @@ def _ndarray_collate(arrays: Sequence[np.ndarray]) -> torch.Tensor:
     return torch.from_numpy(np.stack(arrays))
 
 
+def _ragged_ndarray_collate(arrays: Sequence[np.ndarray]) -> torch.Tensor:
+    """Collate multiple 1D Numpy arrays of possibly different size to a NestedTensor."""
+    return torch.nested_tensor(tuple(map(torch.from_numpy, arrays)))
+
+
 def _coo_collate(arrays: Sequence[sparse.COO]) -> torch.Tensor:
     """Collate multiple sparse.COO arrays to a torch.Tensor with sparse_coo layout."""
     stacked = sparse.stack(arrays)
@@ -171,6 +176,8 @@ def _get_tensor_collator(
 ) -> Union[_SingleCollator, _CompositeCollator]:
     if schema.kind is TensorKind.DENSE:
         collator = _ndarray_collate
+    elif schema.kind is TensorKind.RAGGED:
+        collator = _ragged_ndarray_collate
     elif schema.kind is TensorKind.SPARSE_COO:
         if len(schema.shape) != 2:
             collator = _coo_collate
@@ -194,6 +201,7 @@ _transforms: Mapping[TensorKind, Union[Callable[[Any], Any], bool]] = {
     TensorKind.DENSE: True,
     TensorKind.SPARSE_COO: methodcaller("to_sparse_array"),
     TensorKind.SPARSE_CSR: methodcaller("to_sparse_array"),
+    TensorKind.RAGGED: hasattr(torch, "nested_tensor"),
 }
 
 

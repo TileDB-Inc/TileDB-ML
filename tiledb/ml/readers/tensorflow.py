@@ -5,7 +5,7 @@ from typing import Any, Callable, Mapping, Sequence, Union
 import numpy as np
 import tensorflow as tf
 
-from ._tensor_schema import SparseData, TensorKind, TensorSchema
+from ._tensor_schema import RaggedArray, SparseData, TensorKind, TensorSchema
 from .types import ArrayParams
 
 Tensor = Union[np.ndarray, tf.SparseTensor]
@@ -58,6 +58,7 @@ def TensorflowTileDBDataset(
 _tensor_specs = {
     TensorKind.DENSE: tf.TensorSpec,
     TensorKind.SPARSE_COO: tf.SparseTensorSpec,
+    TensorKind.RAGGED: tf.RaggedTensorSpec,
 }
 
 
@@ -80,8 +81,13 @@ def _to_sparse_tensor(sd: SparseData) -> tf.SparseTensor:
     return tf.SparseTensor(coords.T, sa.data, sa.shape)
 
 
+def _to_ragged_tensor(ra: RaggedArray) -> tf.RaggedTensor:
+    return tf.ragged.constant(ra, dtype=ra[0].dtype)
+
+
 _transforms: Mapping[TensorKind, Union[Callable[[Any], Any], bool]] = {
     TensorKind.DENSE: True,
     TensorKind.SPARSE_COO: _to_sparse_tensor,
     TensorKind.SPARSE_CSR: False,
+    TensorKind.RAGGED: _to_ragged_tensor,
 }

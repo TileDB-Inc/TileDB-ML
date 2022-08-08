@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
 from typing import Any, Callable, Mapping, Optional, Sequence, Union
 
+import numpy as np
+
 import tiledb
 
 from ._tensor_schema import (
@@ -32,7 +34,7 @@ class ArrayParams:
                 elif f in all_dims:
                     dims.append(f)
                 else:
-                    raise ValueError(f"Unknown attribute or dimension '{field}'")
+                    raise ValueError(f"Unknown attribute or dimension '{f}'")
             final_fields = self.fields
         else:
             final_fields = attrs = all_attrs
@@ -78,6 +80,11 @@ class ArrayParams:
             tensor_kind = self.tensor_kind
         elif not self.array.schema.sparse:
             tensor_kind = TensorKind.DENSE
+        elif not all(
+            np.issubdtype(self.array.dim(dim).dtype, np.integer)
+            for dim in self._tensor_schema_kwargs["_all_dims"][1:]
+        ):
+            tensor_kind = TensorKind.RAGGED
         elif self.array.ndim != 2 or not transforms.get(TensorKind.SPARSE_CSR, True):
             tensor_kind = TensorKind.SPARSE_COO
         else:

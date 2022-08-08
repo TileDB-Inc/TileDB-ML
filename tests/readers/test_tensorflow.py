@@ -78,21 +78,22 @@ class TestTensorflowTileDBDataset:
                 )
                 # since num_fields is 0, fields are all the array attributes of each array
                 # the first item of each batch corresponds to the first attribute (="data")
-                x_data_batches, y_data_batches = [], []
+                x_batch_tensors, y_batch_tensors = [], []
                 for x_tensors, y_tensors in dataset:
-                    x_data_batch = x_tensors[0]
-                    if x_spec.sparse:
-                        x_data_batch = tf.sparse.to_dense(x_data_batch)
-                    x_data_batches.append(x_data_batch)
+                    x_batch_tensors.append(x_tensors[0])
+                    y_batch_tensors.append(y_tensors[0])
+                assert_tensors_almost_equal_array(x_batch_tensors, x_data)
+                assert_tensors_almost_equal_array(y_batch_tensors, y_data)
 
-                    y_data_batch = y_tensors[0]
-                    if y_spec.sparse:
-                        y_data_batch = tf.sparse.to_dense(y_data_batch)
-                    y_data_batches.append(y_data_batch)
 
-                np.testing.assert_array_almost_equal(
-                    np.concatenate(x_data_batches), x_data
-                )
-                np.testing.assert_array_almost_equal(
-                    np.concatenate(y_data_batches), y_data
-                )
+def assert_tensors_almost_equal_array(batch_tensors, array):
+    if isinstance(batch_tensors[0], tf.RaggedTensor):
+        # compare each ragged tensor row with the non-zero values of the respective array row
+        tensors = [tensor for batch_tensor in batch_tensors for tensor in batch_tensor]
+        assert len(tensors) == len(array)
+        for tensor_row, row in zip(tensors, array):
+            np.testing.assert_array_almost_equal(tensor_row, row[np.nonzero(row)])
+    else:
+        if isinstance(batch_tensors[0], tf.SparseTensor):
+            batch_tensors = list(map(tf.sparse.to_dense, batch_tensors))
+        np.testing.assert_array_almost_equal(np.concatenate(batch_tensors), array)
