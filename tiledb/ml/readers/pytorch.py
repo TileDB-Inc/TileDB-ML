@@ -56,9 +56,7 @@ def PyTorchTileDBDataLoader(
     if not all(key_range.equal_values(schema.key_range) for schema in schemas[1:]):
         raise ValueError(f"All arrays must have the same key range: {key_range}")
 
-    datapipe_for_key_range = partial(
-        _get_datapipe, schemas, shuffle_buffer_size=shuffle_buffer_size
-    )
+    datapipe_for_key_range = partial(_get_datapipe, schemas)
     num_workers = kwargs.get("num_workers", 0)
     if num_workers:
         if any(schema.kind is not TensorKind.DENSE for schema in schemas):
@@ -71,16 +69,27 @@ def PyTorchTileDBDataLoader(
     else:
         datapipe = datapipe_for_key_range(key_range)
 
+    if shuffle_buffer_size:
+        iter_rows = DataLoader(
+            datapipe, num_workers=num_workers, batch_size=None, collate_fn=_identity
+        )
+        datapipe = IterableWrapper(iter_rows, deepcopy=False)
+        datapipe = datapipe.shuffle(buffer_size=shuffle_buffer_size)
+        kwargs["num_workers"] = 0
+
     collators = tuple(map(_get_tensor_collator, schemas))
     collate_fn = _CompositeCollator(*collators) if len(collators) > 1 else collators[0]
 
-    return DataLoader(dataset=datapipe, collate_fn=collate_fn, **kwargs)
+    return DataLoader(datapipe, collate_fn=collate_fn, **kwargs)
+
+
+def _identity(x: Any) -> Any:
+    return x
 
 
 def _get_datapipe(
     schemas: Sequence[TensorSchema[Tensor]],
     key_range: InclusiveRange[Any, int],
-    shuffle_buffer_size: int = 0,
 ) -> IterDataPipe:
     schema_dps = [
         IterableWrapper(_unbatch_tensors(schema, key_range), deepcopy=False)
@@ -89,8 +98,6 @@ def _get_datapipe(
     dp = schema_dps.pop(0)
     if schema_dps:
         dp = dp.zip(*schema_dps)
-    if shuffle_buffer_size > 0:
-        dp = dp.shuffle(buffer_size=shuffle_buffer_size)
     return dp
 
 
