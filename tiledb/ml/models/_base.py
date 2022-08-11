@@ -3,36 +3,33 @@
 import platform
 import time
 from abc import ABC, abstractmethod
-from enum import Enum, unique
-from typing import Any, Generic, Mapping, Optional, Tuple, TypeVar
+from typing import Any, Generic, Mapping, Optional, Tuple, TypeVar, Union
+
+import numpy as np
 
 import tiledb
 
-from ._cloud_utils import get_cloud_uri
+from ._cloud_utils import get_cloud_uri, update_file_properties
+from ._specs import (
+    ModelFileProperties,
+    SklearnSpec,
+    TensorboardFileProperties,
+    TensorBoardSpec,
+    TFSpec,
+    TorchSpec,
+)
 
-Model = TypeVar("Model")
+Artifact = TypeVar("Artifact")
 Meta = Mapping[str, Any]
 Timestamp = Tuple[int, int]
-
-
-@unique
-class ModelFileProperties(Enum):
-    """
-    Enum Class that contains all model array file properties.
-    """
-
-    TILEDB_ML_MODEL_ML_FRAMEWORK = "TILEDB_ML_MODEL_ML_FRAMEWORK"
-    TILEDB_ML_MODEL_ML_FRAMEWORK_VERSION = "TILEDB_ML_MODEL_ML_FRAMEWORK_VERSION"
-    TILEDB_ML_MODEL_STAGE = "TILEDB_ML_MODEL_STAGE"
-    TILEDB_ML_MODEL_PYTHON_VERSION = "TILEDB_ML_MODEL_PYTHON_VERSION"
-    TILEDB_ML_MODEL_PREVIEW = "TILEDB_ML_MODEL_PREVIEW"
+Spec = Union[TFSpec, TorchSpec, SklearnSpec, TensorBoardSpec]
 
 
 def current_milli_time() -> int:
     return round(time.time() * 1000)
 
 
-class TileDBModel(ABC, Generic[Model]):
+class TileDBArtifact(ABC, Generic[Artifact]):
     """
     This is the base class for all TileDB model storage functionalities, i.e,
     store machine learning models (Tensorflow, PyTorch, etc) as TileDB arrays.
@@ -46,7 +43,7 @@ class TileDBModel(ABC, Generic[Model]):
         uri: str,
         namespace: Optional[str] = None,
         ctx: Optional[tiledb.Ctx] = None,
-        model: Optional[Model] = None,
+        artifact: Optional[Artifact] = None,
     ):
         """
         Base class for saving machine learning models as TileDB arrays
@@ -63,15 +60,9 @@ class TileDBModel(ABC, Generic[Model]):
         """
         self.namespace = namespace
         self.ctx = ctx
-        self.model = model
+        self.model = artifact
         self.uri = get_cloud_uri(uri, namespace) if namespace else uri
-        self._file_properties = {
-            ModelFileProperties.TILEDB_ML_MODEL_ML_FRAMEWORK.value: self.Framework,
-            ModelFileProperties.TILEDB_ML_MODEL_ML_FRAMEWORK_VERSION.value: self.FrameworkVersion,
-            ModelFileProperties.TILEDB_ML_MODEL_STAGE.value: "STAGING",
-            ModelFileProperties.TILEDB_ML_MODEL_PYTHON_VERSION.value: platform.python_version(),
-            ModelFileProperties.TILEDB_ML_MODEL_PREVIEW.value: self.preview(),
-        }
+        self._file_properties = self._get_file_properties()
 
     @abstractmethod
     def save(self, *, update: bool = False, meta: Optional[Meta] = None) -> None:
@@ -83,7 +74,7 @@ class TileDBModel(ABC, Generic[Model]):
         """
 
     @abstractmethod
-    def load(self, *, timestamp: Optional[Timestamp] = None) -> Model:
+    def load(self, *, timestamp: Optional[Timestamp] = None) -> Artifact:
         """Abstract method that loads a machine learning model from a TileDB array.
 
         :param timestamp: Range of timestamps to load fragments of the array which live
@@ -93,6 +84,58 @@ class TileDBModel(ABC, Generic[Model]):
     @abstractmethod
     def preview(self) -> str:
         """Abstract method that previews a machine learning model."""
+
+    def _get_file_properties(
+        self,
+    ) -> Mapping[str, str]:
+        if self.Framework != "TensorBoard":
+            return {
+                ModelFileProperties.TILEDB_ML_MODEL_ML_FRAMEWORK.value: self.Framework,
+                ModelFileProperties.TILEDB_ML_MODEL_ML_FRAMEWORK_VERSION.value: self.FrameworkVersion,
+                ModelFileProperties.TILEDB_ML_MODEL_STAGE.value: "STAGING",
+                ModelFileProperties.TILEDB_ML_MODEL_PYTHON_VERSION.value: platform.python_version(),
+                ModelFileProperties.TILEDB_ML_MODEL_PREVIEW.value: self.preview(),
+            }
+        else:
+            return {
+                TensorboardFileProperties.TILEDB_ML_TENSORBOARD_FRAMEWORK.value: self.Framework,
+                TensorboardFileProperties.TILEDB_ML_TENSORBOARD_VERSION.value: self.FrameworkVersion,
+            }
+
+    def _create_array(self, spec: Spec, **kwargs: Any) -> tiledb.Array:
+        """Internal method that creates a TileDB array based on the model's spec."""
+        dom = tiledb.Domain(
+            tiledb.Dim(
+                name=spec.domain_info[0],
+                domain=spec.domain_info[1],
+                tile=1,
+                dtype=np.int32,
+                ctx=self.ctx,
+            ),
+        )
+        attrs = [
+            tiledb.Attr(
+                name=field,
+                dtype=str if field == "layer_name" else bytes,
+                var=True,
+                filters=tiledb.FilterList([tiledb.ZstdFilter()])
+                if self.Framework != "TensorBoard"
+                else None,
+                ctx=self.ctx,
+            )
+            for field in spec.fields
+        ]
+        schema = tiledb.ArraySchema(
+            domain=dom,
+            sparse=False,
+            attrs=attrs,
+            ctx=self.ctx,
+        )
+        tiledb.Array.create(self.uri, schema, ctx=self.ctx)
+
+        # In case we are on TileDB-Cloud we have to update model array's file properties
+        if self.namespace:
+            update_file_properties(self.uri, self._file_properties)
 
     def update_model_metadata(
         self, array: tiledb.Array, meta: Optional[Meta] = None

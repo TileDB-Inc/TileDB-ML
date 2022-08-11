@@ -1,7 +1,7 @@
 """Functionality for saving and loading Sklearn models as TileDB arrays"""
 
 import pickle
-from typing import Optional
+from typing import Optional, TypeVar
 
 import numpy as np
 import sklearn
@@ -10,11 +10,13 @@ from sklearn.base import BaseEstimator
 
 import tiledb
 
-from ._base import Meta, TileDBModel, Timestamp, current_milli_time
-from ._cloud_utils import update_file_properties
+from ._base import Meta, TileDBArtifact, Timestamp, current_milli_time
+from ._specs import SklearnSpec
+
+Model = TypeVar("Model")
 
 
-class SklearnTileDBModel(TileDBModel[BaseEstimator]):
+class SklearnTileDBModel(TileDBArtifact[BaseEstimator]):
     """
     Class that implements all functionality needed to save Sklearn models as
     TileDB arrays and load Sklearn models from TileDB arrays.
@@ -22,6 +24,15 @@ class SklearnTileDBModel(TileDBModel[BaseEstimator]):
 
     Framework = "SKLEARN"
     FrameworkVersion = sklearn.__version__
+
+    def __init__(
+        self,
+        uri: str,
+        namespace: Optional[str] = None,
+        ctx: Optional[tiledb.Ctx] = None,
+        model: Optional[Model] = None,
+    ):
+        super().__init__(uri, namespace, ctx, model)
 
     def save(self, *, update: bool = False, meta: Optional[Meta] = None) -> None:
         """
@@ -36,7 +47,7 @@ class SklearnTileDBModel(TileDBModel[BaseEstimator]):
 
         # Create TileDB model array
         if not update:
-            self._create_array()
+            self._create_array_internal()
 
         self._write_array(serialized_model=serialized_model, meta=meta)
 
@@ -70,31 +81,12 @@ class SklearnTileDBModel(TileDBModel[BaseEstimator]):
         else:
             return ""
 
-    def _create_array(self) -> None:
+    def _create_array_internal(self) -> None:
         """Create a TileDB array for a Sklearn model."""
-        dom = tiledb.Domain(
-            tiledb.Dim(
-                name="model", domain=(1, 1), tile=1, dtype=np.int32, ctx=self.ctx
-            ),
-        )
 
-        attrs = [
-            tiledb.Attr(
-                name="model_params",
-                dtype=bytes,
-                var=True,
-                filters=tiledb.FilterList([tiledb.ZstdFilter()]),
-                ctx=self.ctx,
-            ),
-        ]
-
-        schema = tiledb.ArraySchema(domain=dom, sparse=False, attrs=attrs, ctx=self.ctx)
-
-        tiledb.Array.create(self.uri, schema, ctx=self.ctx)
-
-        # In case we are on TileDB-Cloud we have to update model array's file properties
-        if self.namespace:
-            update_file_properties(self.uri, self._file_properties)
+        assert self.model
+        spec = SklearnSpec()
+        super(SklearnTileDBModel, self)._create_array(spec=spec)
 
     def _write_array(self, serialized_model: bytes, meta: Optional[Meta]) -> None:
         """

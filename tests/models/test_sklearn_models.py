@@ -99,7 +99,7 @@ class TestSklearnModelCloud:
         )
 
         mock_update_file_properties = mocker.patch(
-            "tiledb.ml.models.sklearn.update_file_properties", return_value=None
+            "tiledb.ml.models._base.update_file_properties", return_value=None
         )
         mocker.patch("tiledb.ml.models.sklearn.SklearnTileDBModel._write_array")
 

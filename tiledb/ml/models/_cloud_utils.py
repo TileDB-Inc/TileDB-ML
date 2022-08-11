@@ -1,5 +1,5 @@
 import os
-from typing import Dict, Optional
+from typing import Mapping, Optional
 
 try:
     import tiledb.cloud
@@ -26,7 +26,7 @@ def get_s3_prefix(namespace: Optional[str]) -> Optional[str]:
     return os.path.join(s3_path, CLOUD_MODELS) if s3_path is not None else None
 
 
-def update_file_properties(uri: str, file_properties: Dict[str, str]) -> None:
+def update_file_properties(uri: str, file_properties: Mapping[str, str]) -> None:
     tiledb.cloud.array.update_file_properties(
         uri=uri,
         file_type=FILETYPE_ML_MODEL,
