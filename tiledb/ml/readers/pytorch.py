@@ -2,7 +2,7 @@
 
 from functools import partial
 from operator import methodcaller
-from typing import Any, Callable, Iterator, Mapping, Sequence, Union
+from typing import Any, Callable, Iterator, Mapping, Sequence, Tuple, Union
 
 import numpy as np
 import scipy.sparse
@@ -20,6 +20,7 @@ TensorSequence = Union[
     Sequence[np.ndarray], Sequence[sparse.COO], Sequence[scipy.sparse.csr_matrix]
 ]
 TensorOrSequence = Union[Tensor, TensorSequence]
+OneOrMoreTensorsOrSequences = Union[TensorOrSequence, Tuple[TensorOrSequence, ...]]
 
 
 def PyTorchTileDBDataLoader(
@@ -56,30 +57,43 @@ def PyTorchTileDBDataLoader(
     if not all(key_range.equal_values(schema.key_range) for schema in schemas[1:]):
         raise ValueError(f"All arrays must have the same key range: {key_range}")
 
-    datapipe_for_key_range = partial(_get_datapipe, schemas)
+    datapipe_for_key_range = partial(_get_unbatched_datapipe, schemas)
     num_workers = kwargs.get("num_workers", 0)
     if num_workers:
         if any(schema.kind is not TensorKind.DENSE for schema in schemas):
             raise NotImplementedError("https://github.com/pytorch/pytorch/issues/20248")
 
+        # partition the key range into `num_workers` subkey ranges of roughly equal weight
         worker_key_ranges = tuple(key_range.partition_by_count(num_workers))
+        # create a datapipe for these partitions
         datapipe = IterableWrapper(worker_key_ranges, deepcopy=False)
+        # shard the datapipe so that each worker gets exactly one partition
         datapipe = datapipe.sharding_filter()
+        # read and unbatch the tensors for each partition
         datapipe = datapipe.flatmap(datapipe_for_key_range)
     else:
+        # create a datapipe that reads and unbatches the tensors for the whole key range
         datapipe = datapipe_for_key_range(key_range)
 
+    # shuffle the unbatched rows if shuffle_buffer_size > 0
     if shuffle_buffer_size:
-        iter_rows = DataLoader(
+        # load the rows to be shuffled
+        # don't batch them (batch_size=None) or collate them (collate_fn=_identity)
+        row_loader = DataLoader(
             datapipe, num_workers=num_workers, batch_size=None, collate_fn=_identity
         )
-        datapipe = IterableWrapper(iter_rows, deepcopy=False)
+        # create a new datapipe for these rows
+        datapipe = IterableWrapper(iter(row_loader), deepcopy=False)
+        # shuffle the datapipe items
         datapipe = datapipe.shuffle(buffer_size=shuffle_buffer_size)
+        # run the shuffling on this process, not on workers
         kwargs["num_workers"] = 0
 
+    # determine the collate function that transforms sequences of rows into `torch.Tensor`s
     collators = tuple(map(_get_tensor_collator, schemas))
     collate_fn = _CompositeCollator(*collators) if len(collators) > 1 else collators[0]
 
+    # return the DataLoader for the final datapipe
     return DataLoader(datapipe, collate_fn=collate_fn, **kwargs)
 
 
@@ -87,10 +101,17 @@ def _identity(x: Any) -> Any:
     return x
 
 
-def _get_datapipe(
+def _get_unbatched_datapipe(
     schemas: Sequence[TensorSchema[Tensor]],
     key_range: InclusiveRange[Any, int],
-) -> IterDataPipe:
+) -> IterDataPipe[OneOrMoreTensorsOrSequences]:
+    """Return a datapipe over unbatched rows for the given schemas and key range.
+
+    If `len(schemas) == 1`, each item of the datapipe is either a single `Tensor` or a
+    sequence of `Tensor`s, depending on `schemas[0].num_fields`.
+    If `len(schemas) > 1`, each item of the datapipe is a tuple of (`Tensor` or sequence
+    of `Tensor`s, depending on `schema.num_fields`), one for each schema.
+    """
     schema_dps = [
         IterableWrapper(_unbatch_tensors(schema, key_range), deepcopy=False)
         for schema in schemas
@@ -104,6 +125,11 @@ def _get_datapipe(
 def _unbatch_tensors(
     schema: TensorSchema[Tensor], key_range: InclusiveRange[Any, int]
 ) -> Iterator[TensorOrSequence]:
+    """
+    Generate batches of `Tensor`s for the given schema and key range and then unbatch them
+    into single "rows". Each row is either a single `Tensor` (if schema.num_fields == 1)
+    or a sequence of `Tensor`s (if schema.num_fields > 1).
+    """
     batches = schema.iter_tensors(
         key_range.partition_by_weight(schema.max_partition_weight)
     )
@@ -173,6 +199,7 @@ def _csr_collate(arrays: Sequence[scipy.sparse.csr_matrix]) -> torch.Tensor:
 def _get_tensor_collator(
     schema: TensorSchema[Tensor],
 ) -> Union[_SingleCollator, _CompositeCollator]:
+    """Return a callable for collating a sequence into a tensor based on the given schema."""
     if schema.kind is TensorKind.DENSE:
         collator = _ndarray_collate
     elif schema.kind is TensorKind.RAGGED:
