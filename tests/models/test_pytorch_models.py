@@ -165,10 +165,21 @@ class TestPyTorchModel:
         assert tiledb_obj._file_properties["TILEDB_ML_MODEL_PREVIEW"] == str(model)
 
     @net
-    def test_tensorboard_callback(self, tmpdir, net):
+    @pytest.mark.parametrize(
+        "optimizer",
+        [
+            getattr(optimizers, name)
+            for name, obj in inspect.getmembers(optimizers)
+            if inspect.isclass(obj) and name != "Optimizer"
+        ],
+    )
+    def test_tensorboard_callback(self, tmpdir, net, optimizer):
         model = net()
+        saved_optimizer = optimizer(model.parameters(), lr=0.001)
         tiledb_array = os.path.join(tmpdir, "model_array")
-        tiledb_obj = PyTorchTileDBModel(uri=tiledb_array, model=model)
+        tiledb_obj = PyTorchTileDBModel(
+            uri=tiledb_array, model=model, optimizer=saved_optimizer
+        )
 
         # SummaryWriter creates file(s) under log_dir
         log_dir = os.path.join(tmpdir, "logs")
@@ -179,6 +190,14 @@ class TestPyTorchModel:
         tiledb_obj.save(update=False, summary_writer=writer)
         with tiledb.open(f"{tiledb_array}-tensorboard") as A:
             assert pickle.loads(A[:]["tensorboard_data"][0]) == log_files
+        shutil.rmtree(log_dir)
+
+        loaded_net = net()
+        loaded_optimizer = optimizer(loaded_net.parameters(), lr=0.001)
+        tiledb_obj.load(model=loaded_net, optimizer=loaded_optimizer, callback=True)
+
+        # Check if files exist under log_dir
+        assert glob.glob(f"{log_dir}/*tfevents*")
         shutil.rmtree(log_dir)
 
 

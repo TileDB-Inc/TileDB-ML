@@ -553,3 +553,11 @@ class TestTensorflowKerasModelCloud:
                 os.path.join(tmpdir, "train", "bar_tfevents_2"): b"test_bytes_2",
             }
         shutil.rmtree(os.path.join(tmpdir, "train"))
+
+        tiledb_obj.load(compile_model=False, callback=True)
+        with open(os.path.join(tmpdir, "train", "foo_tfevents_1"), "rb") as f:
+            assert f.read() == b"test_bytes_1"
+        with open(os.path.join(tmpdir, "train", "bar_tfevents_2"), "rb") as f:
+            assert f.read() == b"test_bytes_2"
+
+        shutil.rmtree(os.path.join(tmpdir, "train"))

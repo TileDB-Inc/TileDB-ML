@@ -119,10 +119,12 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
         compile_model: bool = False,
         custom_objects: Optional[Mapping[str, Any]] = None,
         input_shape: Optional[Tuple[int, ...]] = None,
+        callback: bool = False,
     ) -> tf.keras.Model:
         """
         Load a Tensorflow model from a TileDB array.
 
+        :param callback: Boolean variable if True will store Callback data into saved directory
         :param timestamp: Range of timestamps to load fragments of the array which live
             in the specified time range.
         :param compile_model: Whether to compile the model after loading or not.
@@ -197,7 +199,22 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
                             "starting with a freshly initialized "
                             "optimizer."
                         )
-            return model
+        if callback:
+            try:
+                with tiledb.open(f"{self.uri}-tensorboard") as tb_array:
+                    for path, file_bytes in pickle.loads(
+                        tb_array[:]["tensorboard_data"][0]
+                    ).items():
+                        log_dir = os.path.dirname(path)
+                        if not os.path.exists(log_dir):
+                            os.mkdir(log_dir)
+                        with open(
+                            os.path.join(log_dir, os.path.basename(path)), "wb"
+                        ) as f:
+                            f.write(file_bytes)
+            except FileNotFoundError:
+                print(f"Array {self.uri}-tensorboard does not exist")
+        return model
 
     def preview(self) -> str:
         """Create a string representation of the model."""

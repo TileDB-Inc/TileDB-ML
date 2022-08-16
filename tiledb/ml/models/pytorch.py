@@ -111,10 +111,12 @@ class PyTorchTileDBModel(TileDBArtifact[torch.nn.Module]):
         timestamp: Optional[Timestamp] = None,
         model: torch.nn.Module = None,
         optimizer: Optimizer = None,
+        callback: bool = False,
     ) -> Optional[Mapping[str, Any]]:
         """
         Load a PyTorch model from a TileDB array.
 
+        :param callback: Boolean variable if True will store Callback data into saved directory
         :param timestamp: Range of timestamps to load fragments of the array which live
             in the specified time range.
         :param model: A defined PyTorch model.
@@ -147,6 +149,23 @@ class PyTorchTileDBModel(TileDBArtifact[torch.nn.Module]):
                 out_dict[attr_name] = pickle.loads(
                     model_array_results[attr_name].item(0)
                 )
+
+        if callback:
+            try:
+                with tiledb.open(f"{self.uri}-tensorboard") as tb_array:
+                    for path, file_bytes in pickle.loads(
+                        tb_array[:]["tensorboard_data"][0]
+                    ).items():
+                        log_dir = os.path.dirname(path)
+                        if not os.path.exists(log_dir):
+                            os.mkdir(log_dir)
+                        with open(
+                            os.path.join(log_dir, os.path.basename(path)), "wb"
+                        ) as f:
+                            f.write(file_bytes)
+            except FileNotFoundError:
+                print(f"Array {self.uri}-tensorboard does not exist")
+
         return out_dict
 
     def preview(self) -> str:
