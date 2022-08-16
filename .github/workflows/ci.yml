@@ -6,9 +6,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    defaults:
-      run:
-        shell: bash -l {0}
     strategy:
       fail-fast: false
       matrix:
@@ -47,6 +44,16 @@ jobs:
         mypyenv/bin/pip install mypy
         mypyenv/bin/mypy .
         rm -rf mypyenv
+
+    - name: Run notebook examples
+      if: ${{ github.ref == 'refs/heads/master' }}
+      run: |
+        pip install pytest-xdist nbmake matplotlib torchvision idx2numpy
+        pytest --disable-warnings --nbmake examples/{models,readers}
+        # Run tiledb-cloud in parallel
+        if [[ "${{ secrets.TILEDB_API_TOKEN }}" != "" ]]; then
+          TILEDB_API_TOKEN="${{ secrets.TILEDB_API_TOKEN }}" pytest --disable-warnings --nbmake -n3 examples/cloud
+        fi
 
     - name: Run tests
       if: ${{ !fromJSON(env.run_coverage) }}
