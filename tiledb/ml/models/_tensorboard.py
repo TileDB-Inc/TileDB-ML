@@ -1,7 +1,7 @@
 import glob
 import os
 import pickle
-from typing import Any, Optional
+from typing import Any, Mapping, Optional
 
 import numpy as np
 import tensorflow as tf
@@ -9,12 +9,12 @@ import tensorflow as tf
 import tiledb
 
 from ._base import TileDBArtifact, Timestamp, current_milli_time
-from ._specs import TensorBoardSpec
+from ._specs import TensorboardFileProperties, TensorBoardSpec
 
 
 class TensorBoardTileDB(TileDBArtifact[tf.keras.callbacks.TensorBoard]):
-    Framework: str = "TensorBoard"
-    FrameworkVersion: str = "1.0"
+    Framework = "TensorBoard"
+    FrameworkVersion = "1.0"
     _KEY = "tensorboard_data"
 
     def __init__(
@@ -23,6 +23,14 @@ class TensorBoardTileDB(TileDBArtifact[tf.keras.callbacks.TensorBoard]):
 
         super().__init__(uri, namespace, ctx)
         self.spec = TensorBoardSpec(key=self._KEY)
+
+    def _get_file_properties(
+        self,
+    ) -> Mapping[str, str]:
+        return {
+            TensorboardFileProperties.TILEDB_ML_MODEL_TENSORBOARD_FRAMEWORK.value: self.Framework,
+            TensorboardFileProperties.TILEDB_ML_MODEL_TENSORBOARD_VERSION.value: self.FrameworkVersion,
+        }
 
     def _create_array_internal(self) -> None:
         """Create a TileDB array for a TensorBoard"""
@@ -76,6 +84,3 @@ class TensorBoardTileDB(TileDBArtifact[tf.keras.callbacks.TensorBoard]):
                     os.mkdir(log_dir)
                 with open(os.path.join(log_dir, os.path.basename(path)), "wb") as f:
                     f.write(file_bytes)
-
-    def preview(self) -> str:
-        pass

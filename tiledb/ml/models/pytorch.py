@@ -52,10 +52,10 @@ class PyTorchTileDBModel(TileDBArtifact[torch.nn.Module]):
         :param meta: Extra metadata to save in a TileDB array.
         :param model_info: Contains model info like loss, epoch etc, that could be needed
             to save a model's general checkpoint for inference and/or resuming training.
-        :param summary_path: Contains summary writer's path for storing tensorboard metadata
+        :param summary_writer: Contains summary writer object for storing tensorboard metadata
                                 in array's metadata
         """
-        if self.model is None:
+        if self.artifact is None:
             raise RuntimeError("Model is not initialized")
 
         # Serialize model information
@@ -66,7 +66,7 @@ class PyTorchTileDBModel(TileDBArtifact[torch.nn.Module]):
         )
 
         serialized_model_dict = {
-            "model_state_dict": pickle.dumps(self.model.state_dict(), protocol=4)
+            "model_state_dict": pickle.dumps(self.artifact.state_dict(), protocol=4)
         }
 
         serialized_optimizer_dict = (
@@ -99,10 +99,7 @@ class PyTorchTileDBModel(TileDBArtifact[torch.nn.Module]):
 
             # Create group for first time when callback is activated
             if not update:
-                tiledb.group_create(f"{self.uri}-group", self.ctx)
-                grp = tiledb.Group(f"{self.uri}-group", mode="w", ctx=self.ctx)
-                grp.add(self.uri)
-                grp.add(f"{self.uri}-tensorboard")
+                self._group_create()
 
     # FIXME: This method should change to return the model, not the model_info dict
     def load(
@@ -174,7 +171,7 @@ class PyTorchTileDBModel(TileDBArtifact[torch.nn.Module]):
 
         :return: str. A string representation of the models internal configuration.
         """
-        return str(self.model) if self.model else ""
+        return str(self.artifact) if self.artifact else ""
 
     def _create_array_internal(self, **kwargs: Any) -> None:
         """

@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from enum import Enum, unique
 from typing import Any
 
@@ -18,6 +19,7 @@ SharedObjectLoadingScope = keras.utils.generic_utils.SharedObjectLoadingScope
 FunctionalOrSequential = (keras.models.Functional, keras.models.Sequential)
 
 
+@dataclass
 class TFSpec:
     def __init__(self, model: tf.keras.Model) -> None:
         self.domain_info = (
@@ -37,6 +39,7 @@ class TFSpec:
             ]
 
 
+@dataclass
 class TorchSpec:
     def __init__(self, **kwargs: Any) -> None:
         self.domain_info = ("model", (1, 1))
@@ -47,12 +50,14 @@ class TorchSpec:
             self.fields.extend(kwargs["model_info"].keys())
 
 
+@dataclass
 class SklearnSpec:
     def __init__(self) -> None:
         self.domain_info = ("model", (1, 1))
         self.fields = ["model_params"]
 
 
+@dataclass
 class TensorBoardSpec:
     def __init__(self, **kwargs: Any) -> None:
         self.domain_info = ("tensorboard", (1, 1))
@@ -78,5 +83,5 @@ class TensorboardFileProperties(Enum):
     Enum Class that contains all model array file properties.
     """
 
-    TILEDB_ML_TENSORBOARD_FRAMEWORK = "TILEDB_ML_MODEL_TENSORBOARD_FRAMEWORK"
-    TILEDB_ML_TENSORBOARD_VERSION = "TILEDB_ML_MODEL_TENSORBOARD_VERSION"
+    TILEDB_ML_MODEL_TENSORBOARD_FRAMEWORK = "TILEDB_ML_MODEL_TENSORBOARD_FRAMEWORK"
+    TILEDB_ML_MODEL_TENSORBOARD_VERSION = "TILEDB_ML_MODEL_TENSORBOARD_VERSION"

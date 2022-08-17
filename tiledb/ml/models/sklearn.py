@@ -75,16 +75,16 @@ class SklearnTileDBModel(TileDBArtifact[BaseEstimator]):
             displayed as text.
         :return. A string representation of the models internal configuration.
         """
-        if self.model:
+        if self.artifact:
             with config_context(display=display):
-                return str(self.model)
+                return str(self.artifact)
         else:
             return ""
 
     def _create_array_internal(self) -> None:
         """Create a TileDB array for a Sklearn model."""
 
-        assert self.model
+        assert self.artifact
         spec = SklearnSpec()
         super(SklearnTileDBModel, self)._create_array(spec=spec)
 
@@ -110,4 +110,4 @@ class SklearnTileDBModel(TileDBArtifact[BaseEstimator]):
 
         :return: Pickled Sklearn model.
         """
-        return pickle.dumps(self.model, protocol=4)
+        return pickle.dumps(self.artifact, protocol=4)

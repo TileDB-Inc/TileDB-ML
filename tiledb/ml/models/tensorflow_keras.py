@@ -73,11 +73,11 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
         :param include_optimizer: Whether to save the optimizer or not.
         :param include_callbacks: Callbacks list to store their data in array's metadata
         """
-        if self.model is None:
+        if self.artifact is None:
             raise RuntimeError("Model is not initialized")
 
         # Used in this format only when model is Functional or Sequential
-        model_weights = pickle.dumps(self.model.get_weights(), protocol=4)
+        model_weights = pickle.dumps(self.artifact.get_weights(), protocol=4)
 
         # Serialize model optimizer
         optimizer_weights = self._serialize_optimizer_weights(
@@ -107,10 +107,7 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
 
             # Create group for first time when callback is activated
             if not update:
-                tiledb.group_create(f"{self.uri}-group", self.ctx)
-                grp = tiledb.Group(f"{self.uri}-group", mode="w", ctx=self.ctx)
-                grp.add(self.uri)
-                grp.add(f"{self.uri}-tensorboard")
+                self._group_create()
 
     def load(
         self,
@@ -218,9 +215,9 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
 
     def preview(self) -> str:
         """Create a string representation of the model."""
-        if self.model:
+        if self.artifact:
             s = io.StringIO()
-            self.model.summary(print_fn=lambda x: s.write(x + "\n"))
+            self.artifact.summary(print_fn=lambda x: s.write(x + "\n"))
             model_summary = s.getvalue()
             return model_summary
         else:
@@ -228,8 +225,8 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
 
     def _create_array_internal(self) -> None:
         """Create a TileDB array for a Tensorflow model"""
-        assert self.model
-        spec = TFSpec(self.model)
+        assert self.artifact
+        spec = TFSpec(self.artifact)
         super(TensorflowKerasTileDBModel, self)._create_array(spec=spec)
 
     def _write_array(
@@ -240,12 +237,12 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
         meta: Optional[Meta],
     ) -> None:
         """Write Tensorflow model to a TileDB array."""
-        assert self.model
+        assert self.artifact
         # TODO: Change timestamp when issue in core is resolved
         with tiledb.open(
             self.uri, "w", timestamp=current_milli_time(), ctx=self.ctx
         ) as tf_model_tiledb:
-            if isinstance(self.model, FunctionalOrSequential):
+            if isinstance(self.artifact, FunctionalOrSequential):
                 tf_model_tiledb[:] = {
                     "model_weights": np.array([serialized_weights]),
                     "optimizer_weights": np.array([serialized_optimizer_weights]),
@@ -255,7 +252,7 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
                 layer_names = []
                 weight_names = []
                 weight_values = []
-                for layer in sorted(self.model.layers, key=attrgetter("name")):
+                for layer in sorted(self.artifact.layers, key=attrgetter("name")):
                     weights = layer.trainable_weights + layer.non_trainable_weights
                     weight_values.append(
                         pickle.dumps(tf.keras.backend.batch_get_value(weights))
@@ -273,13 +270,15 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
                     "optimizer_weights": np.array(
                         [
                             serialized_optimizer_weights
-                            for _ in range(len(self.model.layers))
+                            for _ in range(len(self.artifact.layers))
                         ]
                     ),
                 }
 
             # Insert all model metadata
-            model_metadata = saving_utils.model_metadata(self.model, include_optimizer)
+            model_metadata = saving_utils.model_metadata(
+                self.artifact, include_optimizer
+            )
             for key, value in model_metadata.items():
                 tf_model_tiledb.meta[key] = json.dumps(
                     value, default=get_json_type
@@ -289,8 +288,8 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
 
     def _serialize_optimizer_weights(self, include_optimizer: bool = True) -> bytes:
         """Serialize optimizer weights"""
-        assert self.model
-        optimizer = self.model.optimizer
+        assert self.artifact
+        optimizer = self.artifact.optimizer
         if include_optimizer and optimizer and not isinstance(optimizer, TFOptimizer):
             optimizer_weights = tf.keras.backend.batch_get_value(optimizer.weights)
             return pickle.dumps(optimizer_weights, protocol=4)
