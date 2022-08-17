@@ -4,15 +4,19 @@ from functools import partial
 from operator import methodcaller
 from typing import Any, Callable, Iterator, Sequence, Tuple, Union
 
+import numpy as np
+import scipy.sparse
+import sparse
 from torch.utils.data import DataLoader, IterDataPipe
 from torchdata.datapipes.iter import IterableWrapper
 
-from ._pytorch_collators import TensorLike, get_schemas_collator
+from ._pytorch_collators import Collator
 from ._ranges import InclusiveRange
 from ._tensor_schema import MappedTensorSchema, TensorKind, TensorSchema
 from .types import ArrayParams
 
-TensorLikeOrSequence = Union[TensorLike, Sequence[TensorLike]]
+TensorLike = Union[np.ndarray, sparse.COO, scipy.sparse.csr_matrix]
+TensorLikeOrTuple = Union[TensorLike, Tuple[TensorLike, ...]]
 
 
 def PyTorchTileDBDataLoader(
@@ -86,7 +90,8 @@ def PyTorchTileDBDataLoader(
         kwargs["num_workers"] = 0
 
     # return the DataLoader for the final datapipe
-    return DataLoader(datapipe, collate_fn=get_schemas_collator(schemas), **kwargs)
+    kwargs["collate_fn"] = Collator.from_schemas(schemas).collate
+    return DataLoader(datapipe, **kwargs)
 
 
 class DeferredIterableIterDataPipe(IterDataPipe):
@@ -106,7 +111,7 @@ def _identity(x: Any) -> Any:
 def _get_unbatched_datapipe(
     schemas: Sequence[TensorSchema[TensorLike]],
     key_range: InclusiveRange[Any, int],
-) -> IterDataPipe[Union[TensorLikeOrSequence, Tuple[TensorLikeOrSequence, ...]]]:
+) -> IterDataPipe[Union[TensorLikeOrTuple, Tuple[TensorLikeOrTuple, ...]]]:
     """Return a datapipe over unbatched rows for the given schemas and key range.
 
     If `len(schemas) == 1`, each item of the datapipe is either a single `TensorLike`
@@ -126,7 +131,7 @@ def _get_unbatched_datapipe(
 
 def _unbatch_tensors(
     schema: TensorSchema[TensorLike], key_range: InclusiveRange[Any, int]
-) -> Iterator[TensorLikeOrSequence]:
+) -> Iterator[TensorLikeOrTuple]:
     """
     Generate batches of `TensorLike`s for the given schema and key range and then unbatch
     them into single "rows".
