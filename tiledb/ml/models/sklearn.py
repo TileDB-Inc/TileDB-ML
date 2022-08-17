@@ -1,7 +1,7 @@
 """Functionality for saving and loading Sklearn models as TileDB arrays"""
 
 import pickle
-from typing import Optional, TypeVar
+from typing import Any, Optional, TypeVar
 
 import numpy as np
 import sklearn
@@ -11,7 +11,6 @@ from sklearn.base import BaseEstimator
 import tiledb
 
 from ._base import Meta, TileDBArtifact, Timestamp, current_milli_time
-from ._specs import SklearnSpec
 
 Model = TypeVar("Model")
 
@@ -47,7 +46,7 @@ class SklearnTileDBModel(TileDBArtifact[BaseEstimator]):
 
         # Create TileDB model array
         if not update:
-            self._create_array_internal()
+            self.__create_array()
 
         self._write_array(serialized_model=serialized_model, meta=meta)
 
@@ -81,12 +80,13 @@ class SklearnTileDBModel(TileDBArtifact[BaseEstimator]):
         else:
             return ""
 
-    def _create_array_internal(self) -> None:
+    def __create_array(self, **kwargs: Any) -> None:
         """Create a TileDB array for a Sklearn model."""
 
         assert self.artifact
-        spec = SklearnSpec()
-        super(SklearnTileDBModel, self)._create_array(spec=spec)
+        domain_info = ("model", (1, 1))
+        fields = ["model_params"]
+        super()._create_array(domain_info, fields)
 
     def _write_array(self, serialized_model: bytes, meta: Optional[Meta]) -> None:
         """

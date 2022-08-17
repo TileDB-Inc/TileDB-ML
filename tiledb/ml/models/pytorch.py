@@ -11,7 +11,6 @@ from torch.utils.tensorboard import SummaryWriter
 import tiledb
 
 from ._base import Meta, TileDBArtifact, Timestamp, current_milli_time
-from ._specs import TorchSpec
 from ._tensorboard import TensorBoardTileDB
 
 
@@ -81,7 +80,7 @@ class PyTorchTileDBModel(TileDBArtifact[torch.nn.Module]):
 
         # Create TileDB model array
         if not update:
-            self._create_array_internal(serialized_model_info=serialized_model_info)
+            self.__create_array(serialized_model_info=serialized_model_info)
 
         self._write_array(
             {
@@ -173,16 +172,18 @@ class PyTorchTileDBModel(TileDBArtifact[torch.nn.Module]):
         """
         return str(self.artifact) if self.artifact else ""
 
-    def _create_array_internal(self, **kwargs: Any) -> None:
+    def __create_array(self, **kwargs: Any) -> None:
         """
         Create a TileDB array for a PyTorch model
         :param serialized_model_info: A mapping with pickled information of a PyTorch model.
         """
-
-        spec = TorchSpec(
-            optimizer=self.optimizer, model_info=kwargs["serialized_model_info"]
-        )
-        super(PyTorchTileDBModel, self)._create_array(spec)
+        domain_info = ("model", (1, 1))
+        fields = ["model_state_dict"]
+        if self.optimizer:
+            fields.append("optimizer_state_dict")
+        if kwargs["serialized_model_info"]:
+            fields.extend(kwargs["serialized_model_info"].keys())
+        super()._create_array(domain_info, fields)
 
     def _write_array(
         self, serialized_model_dict: Mapping[str, bytes], meta: Optional[Meta]

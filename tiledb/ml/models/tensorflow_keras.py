@@ -14,7 +14,6 @@ import tensorflow as tf
 import tiledb
 
 from ._base import Meta, TileDBArtifact, Timestamp, current_milli_time
-from ._specs import TFSpec
 from ._tensorboard import TensorBoardTileDB
 
 try:
@@ -86,7 +85,7 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
 
         # Create TileDB model array
         if not update:
-            self._create_array_internal()
+            self.__create_array()
 
         self._write_array(
             include_optimizer=include_optimizer,
@@ -223,11 +222,25 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
         else:
             return ""
 
-    def _create_array_internal(self) -> None:
+    def __create_array(self, **kwargs: Any) -> None:
         """Create a TileDB array for a Tensorflow model"""
         assert self.artifact
-        spec = TFSpec(self.artifact)
-        super(TensorflowKerasTileDBModel, self)._create_array(spec=spec)
+        domain_info = (
+            "model",
+            (1, 1)
+            if isinstance(self.artifact, FunctionalOrSequential)
+            else (1, len(self.artifact.layers)),
+        )
+        if isinstance(self.artifact, FunctionalOrSequential):
+            fields = ["model_weights", "optimizer_weights"]
+        else:
+            fields = [
+                "weight_names",
+                "weight_values",
+                "layer_name",
+                "optimizer_weights",
+            ]
+        super()._create_array(domain_info, fields)
 
     def _write_array(
         self,

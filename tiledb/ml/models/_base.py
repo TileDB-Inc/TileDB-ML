@@ -3,19 +3,18 @@
 import platform
 import time
 from abc import ABC, abstractmethod
-from typing import Any, Generic, Mapping, Optional, Tuple, TypeVar, Union
+from typing import Any, Generic, Mapping, Optional, Sequence, Tuple, TypeVar
 
 import numpy as np
 
 import tiledb
 
 from ._cloud_utils import get_cloud_uri, update_file_properties
-from ._specs import ModelFileProperties, SklearnSpec, TensorBoardSpec, TFSpec, TorchSpec
+from ._file_properties import ModelFileProperties
 
 Artifact = TypeVar("Artifact")
 Meta = Mapping[str, Any]
 Timestamp = Tuple[int, int]
-Spec = Union[TFSpec, TorchSpec, SklearnSpec, TensorBoardSpec]
 
 
 def current_milli_time() -> int:
@@ -86,12 +85,16 @@ class TileDBArtifact(ABC, Generic[Artifact]):
             ModelFileProperties.TILEDB_ML_MODEL_PREVIEW.value: self.preview(),
         }
 
-    def _create_array(self, spec: Spec, **kwargs: Any) -> tiledb.Array:
+    def _create_array(
+        self,
+        domain_info: Tuple[str, Tuple[int, int]],
+        fields: Sequence[str],
+    ) -> None:
         """Internal method that creates a TileDB array based on the model's spec."""
         dom = tiledb.Domain(
             tiledb.Dim(
-                name=spec.domain_info[0],
-                domain=spec.domain_info[1],
+                name=domain_info[0],
+                domain=domain_info[1],
                 tile=1,
                 dtype=np.int32,
                 ctx=self.ctx,
@@ -105,7 +108,7 @@ class TileDBArtifact(ABC, Generic[Artifact]):
                 filters=tiledb.FilterList([tiledb.ZstdFilter()]),
                 ctx=self.ctx,
             )
-            for field in spec.fields
+            for field in fields
         ]
         schema = tiledb.ArraySchema(
             domain=dom,

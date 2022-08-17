@@ -9,7 +9,7 @@ import tensorflow as tf
 import tiledb
 
 from ._base import TileDBArtifact, Timestamp, current_milli_time
-from ._specs import TensorboardFileProperties, TensorBoardSpec
+from ._file_properties import TensorboardFileProperties
 
 
 class TensorBoardTileDB(TileDBArtifact[tf.keras.callbacks.TensorBoard]):
@@ -22,7 +22,6 @@ class TensorBoardTileDB(TileDBArtifact[tf.keras.callbacks.TensorBoard]):
     ) -> None:
 
         super().__init__(uri, namespace, ctx)
-        self.spec = TensorBoardSpec(key=self._KEY)
 
     def _get_file_properties(
         self,
@@ -32,9 +31,11 @@ class TensorBoardTileDB(TileDBArtifact[tf.keras.callbacks.TensorBoard]):
             TensorboardFileProperties.TILEDB_ML_MODEL_TENSORBOARD_VERSION.value: self.FrameworkVersion,
         }
 
-    def _create_array_internal(self) -> None:
+    def __create_array(self, **kwargs: Any) -> None:
         """Create a TileDB array for a TensorBoard"""
-        super(TensorBoardTileDB, self)._create_array(self.spec)
+        domain_info = ("tensorboard", (1, 1))
+        fields = [self._KEY]
+        super()._create_array(domain_info, fields)
 
     def save(self, *, log_dir: str = "", update: bool = False, **kwargs: Any) -> None:
         """
@@ -47,7 +48,7 @@ class TensorBoardTileDB(TileDBArtifact[tf.keras.callbacks.TensorBoard]):
 
         # Create TileDB model array
         if not update:
-            self._create_array_internal()
+            self.__create_array()
 
         event_files = {}
         for path in glob.glob(f"{log_dir}/*tfevents*"):
