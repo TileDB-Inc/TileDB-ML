@@ -34,8 +34,8 @@ jobs:
     - name: Install dependencies
       run: |
         pip install --upgrade pip
-        pip install -f https://download.pytorch.org/whl/torch_stable.html \
-          pytest-mock pytest-cov scikit-learn==1.0.2 protobuf==3.* ${{ matrix.ml-deps }}
+        pip install -f https://download.pytorch.org/whl/torch_stable.html protobuf==3.* ${{ matrix.ml-deps }}
+        pip install pytest-mock pytest-cov torchdata scikit-learn==1.0.2
         pip install -e .[cloud]
 
     - name: Run mypy
