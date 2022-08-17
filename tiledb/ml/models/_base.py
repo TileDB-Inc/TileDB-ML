@@ -21,6 +21,13 @@ def current_milli_time() -> int:
     return round(time.time() * 1000)
 
 
+def group_create(uri: str, ctx: tiledb.Ctx) -> None:
+    tiledb.group_create(f"{uri}-group", ctx)
+    grp = tiledb.Group(f"{uri}-group", mode="w", ctx=ctx)
+    grp.add(uri)
+    grp.add(f"{uri}-tensorboard")
+
+
 class TileDBArtifact(ABC, Generic[Artifact]):
     """
     This is the base class for all TileDB model storage functionalities, i.e,
@@ -121,12 +128,6 @@ class TileDBArtifact(ABC, Generic[Artifact]):
         # In case we are on TileDB-Cloud we have to update model array's file properties
         if self.namespace:
             update_file_properties(self.uri, self._file_properties)
-
-    def _group_create(self) -> None:
-        tiledb.group_create(f"{self.uri}-group", self.ctx)
-        grp = tiledb.Group(f"{self.uri}-group", mode="w", ctx=self.ctx)
-        grp.add(self.uri)
-        grp.add(f"{self.uri}-tensorboard")
 
     def update_model_metadata(
         self, array: tiledb.Array, meta: Optional[Meta] = None

@@ -13,7 +13,7 @@ import tensorflow as tf
 
 import tiledb
 
-from ._base import Meta, TileDBArtifact, Timestamp, current_milli_time
+from ._base import Meta, TileDBArtifact, Timestamp, current_milli_time, group_create
 from ._tensorboard import TensorBoardTileDB
 
 try:
@@ -106,7 +106,7 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
 
             # Create group for first time when callback is activated
             if not update:
-                self._group_create()
+                group_create(self.uri, self.ctx)
 
     def load(
         self,
