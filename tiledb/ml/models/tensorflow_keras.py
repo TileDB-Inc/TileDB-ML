@@ -222,7 +222,7 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
         else:
             return ""
 
-    def __create_array(self, **kwargs: Any) -> None:
+    def __create_array(self) -> None:
         """Create a TileDB array for a Tensorflow model"""
         assert self.artifact
         domain_info = (

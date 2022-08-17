@@ -31,7 +31,7 @@ class TensorBoardTileDB(TileDBArtifact[tf.keras.callbacks.TensorBoard]):
             TensorboardFileProperties.TILEDB_ML_MODEL_TENSORBOARD_VERSION.value: self.Version,
         }
 
-    def __create_array(self, **kwargs: Any) -> None:
+    def __create_array(self) -> None:
         """Create a TileDB array for a TensorBoard"""
         domain_info = ("tensorboard", (1, 1))
         fields = [self._KEY]

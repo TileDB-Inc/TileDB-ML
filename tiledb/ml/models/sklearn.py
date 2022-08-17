@@ -1,7 +1,7 @@
 """Functionality for saving and loading Sklearn models as TileDB arrays"""
 
 import pickle
-from typing import Any, Optional, TypeVar
+from typing import Optional, TypeVar
 
 import numpy as np
 import sklearn
@@ -80,7 +80,7 @@ class SklearnTileDBModel(TileDBArtifact[BaseEstimator]):
         else:
             return ""
 
-    def __create_array(self, **kwargs: Any) -> None:
+    def __create_array(self) -> None:
         """Create a TileDB array for a Sklearn model."""
 
         assert self.artifact
