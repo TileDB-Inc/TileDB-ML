@@ -1,7 +1,7 @@
 """Functionality for saving and loading Sklearn models as TileDB arrays"""
 
 import pickle
-from typing import Optional, TypeVar
+from typing import Optional
 
 import numpy as np
 import sklearn
@@ -11,8 +11,6 @@ from sklearn.base import BaseEstimator
 import tiledb
 
 from ._base import Meta, TileDBArtifact, Timestamp, current_milli_time
-
-Model = TypeVar("Model")
 
 
 class SklearnTileDBModel(TileDBArtifact[BaseEstimator]):
@@ -29,7 +27,7 @@ class SklearnTileDBModel(TileDBArtifact[BaseEstimator]):
         uri: str,
         namespace: Optional[str] = None,
         ctx: Optional[tiledb.Ctx] = None,
-        model: Optional[Model] = None,
+        model: Optional[BaseEstimator] = None,
     ):
         super().__init__(uri, namespace, ctx, model)
 

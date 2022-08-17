@@ -6,7 +6,7 @@ import logging
 import os
 import pickle
 from operator import attrgetter
-from typing import Any, List, Mapping, Optional, Tuple, TypeVar
+from typing import Any, List, Mapping, Optional, Tuple
 
 import numpy as np
 import tensorflow as tf
@@ -34,8 +34,6 @@ get_json_type = keras.saving.saved_model.json_utils.get_json_type
 preprocess_weights_for_loading = keras.saving.hdf5_format.preprocess_weights_for_loading
 saving_utils = keras.saving.saving_utils
 
-Model = TypeVar("Model")
-
 
 class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
     """
@@ -51,7 +49,7 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
         uri: str,
         namespace: Optional[str] = None,
         ctx: Optional[tiledb.Ctx] = None,
-        model: Optional[Model] = None,
+        model: Optional[tf.keras.Model] = None,
     ):
         super().__init__(uri, namespace, ctx, model)
 
