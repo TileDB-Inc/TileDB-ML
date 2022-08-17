@@ -172,7 +172,7 @@ class PyTorchTileDBModel(TileDBArtifact[torch.nn.Module]):
         """
         return str(self.artifact) if self.artifact else ""
 
-    def __create_array(self, **kwargs: Any) -> None:
+    def __create_array(self, serialized_model_info: Mapping[str, bytes]) -> None:
         """
         Create a TileDB array for a PyTorch model
         :param serialized_model_info: A mapping with pickled information of a PyTorch model.
@@ -181,8 +181,8 @@ class PyTorchTileDBModel(TileDBArtifact[torch.nn.Module]):
         fields = ["model_state_dict"]
         if self.optimizer:
             fields.append("optimizer_state_dict")
-        if kwargs["serialized_model_info"]:
-            fields.extend(kwargs["serialized_model_info"].keys())
+        if serialized_model_info:
+            fields.extend(serialized_model_info.keys())
         super()._create_array(domain_info, fields)
 
     def _write_array(
