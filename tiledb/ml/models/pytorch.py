@@ -1,5 +1,5 @@
 """Functionality for saving and loading PytTorch models as TileDB arrays"""
-
+import os
 import pickle
 from typing import Any, Mapping, Optional
 
@@ -10,19 +10,18 @@ from torch.utils.tensorboard import SummaryWriter
 
 import tiledb
 
-from ._base import Meta, TileDBModel, Timestamp, current_milli_time
-from ._cloud_utils import update_file_properties
-from ._tensorboard import load_tensorboard, save_tensorboard
+from ._base import Meta, TileDBArtifact, Timestamp, current_milli_time, group_create
+from ._tensorboard import TensorBoardTileDB
 
 
-class PyTorchTileDBModel(TileDBModel[torch.nn.Module]):
+class PyTorchTileDBModel(TileDBArtifact[torch.nn.Module]):
     """
     Class that implements all functionality needed to save PyTorch models as
     TileDB arrays and load PyTorch models from TileDB arrays.
     """
 
-    Framework = "PYTORCH"
-    FrameworkVersion = torch.__version__
+    Name = "PYTORCH"
+    Version = torch.__version__
 
     def __init__(
         self,
@@ -46,15 +45,16 @@ class PyTorchTileDBModel(TileDBModel[torch.nn.Module]):
         """
         Save a PyTorch model as a TileDB array.
 
+        :param summary_writer:
         :param update: Whether we should update any existing TileDB array model at the
             target location.
         :param meta: Extra metadata to save in a TileDB array.
         :param model_info: Contains model info like loss, epoch etc, that could be needed
             to save a model's general checkpoint for inference and/or resuming training.
-        :param summary_path: Contains summary writer's path for storing tensorboard metadata
+        :param summary_writer: Contains summary writer object for storing tensorboard metadata
                                 in array's metadata
         """
-        if self.model is None:
+        if self.artifact is None:
             raise RuntimeError("Model is not initialized")
 
         # Serialize model information
@@ -65,7 +65,7 @@ class PyTorchTileDBModel(TileDBModel[torch.nn.Module]):
         )
 
         serialized_model_dict = {
-            "model_state_dict": pickle.dumps(self.model.state_dict(), protocol=4)
+            "model_state_dict": pickle.dumps(self.artifact.state_dict(), protocol=4)
         }
 
         serialized_optimizer_dict = (
@@ -78,14 +78,9 @@ class PyTorchTileDBModel(TileDBModel[torch.nn.Module]):
             else {}
         )
 
-        # Summary writer
-        if summary_writer:
-            cb_meta = save_tensorboard(summary_writer.log_dir)
-            meta = {**meta, **cb_meta} if meta else cb_meta
-
         # Create TileDB model array
         if not update:
-            self._create_array(serialized_model_info)
+            self.__create_array(serialized_model_info=serialized_model_info)
 
         self._write_array(
             {
@@ -96,17 +91,28 @@ class PyTorchTileDBModel(TileDBModel[torch.nn.Module]):
             meta=meta,
         )
 
+        # Summary writer
+        if summary_writer:
+            tb = TensorBoardTileDB(f"{self.uri}-tensorboard", self.ctx, self.namespace)
+            tb.save(log_dir=os.path.join(summary_writer.log_dir), update=update)
+
+            # Create group for first time when callback is activated
+            if not update:
+                group_create(self.uri, self.ctx)
+
     # FIXME: This method should change to return the model, not the model_info dict
-    def load(  # type: ignore
+    def load(
         self,
         *,
         timestamp: Optional[Timestamp] = None,
-        model: torch.nn.Module,
-        optimizer: Optimizer,
+        model: torch.nn.Module = None,
+        optimizer: Optimizer = None,
+        callback: bool = False,
     ) -> Optional[Mapping[str, Any]]:
         """
         Load a PyTorch model from a TileDB array.
 
+        :param callback: Boolean variable if True will store Callback data into saved directory
         :param timestamp: Range of timestamps to load fragments of the array which live
             in the specified time range.
         :param model: A defined PyTorch model.
@@ -139,14 +145,24 @@ class PyTorchTileDBModel(TileDBModel[torch.nn.Module]):
                 out_dict[attr_name] = pickle.loads(
                     model_array_results[attr_name].item(0)
                 )
-        return out_dict
 
-    def load_tensorboard(
-        self,
-        target_dir: Optional[str] = None,
-        timestamp: Optional[Timestamp] = None,
-    ) -> None:
-        return load_tensorboard(self.uri, self.ctx, target_dir, timestamp)
+        if callback:
+            try:
+                with tiledb.open(f"{self.uri}-tensorboard") as tb_array:
+                    for path, file_bytes in pickle.loads(
+                        tb_array[:]["tensorboard_data"][0]
+                    ).items():
+                        log_dir = os.path.dirname(path)
+                        if not os.path.exists(log_dir):
+                            os.mkdir(log_dir)
+                        with open(
+                            os.path.join(log_dir, os.path.basename(path)), "wb"
+                        ) as f:
+                            f.write(file_bytes)
+            except FileNotFoundError:
+                print(f"Array {self.uri}-tensorboard does not exist")
+
+        return out_dict
 
     def preview(self) -> str:
         """
@@ -154,70 +170,20 @@ class PyTorchTileDBModel(TileDBModel[torch.nn.Module]):
 
         :return: str. A string representation of the models internal configuration.
         """
-        return str(self.model) if self.model else ""
+        return str(self.artifact) if self.artifact else ""
 
-    def _create_array(self, serialized_model_info: Mapping[str, bytes]) -> None:
+    def __create_array(self, serialized_model_info: Mapping[str, bytes]) -> None:
         """
         Create a TileDB array for a PyTorch model
-
         :param serialized_model_info: A mapping with pickled information of a PyTorch model.
         """
-        dom = tiledb.Domain(
-            tiledb.Dim(
-                name="model", domain=(1, 1), tile=1, dtype=np.int32, ctx=self.ctx
-            ),
-        )
-
-        attrs = []
-
-        # Keep model's state dictionary
-        attrs.append(
-            tiledb.Attr(
-                name="model_state_dict",
-                dtype=bytes,
-                var=True,
-                filters=tiledb.FilterList([tiledb.ZstdFilter()]),
-                ctx=self.ctx,
-            ),
-        )
-
-        # If optimizer is provided we also keep optimizer's state dictionary
+        domain_info = ("model", (1, 1))
+        fields = ["model_state_dict"]
         if self.optimizer:
-            attrs.append(
-                tiledb.Attr(
-                    name="optimizer_state_dict",
-                    dtype=bytes,
-                    var=True,
-                    filters=tiledb.FilterList([tiledb.ZstdFilter()]),
-                    ctx=self.ctx,
-                ),
-            )
-
-        # Add extra attributes in case model information is provided by the user
+            fields.append("optimizer_state_dict")
         if serialized_model_info:
-            for key in serialized_model_info:
-                attrs.append(
-                    tiledb.Attr(
-                        name=key,
-                        dtype=bytes,
-                        var=True,
-                        filters=tiledb.FilterList([tiledb.ZstdFilter()]),
-                        ctx=self.ctx,
-                    ),
-                )
-
-        schema = tiledb.ArraySchema(
-            domain=dom,
-            sparse=False,
-            attrs=attrs,
-            ctx=self.ctx,
-        )
-
-        tiledb.Array.create(self.uri, schema, ctx=self.ctx)
-
-        # In case we are on TileDB-Cloud we have to update model array's file properties
-        if self.namespace:
-            update_file_properties(self.uri, self._file_properties)
+            fields.extend(serialized_model_info.keys())
+        super()._create_array(domain_info, fields)
 
     def _write_array(
         self, serialized_model_dict: Mapping[str, bytes], meta: Optional[Meta]

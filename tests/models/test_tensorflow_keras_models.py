@@ -1,5 +1,6 @@
 """Tests for TileDB Tensorflow Keras model save and load."""
 
+import glob
 import io
 import os
 import pickle
@@ -26,6 +27,14 @@ else:
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 batch_get_value = tf.keras.backend.batch_get_value
+
+
+def read_files(dirpath):
+    files = {}
+    for path in glob.glob(f"{dirpath}/*"):
+        with open(path, "rb") as f:
+            files[path] = f.read()
+    return files
 
 
 class ConfigSubclassModel(tf.keras.Model):
@@ -488,7 +497,7 @@ class TestTensorflowKerasModelCloud:
         )
 
         mock_update_file_properties = mocker.patch(
-            "tiledb.ml.models.tensorflow_keras.update_file_properties",
+            "tiledb.ml.models._base.update_file_properties",
             return_value=None,
         )
         mocker.patch(
@@ -521,7 +530,7 @@ class TestTensorflowKerasModelCloud:
             ex.value
         )
 
-    def test_tensorboard_callback_meta(self, tmpdir):
+    def test_tensorboard_callback(self, tmpdir):
         model = tf.keras.Sequential()
         model.add(tf.keras.layers.Flatten(input_shape=(10, 10)))
         tiledb_array = os.path.join(tmpdir, "model_array")
@@ -535,24 +544,20 @@ class TestTensorflowKerasModelCloud:
         with open(os.path.join(tmpdir, "train", "bar_tfevents_2"), "wb") as f:
             f.write(b"test_bytes_2")
 
+        log_files = read_files(os.path.join(tmpdir, "train"))
+        assert log_files
         tiledb_obj.save(include_callbacks=cb)
-        with tiledb.open(tiledb_array) as A:
-            assert pickle.loads(A.meta["__TENSORBOARD__"]) == {
+        with tiledb.open(f"{tiledb_array}-tensorboard") as A:
+            assert pickle.loads(A[:]["tensorboard_data"][0]) == {
                 os.path.join(tmpdir, "train", "foo_tfevents_1"): b"test_bytes_1",
                 os.path.join(tmpdir, "train", "bar_tfevents_2"): b"test_bytes_2",
             }
         shutil.rmtree(os.path.join(tmpdir, "train"))
 
-        # Loading the event data should create local files
-        tiledb_obj.load_tensorboard()
+        tiledb_obj.load(compile_model=False, callback=True)
         with open(os.path.join(tmpdir, "train", "foo_tfevents_1"), "rb") as f:
             assert f.read() == b"test_bytes_1"
         with open(os.path.join(tmpdir, "train", "bar_tfevents_2"), "rb") as f:
             assert f.read() == b"test_bytes_2"
 
-        custom_dir = os.path.join(tmpdir, "custom_log")
-        tiledb_obj.load_tensorboard(target_dir=custom_dir)
-        with open(os.path.join(custom_dir, "foo_tfevents_1"), "rb") as f:
-            assert f.read() == b"test_bytes_1"
-        with open(os.path.join(custom_dir, "bar_tfevents_2"), "rb") as f:
-            assert f.read() == b"test_bytes_2"
+        shutil.rmtree(os.path.join(tmpdir, "train"))

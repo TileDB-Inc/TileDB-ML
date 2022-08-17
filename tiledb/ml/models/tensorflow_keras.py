@@ -13,9 +13,8 @@ import tensorflow as tf
 
 import tiledb
 
-from ._base import Meta, TileDBModel, Timestamp, current_milli_time
-from ._cloud_utils import update_file_properties
-from ._tensorboard import load_tensorboard, save_tensorboard
+from ._base import Meta, TileDBArtifact, Timestamp, current_milli_time, group_create
+from ._tensorboard import TensorBoardTileDB
 
 try:
     import keras
@@ -36,14 +35,23 @@ preprocess_weights_for_loading = keras.saving.hdf5_format.preprocess_weights_for
 saving_utils = keras.saving.saving_utils
 
 
-class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
+class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
     """
     Class that implements all functionality needed to save Tensorflow models as
     TileDB arrays and load Tensorflow models from TileDB arrays.
     """
 
-    Framework = "TENSORFLOW KERAS"
-    FrameworkVersion = tf.__version__
+    Name = "TENSORFLOW KERAS"
+    Version = tf.__version__
+
+    def __init__(
+        self,
+        uri: str,
+        namespace: Optional[str] = None,
+        ctx: Optional[tiledb.Ctx] = None,
+        model: Optional[tf.keras.Model] = None,
+    ):
+        super().__init__(uri, namespace, ctx, model)
 
     def save(
         self,
@@ -62,26 +70,20 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
         :param include_optimizer: Whether to save the optimizer or not.
         :param include_callbacks: Callbacks list to store their data in array's metadata
         """
-        if self.model is None:
+        if self.artifact is None:
             raise RuntimeError("Model is not initialized")
 
         # Used in this format only when model is Functional or Sequential
-        model_weights = pickle.dumps(self.model.get_weights(), protocol=4)
+        model_weights = pickle.dumps(self.artifact.get_weights(), protocol=4)
 
         # Serialize model optimizer
         optimizer_weights = self._serialize_optimizer_weights(
             include_optimizer=include_optimizer
         )
 
-        if include_callbacks:
-            for cb in include_callbacks:
-                if isinstance(cb, tf.keras.callbacks.TensorBoard):
-                    cb_meta = save_tensorboard(os.path.join(cb.log_dir, "train"))
-                    meta = {**meta, **cb_meta} if meta else cb_meta
-
         # Create TileDB model array
         if not update:
-            self._create_array()
+            self.__create_array()
 
         self._write_array(
             include_optimizer=include_optimizer,
@@ -90,6 +92,20 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
             meta=meta,
         )
 
+        # Add callbacks to the group
+        if include_callbacks:
+            for cb in include_callbacks:
+                if isinstance(cb, tf.keras.callbacks.TensorBoard):
+                    # Save TensorBoard callback
+                    tb = TensorBoardTileDB(
+                        f"{self.uri}-tensorboard", self.ctx, self.namespace
+                    )
+                    tb.save(log_dir=os.path.join(cb.log_dir, "train"), update=update)
+
+            # Create group for first time when callback is activated
+            if not update:
+                group_create(self.uri, self.ctx)
+
     def load(
         self,
         *,
@@ -97,10 +113,12 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
         compile_model: bool = False,
         custom_objects: Optional[Mapping[str, Any]] = None,
         input_shape: Optional[Tuple[int, ...]] = None,
+        callback: bool = False,
     ) -> tf.keras.Model:
         """
         Load a Tensorflow model from a TileDB array.
 
+        :param callback: Boolean variable if True will store Callback data into saved directory
         :param timestamp: Range of timestamps to load fragments of the array which live
             in the specified time range.
         :param compile_model: Whether to compile the model after loading or not.
@@ -175,106 +193,52 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
                             "starting with a freshly initialized "
                             "optimizer."
                         )
-            return model
-
-    def load_tensorboard(
-        self,
-        target_dir: Optional[str] = None,
-        timestamp: Optional[Timestamp] = None,
-    ) -> None:
-        return load_tensorboard(self.uri, self.ctx, target_dir, timestamp)
+        if callback:
+            try:
+                with tiledb.open(f"{self.uri}-tensorboard") as tb_array:
+                    for path, file_bytes in pickle.loads(
+                        tb_array[:]["tensorboard_data"][0]
+                    ).items():
+                        log_dir = os.path.dirname(path)
+                        if not os.path.exists(log_dir):
+                            os.mkdir(log_dir)
+                        with open(
+                            os.path.join(log_dir, os.path.basename(path)), "wb"
+                        ) as f:
+                            f.write(file_bytes)
+            except FileNotFoundError:
+                print(f"Array {self.uri}-tensorboard does not exist")
+        return model
 
     def preview(self) -> str:
         """Create a string representation of the model."""
-        if self.model:
+        if self.artifact:
             s = io.StringIO()
-            self.model.summary(print_fn=lambda x: s.write(x + "\n"))
+            self.artifact.summary(print_fn=lambda x: s.write(x + "\n"))
             model_summary = s.getvalue()
             return model_summary
         else:
             return ""
 
-    def _create_array(self) -> None:
+    def __create_array(self) -> None:
         """Create a TileDB array for a Tensorflow model"""
-        assert self.model
-        dom = tiledb.Domain(
-            tiledb.Dim(
-                name="model", domain=(1, 1), tile=1, dtype=np.int32, ctx=self.ctx
-            )
-            if isinstance(self.model, FunctionalOrSequential)
-            else tiledb.Dim(
-                name="model",
-                domain=(1, len(self.model.layers)),
-                tile=1,
-                dtype=np.int32,
-                ctx=self.ctx,
-            ),
+        assert self.artifact
+        domain_info = (
+            "model",
+            (1, 1)
+            if isinstance(self.artifact, FunctionalOrSequential)
+            else (1, len(self.artifact.layers)),
         )
-        if isinstance(self.model, FunctionalOrSequential):
-            attrs = [
-                tiledb.Attr(
-                    name="model_weights",
-                    dtype=bytes,
-                    var=True,
-                    filters=tiledb.FilterList([tiledb.ZstdFilter()]),
-                    ctx=self.ctx,
-                ),
-                tiledb.Attr(
-                    name="optimizer_weights",
-                    dtype=bytes,
-                    var=True,
-                    filters=tiledb.FilterList([tiledb.ZstdFilter()]),
-                    ctx=self.ctx,
-                ),
-            ]
+        if isinstance(self.artifact, FunctionalOrSequential):
+            fields = ["model_weights", "optimizer_weights"]
         else:
-            attrs = [
-                # String names of weights of each layer of the model
-                tiledb.Attr(
-                    name="weight_names",
-                    dtype=bytes,
-                    var=True,
-                    filters=tiledb.FilterList([tiledb.ZstdFilter()]),
-                    ctx=self.ctx,
-                ),
-                # The values of weights of each layer of the model
-                tiledb.Attr(
-                    name="weight_values",
-                    dtype=bytes,
-                    var=True,
-                    filters=tiledb.FilterList([tiledb.ZstdFilter()]),
-                    ctx=self.ctx,
-                ),
-                # Layer names TF format of the saved/loaded model
-                tiledb.Attr(
-                    name="layer_name",
-                    dtype=str,
-                    var=True,
-                    filters=tiledb.FilterList([tiledb.ZstdFilter()]),
-                    ctx=self.ctx,
-                ),
-                # The weight values of the optimizer in case the model is saved compiled
-                tiledb.Attr(
-                    name="optimizer_weights",
-                    dtype=bytes,
-                    var=True,
-                    filters=tiledb.FilterList([tiledb.ZstdFilter()]),
-                    ctx=self.ctx,
-                ),
+            fields = [
+                "weight_names",
+                "weight_values",
+                "layer_name",
+                "optimizer_weights",
             ]
-
-        schema = tiledb.ArraySchema(
-            domain=dom,
-            sparse=False,
-            attrs=attrs,
-            ctx=self.ctx,
-        )
-
-        tiledb.Array.create(self.uri, schema, ctx=self.ctx)
-
-        # In case we are on TileDB-Cloud we have to update model array's file properties
-        if self.namespace:
-            update_file_properties(self.uri, self._file_properties)
+        super()._create_array(domain_info, fields)
 
     def _write_array(
         self,
@@ -284,12 +248,12 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
         meta: Optional[Meta],
     ) -> None:
         """Write Tensorflow model to a TileDB array."""
-        assert self.model
+        assert self.artifact
         # TODO: Change timestamp when issue in core is resolved
         with tiledb.open(
             self.uri, "w", timestamp=current_milli_time(), ctx=self.ctx
         ) as tf_model_tiledb:
-            if isinstance(self.model, FunctionalOrSequential):
+            if isinstance(self.artifact, FunctionalOrSequential):
                 tf_model_tiledb[:] = {
                     "model_weights": np.array([serialized_weights]),
                     "optimizer_weights": np.array([serialized_optimizer_weights]),
@@ -299,7 +263,7 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
                 layer_names = []
                 weight_names = []
                 weight_values = []
-                for layer in sorted(self.model.layers, key=attrgetter("name")):
+                for layer in sorted(self.artifact.layers, key=attrgetter("name")):
                     weights = layer.trainable_weights + layer.non_trainable_weights
                     weight_values.append(
                         pickle.dumps(tf.keras.backend.batch_get_value(weights))
@@ -317,13 +281,15 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
                     "optimizer_weights": np.array(
                         [
                             serialized_optimizer_weights
-                            for _ in range(len(self.model.layers))
+                            for _ in range(len(self.artifact.layers))
                         ]
                     ),
                 }
 
             # Insert all model metadata
-            model_metadata = saving_utils.model_metadata(self.model, include_optimizer)
+            model_metadata = saving_utils.model_metadata(
+                self.artifact, include_optimizer
+            )
             for key, value in model_metadata.items():
                 tf_model_tiledb.meta[key] = json.dumps(
                     value, default=get_json_type
@@ -333,8 +299,8 @@ class TensorflowKerasTileDBModel(TileDBModel[tf.keras.Model]):
 
     def _serialize_optimizer_weights(self, include_optimizer: bool = True) -> bytes:
         """Serialize optimizer weights"""
-        assert self.model
-        optimizer = self.model.optimizer
+        assert self.artifact
+        optimizer = self.artifact.optimizer
         if include_optimizer and optimizer and not isinstance(optimizer, TFOptimizer):
             optimizer_weights = tf.keras.backend.batch_get_value(optimizer.weights)
             return pickle.dumps(optimizer_weights, protocol=4)

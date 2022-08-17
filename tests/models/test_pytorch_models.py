@@ -165,10 +165,21 @@ class TestPyTorchModel:
         assert tiledb_obj._file_properties["TILEDB_ML_MODEL_PREVIEW"] == str(model)
 
     @net
-    def test_tensorboard_callback_meta(self, tmpdir, net):
+    @pytest.mark.parametrize(
+        "optimizer",
+        [
+            getattr(optimizers, name)
+            for name, obj in inspect.getmembers(optimizers)
+            if inspect.isclass(obj) and name != "Optimizer"
+        ],
+    )
+    def test_tensorboard_callback(self, tmpdir, net, optimizer):
         model = net()
+        saved_optimizer = optimizer(model.parameters(), lr=0.001)
         tiledb_array = os.path.join(tmpdir, "model_array")
-        tiledb_obj = PyTorchTileDBModel(uri=tiledb_array, model=model)
+        tiledb_obj = PyTorchTileDBModel(
+            uri=tiledb_array, model=model, optimizer=saved_optimizer
+        )
 
         # SummaryWriter creates file(s) under log_dir
         log_dir = os.path.join(tmpdir, "logs")
@@ -177,21 +188,17 @@ class TestPyTorchModel:
         assert log_files
 
         tiledb_obj.save(update=False, summary_writer=writer)
-        with tiledb.open(tiledb_array) as A:
-            assert pickle.loads(A.meta["__TENSORBOARD__"]) == log_files
+        with tiledb.open(f"{tiledb_array}-tensorboard") as A:
+            assert pickle.loads(A[:]["tensorboard_data"][0]) == log_files
         shutil.rmtree(log_dir)
 
-        # Loading the event data should create local files
-        tiledb_obj.load_tensorboard()
-        new_log_files = read_files(log_dir)
-        assert new_log_files == log_files
+        loaded_net = net()
+        loaded_optimizer = optimizer(loaded_net.parameters(), lr=0.001)
+        tiledb_obj.load(model=loaded_net, optimizer=loaded_optimizer, callback=True)
 
-        custom_dir = os.path.join(tmpdir, "custom_log")
-        tiledb_obj.load_tensorboard(target_dir=custom_dir)
-        new_log_files = read_files(custom_dir)
-        assert len(new_log_files) == len(log_files)
-        for new_file, old_file in zip(new_log_files.values(), log_files.values()):
-            assert new_file == old_file
+        # Check if files exist under log_dir
+        assert glob.glob(f"{log_dir}/*tfevents*")
+        shutil.rmtree(log_dir)
 
 
 def read_files(dirpath):
@@ -238,7 +245,7 @@ class TestPyTorchModelCloud:
         )
 
         mock_update_file_properties = mocker.patch(
-            "tiledb.ml.models.pytorch.update_file_properties", return_value=None
+            "tiledb.ml.models._base.update_file_properties", return_value=None
         )
         mocker.patch("tiledb.ml.models.pytorch.PyTorchTileDBModel._write_array")
 
