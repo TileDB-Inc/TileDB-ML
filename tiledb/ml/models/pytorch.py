@@ -20,8 +20,8 @@ class PyTorchTileDBModel(TileDBArtifact[torch.nn.Module]):
     TileDB arrays and load PyTorch models from TileDB arrays.
     """
 
-    Framework = "PYTORCH"
-    FrameworkVersion = torch.__version__
+    Name = "PYTORCH"
+    Version = torch.__version__
 
     def __init__(
         self,

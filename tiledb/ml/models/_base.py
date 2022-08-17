@@ -34,8 +34,8 @@ class TileDBArtifact(ABC, Generic[Artifact]):
     store machine learning models (Tensorflow, PyTorch, etc) as TileDB arrays.
     """
 
-    Framework: str
-    FrameworkVersion: str
+    Name: str
+    Version: str
 
     def __init__(
         self,
@@ -85,8 +85,8 @@ class TileDBArtifact(ABC, Generic[Artifact]):
 
     def _get_file_properties(self) -> Mapping[str, str]:
         return {
-            ModelFileProperties.TILEDB_ML_MODEL_ML_FRAMEWORK.value: self.Framework,
-            ModelFileProperties.TILEDB_ML_MODEL_ML_FRAMEWORK_VERSION.value: self.FrameworkVersion,
+            ModelFileProperties.TILEDB_ML_MODEL_ML_FRAMEWORK.value: self.Name,
+            ModelFileProperties.TILEDB_ML_MODEL_ML_FRAMEWORK_VERSION.value: self.Version,
             ModelFileProperties.TILEDB_ML_MODEL_STAGE.value: "STAGING",
             ModelFileProperties.TILEDB_ML_MODEL_PYTHON_VERSION.value: platform.python_version(),
             ModelFileProperties.TILEDB_ML_MODEL_PREVIEW.value: self.preview(),

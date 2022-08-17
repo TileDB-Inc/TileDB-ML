@@ -43,8 +43,8 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
     TileDB arrays and load Tensorflow models from TileDB arrays.
     """
 
-    Framework = "TENSORFLOW KERAS"
-    FrameworkVersion = tf.__version__
+    Name = "TENSORFLOW KERAS"
+    Version = tf.__version__
 
     def __init__(
         self,

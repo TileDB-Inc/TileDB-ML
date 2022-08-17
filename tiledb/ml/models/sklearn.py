@@ -21,8 +21,8 @@ class SklearnTileDBModel(TileDBArtifact[BaseEstimator]):
     TileDB arrays and load Sklearn models from TileDB arrays.
     """
 
-    Framework = "SKLEARN"
-    FrameworkVersion = sklearn.__version__
+    Name = "SKLEARN"
+    Version = sklearn.__version__
 
     def __init__(
         self,

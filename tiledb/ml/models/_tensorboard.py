@@ -13,8 +13,8 @@ from ._file_properties import TensorboardFileProperties
 
 
 class TensorBoardTileDB(TileDBArtifact[tf.keras.callbacks.TensorBoard]):
-    Framework = "TensorBoard"
-    FrameworkVersion = "1.0"
+    Name = "TensorBoard"
+    Version = "1.0"
     _KEY = "tensorboard_data"
 
     def __init__(
@@ -27,8 +27,8 @@ class TensorBoardTileDB(TileDBArtifact[tf.keras.callbacks.TensorBoard]):
         self,
     ) -> Mapping[str, str]:
         return {
-            TensorboardFileProperties.TILEDB_ML_MODEL_TENSORBOARD_FRAMEWORK.value: self.Framework,
-            TensorboardFileProperties.TILEDB_ML_MODEL_TENSORBOARD_VERSION.value: self.FrameworkVersion,
+            TensorboardFileProperties.TILEDB_ML_MODEL_TENSORBOARD_FRAMEWORK.value: self.Name,
+            TensorboardFileProperties.TILEDB_ML_MODEL_TENSORBOARD_VERSION.value: self.Version,
         }
 
     def __create_array(self, **kwargs: Any) -> None:
