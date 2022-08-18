@@ -46,7 +46,6 @@ jobs:
         rm -rf mypyenv
 
     - name: Run notebook examples
-      if: ${{ github.ref == 'refs/heads/master' }}
       run: |
         pip install pytest-xdist nbmake matplotlib torchvision idx2numpy
         pytest --disable-warnings --nbmake examples/{models,readers}
