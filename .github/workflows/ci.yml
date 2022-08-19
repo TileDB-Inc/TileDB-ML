@@ -5,14 +5,13 @@ on: [push]
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
         ml-deps:
-          - "torch==1.10.2+cpu tensorflow-cpu==2.6.3"
-          - "torch==1.11.0+cpu tensorflow-cpu==2.7.1"
-          - "torch==1.12.0+cpu tensorflow-cpu==2.8.1"
+          - "torch==1.12.0+cpu torchvision==0.13.0+cpu torchdata==0.4.0 tensorflow-cpu==2.7.1"
+          - "torch==1.12.1+cpu torchvision==0.13.1+cpu torchdata==0.4.1 tensorflow-cpu==2.8.1"
 
     env:
       run_coverage: ${{ github.ref == 'refs/heads/master' }}
@@ -35,7 +34,7 @@ jobs:
       run: |
         pip install --upgrade pip
         pip install -f https://download.pytorch.org/whl/torch_stable.html protobuf==3.* ${{ matrix.ml-deps }}
-        pip install pytest-mock pytest-cov torchdata scikit-learn==1.0.2
+        pip install pytest-mock pytest-cov scikit-learn==1.0.2
         pip install -e .[cloud]
 
     - name: Run mypy
@@ -47,7 +46,7 @@ jobs:
 
     - name: Run notebook examples
       run: |
-        pip install pytest-xdist nbmake matplotlib torchvision idx2numpy
+        pip install pytest-xdist nbmake matplotlib idx2numpy
         pytest --disable-warnings --nbmake examples/{models,readers}
         # Run tiledb-cloud in parallel
         if [[ "${{ secrets.TILEDB_API_TOKEN }}" != "" ]]; then
