@@ -36,6 +36,11 @@ class TestPyTorchTileDBDataLoader:
                     validate_tensor_generator(
                         dataloader, x_spec, y_spec, batch_size, supports_csr=True
                     )
+                    # ensure the dataloader can be iterated again
+                    n1 = sum(1 for _ in dataloader)
+                    assert n1 != 0
+                    n2 = sum(1 for _ in dataloader)
+                    assert n1 == n2
 
     @parametrize_for_dataset(
         non_key_dim_dtype=non_key_dim_dtype,

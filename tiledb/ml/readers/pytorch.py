@@ -83,7 +83,7 @@ def PyTorchTileDBDataLoader(
             datapipe, num_workers=num_workers, batch_size=None, collate_fn=_identity
         )
         # create a new datapipe for these rows
-        datapipe = IterableWrapper(iter(row_loader), deepcopy=False)
+        datapipe = DeferredIterableIterDataPipe(iter, row_loader)
         # shuffle the datapipe items
         datapipe = datapipe.shuffle(buffer_size=shuffle_buffer_size)
         # run the shuffling on this process, not on workers
@@ -95,6 +95,16 @@ def PyTorchTileDBDataLoader(
 
     # return the DataLoader for the final datapipe
     return DataLoader(datapipe, collate_fn=collate_fn, **kwargs)
+
+
+class DeferredIterableIterDataPipe(IterDataPipe):
+    """Wraps a callable that returns an iterable object to create an IterDataPipe."""
+
+    def __init__(self, func: Callable[..., Iterator[Any]], *args: Any, **kwargs: Any):
+        self._callable = partial(func, *args, **kwargs)
+
+    def __iter__(self) -> Iterator[Any]:
+        return self._callable()
 
 
 def _identity(x: Any) -> Any:
@@ -113,7 +123,7 @@ def _get_unbatched_datapipe(
     of `Tensor`s, depending on `schema.num_fields`), one for each schema.
     """
     schema_dps = [
-        IterableWrapper(_unbatch_tensors(schema, key_range), deepcopy=False)
+        DeferredIterableIterDataPipe(_unbatch_tensors, schema, key_range)
         for schema in schemas
     ]
     dp = schema_dps.pop(0)
