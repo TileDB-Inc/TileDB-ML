@@ -91,11 +91,23 @@ def parametrize_fields(*fields):
     "key_dim_index,memory_budget",
     [(0, 16_000), (0, 32_000), (0, 64_000), (1, 500_000), (1, 600_000), (1, 700_000)],
 )
+# secondary slicing on the key_dim_index should do nothing
+@pytest.mark.parametrize(
+    "secondary_slices",
+    [
+        {}, 
+        {"d1": slice(0,2)}, 
+        {"d0": slice(2, 400), "d1": slice(0,2), "d2": 2}, 
+        {"d0": [1, 2, 3], "d1": [0, 1], "d2": slice(2,2)},
+        {"d0": [1, 100, 143, 976], "d1": [-2, 2]},
+        {"d0": [1, 100, 143, 1093, 1094], "d1": [-1, 0]},
+    ]
+)
 @parametrize_fields("d0", "d1", "d2", "af8", "af4", "au1")
-def test_max_partition_weight_dense(dense_uri, fields, key_dim_index, memory_budget):
+def test_max_partition_weight_dense(dense_uri, fields, key_dim_index, memory_budget, secondary_slices):
     config = {"py.max_incomplete_retries": 0, "sm.memory_budget": memory_budget}
     with tiledb.open(dense_uri, config=config) as a:
-        schema = ArrayParams(a, key_dim_index, fields).tensor_schema
+        schema = ArrayParams(a, key_dim_index, fields, secondary_slices=secondary_slices).tensor_schema
         max_weight = schema.max_partition_weight
         for key_range in schema.key_range.partition_by_weight(max_weight):
             # query succeeds without incomplete retries
