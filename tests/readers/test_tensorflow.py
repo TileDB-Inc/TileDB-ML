@@ -9,14 +9,16 @@ from tiledb.ml.readers.tensorflow import TensorflowTileDBDataset
 from .utils import ingest_in_tiledb, parametrize_for_dataset, validate_tensor_generator
 
 
-def dataset_batching_shuffling(dataset: tf.data.Dataset, batch_size: int, shuffle_buffer_size: int) -> tf.data.Dataset:
+def dataset_batching_shuffling(
+    dataset: tf.data.Dataset, batch_size: int, shuffle_buffer_size: int
+) -> tf.data.Dataset:
     if shuffle_buffer_size > 0:
         dataset = dataset.shuffle(shuffle_buffer_size)
     return dataset.batch(batch_size)
 
 
 class TestTensorflowTileDBDataset:
-    @parametrize_for_dataset()
+    @parametrize_for_dataset(x_prefer_csr=[False], y_prefer_csr=[False])
     def test_dataset(
         self, tmpdir, x_spec, y_spec, batch_size, shuffle_buffer_size, num_workers
     ):
@@ -33,14 +35,14 @@ class TestTensorflowTileDBDataset:
                     shuffle_buffer_size=shuffle_buffer_size,
                 )
                 assert isinstance(dataset, tf.data.Dataset)
-                validate_tensor_generator(
-                    dataset, x_spec, y_spec, batch_size, supports_csr=False
-                )
+                validate_tensor_generator(dataset, x_spec, y_spec, batch_size)
 
     @parametrize_for_dataset(
         # Add one extra key on X
         x_shape=((108, 10), (108, 10, 3)),
         y_shape=((107, 5), (107, 5, 2)),
+        x_prefer_csr=[False],
+        y_prefer_csr=[False],
     )
     def test_unequal_num_keys(
         self, tmpdir, x_spec, y_spec, batch_size, shuffle_buffer_size, num_workers
@@ -55,7 +57,13 @@ class TestTensorflowTileDBDataset:
                     )
                 assert "All arrays must have the same key range" in str(ex.value)
 
-    @parametrize_for_dataset(num_fields=[0], shuffle_buffer_size=[0], num_workers=[0])
+    @parametrize_for_dataset(
+        num_fields=[0],
+        shuffle_buffer_size=[0],
+        num_workers=[0],
+        x_prefer_csr=[False],
+        y_prefer_csr=[False],
+    )
     def test_dataset_order(
         self, tmpdir, x_spec, y_spec, batch_size, shuffle_buffer_size, num_workers
     ):
