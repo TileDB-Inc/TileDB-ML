@@ -10,7 +10,7 @@ import sparse
 from torch.utils.data import DataLoader, IterDataPipe
 from torchdata.datapipes.iter import IterableWrapper
 
-from ._pytorch_collators import Collator
+from ._pytorch_collators import get_collate_fn
 from ._ranges import InclusiveRange
 from ._tensor_schema import MappedTensorSchema, TensorKind, TensorSchema
 from .types import ArrayParams
@@ -89,8 +89,11 @@ def PyTorchTileDBDataLoader(
         # run the shuffling on this process, not on workers
         kwargs["num_workers"] = 0
 
+    # construct an appropriate collator based on the schemas
+    is_batched = kwargs.get("batch_size", 1) is not None
+    kwargs["collate_fn"] = get_collate_fn(schemas, is_batched)
+
     # return the DataLoader for the final datapipe
-    kwargs["collate_fn"] = Collator.from_schemas(schemas).collate
     return DataLoader(datapipe, **kwargs)
 
 
