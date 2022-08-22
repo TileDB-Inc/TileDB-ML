@@ -110,7 +110,6 @@ def test_max_partition_weight_dense(dense_uri, fields, key_dim_index, memory_bud
         max_weight = schema.max_partition_weight
         for key_range in schema.key_range.partition_by_weight(max_weight):
             # query succeeds without incomplete retries
-            print(key_range.min, key_range.max)
             schema.query[key_range.min : key_range.max]
                     
             if key_range.max < schema.key_range.max:
