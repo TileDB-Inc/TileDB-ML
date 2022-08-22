@@ -111,7 +111,7 @@ def test_max_partition_weight_dense(dense_uri, fields, key_dim_index, memory_bud
         for key_range in schema.key_range.partition_by_weight(max_weight):
             # query succeeds without incomplete retries
             schema.query[key_range.min : key_range.max]
-                    
+
             if key_range.max < schema.key_range.max:
                 # querying a larger slice should fail
                 with pytest.raises(tiledb.TileDBError) as ex:

@@ -438,13 +438,11 @@ class KeyDimQuery:
             if secondary_index == self._key_dim_index:
                 secondary_index = 0
             self._slices[secondary_index] = secondary_slice
-        print("sec slics2", secondary_slices)
 
 
     def __getitem__(self, key_dim_slice: slice) -> Dict[str, np.ndarray]:
         """Query the TileDB array by `dim_key=key_dim_slice`."""
         slices = (*self._slices[:self._key_dim_index], key_dim_slice, *self._slices[self._key_dim_index + 1:])
-        print("slices", slices)
         return cast(
             Dict[str, np.ndarray],
             self._multi_index[slices],
