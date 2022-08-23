@@ -85,10 +85,8 @@ class ArrayParams:
             for dim in self._tensor_schema_kwargs["_all_dims"][1:]
         ):
             tensor_kind = TensorKind.RAGGED
-        elif self.array.ndim != 2 or not transforms.get(TensorKind.SPARSE_CSR, True):
-            tensor_kind = TensorKind.SPARSE_COO
         else:
-            tensor_kind = TensorKind.SPARSE_CSR
+            tensor_kind = TensorKind.SPARSE_COO
 
         transform = transforms.get(tensor_kind, True)
         if not transform:
