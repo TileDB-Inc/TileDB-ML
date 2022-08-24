@@ -25,8 +25,6 @@ When pushing to the repository, name your branches with a prefix that is likely 
 followed by `[feature/enhancement/fix/bug]`. For example, `kt/feature/title-of-the-branch`.
 
 ## Pull Request Best Practices
-Pull requests should be as small as possible to accomplish a single, well-defined objective. We prefer multiple small pull requests over one large pull request.
-
-We also expect pull requests to meet the test coverage standards. Mainly we prefer proper tested code that will keep the test coverage statistics to the same or higher levels. 
-
-Pull request should embody as few as possible external library requirements. It is a good principle to keep the project as self contained as we could.
+- Pull requests should be as small as possible to accomplish a single, well-defined objective. We prefer multiple small pull requests over one large pull request.
+- We also expect pull requests to meet the test coverage standards. Mainly we prefer proper tested code that will keep the test coverage statistics to the same or higher levels. 
+- Pull request should embody as few as possible external library requirements. It is a good principle to keep the project as self contained as we could.
