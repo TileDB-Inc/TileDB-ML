@@ -47,9 +47,9 @@ class Collator(ABC, Generic[T]):
         """
         collator: Collator[Any]
         if schema.kind is TensorKind.DENSE:
-            collator = NDArrayCollator()
+            collator = NumpyArrayCollator()
         elif schema.kind is TensorKind.RAGGED:
-            collator = RaggedNDArrayCollator()
+            collator = NumpyArrayCollator(to_nested=True)
         else:
             assert schema.kind in (TensorKind.SPARSE_COO, TensorKind.SPARSE_CSR)
             # The sparse arrays to be converted/collated are scipy.sparse.csr_matrix if
@@ -91,21 +91,25 @@ class RowCollator(Collator[Sequence[Any]]):
         )
 
 
-class NDArrayCollator(Collator[np.ndarray]):
-    """Collator of Numpy arrays of fixed shape"""
+class NumpyArrayCollator(Collator[np.ndarray]):
+    """Collator of Numpy arrays"""
+
+    def __init__(self, to_nested: bool = False):
+        """
+        :param to_nested: If true, collate 1D Numpy arrays with possibly different
+            length to nested `torch.Tensor`s. Otherwise, all the arrays to be collated
+            must have the same shape.
+        """
+        self.to_nested = to_nested
 
     def convert(self, value: np.ndarray) -> torch.Tensor:
         return torch.from_numpy(value)
 
     def collate(self, batch: Sequence[np.ndarray]) -> torch.Tensor:
-        return self.convert(np.stack(batch))
-
-
-class RaggedNDArrayCollator(NDArrayCollator):
-    """Collator of 1D Numpy arrays with possibly different size"""
-
-    def collate(self, batch: Sequence[np.ndarray]) -> torch.Tensor:
-        return torch.nested_tensor(tuple(map(torch.from_numpy, batch)))
+        if self.to_nested:
+            return torch.nested_tensor(tuple(map(torch.from_numpy, batch)))
+        else:
+            return torch.from_numpy(np.stack(batch))
 
 
 class SparseCOOCollator(Collator[sparse.COO]):
@@ -113,7 +117,7 @@ class SparseCOOCollator(Collator[sparse.COO]):
 
     def __init__(self, to_csr: bool = False):
         """
-        :param to_csr: Convert/collate to `torch.Tensors` with `sparse_csr` layout if True
+        :param to_csr: Convert/collate to `torch.Tensor`s with `sparse_csr` layout if True
             or `sparse_coo` layout if False
         """
         self.to_csr = to_csr
@@ -134,7 +138,7 @@ class ScipySparseCSRCollator(Collator[scipy.sparse.csr_matrix]):
 
     def __init__(self, to_csr: bool = True):
         """
-        :param to_csr: Convert/collate to `torch.Tensors` with `sparse_csr` layout if True
+        :param to_csr: Convert/collate to `torch.Tensor`s with `sparse_csr` layout if True
             or `sparse_coo` layout if False
         """
         self.to_csr = to_csr
