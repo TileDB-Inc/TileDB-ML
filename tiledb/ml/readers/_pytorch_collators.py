@@ -50,17 +50,14 @@ class Collator(ABC, Generic[T]):
             collator = NDArrayCollator()
         elif schema.kind is TensorKind.RAGGED:
             collator = RaggedNDArrayCollator()
-        elif schema.kind is TensorKind.SPARSE_COO:
-            if len(schema.shape) != 2:
-                collator = SparseCOOCollator()
-            else:
-                collator = ScipySparseCSRToCOOCollator()
-        elif schema.kind is TensorKind.SPARSE_CSR:
-            if len(schema.shape) != 2:
-                raise ValueError("SPARSE_CSR is supported only for 2D tensors")
-            collator = ScipySparseCSRCollator()
         else:
-            assert False, schema.kind
+            assert schema.kind in (TensorKind.SPARSE_COO, TensorKind.SPARSE_CSR)
+            # The sparse arrays to be converted/collated are scipy.sparse.csr_matrix if
+            # (and only if) the schema ndim == 2; see SparseData.to_sparse_array()
+            from_csr = len(schema.shape) == 2
+            to_csr = schema.kind is TensorKind.SPARSE_CSR
+            cls = ScipySparseCSRCollator if from_csr else SparseCOOCollator
+            collator = cls(to_csr)
 
         num_fields = schema.num_fields
         return RowCollator(*(collator,) * num_fields) if num_fields > 1 else collator
@@ -112,35 +109,53 @@ class RaggedNDArrayCollator(NDArrayCollator):
 
 
 class SparseCOOCollator(Collator[sparse.COO]):
-    """Collator of sparse.COO arrays to a `torch.Tensor` with `sparse_coo` layout."""
+    """Collator of sparse.COO instances"""
+
+    def __init__(self, to_csr: bool = False):
+        """
+        :param to_csr: Convert/collate to `torch.Tensors` with `sparse_csr` layout if True
+            or `sparse_coo` layout if False
+        """
+        self.to_csr = to_csr
 
     def convert(self, value: sparse.COO) -> torch.Tensor:
-        return torch.sparse_coo_tensor(value.coords, value.data, value.shape)
+        if self.to_csr:
+            csr = value.tocsr()
+            return torch.sparse_csr_tensor(csr.indptr, csr.indices, csr.data, csr.shape)
+        else:
+            return torch.sparse_coo_tensor(value.coords, value.data, value.shape)
 
     def collate(self, batch: Sequence[sparse.COO]) -> torch.Tensor:
         return self.convert(sparse.stack(batch))
 
 
 class ScipySparseCSRCollator(Collator[scipy.sparse.csr_matrix]):
-    """
-    Collator of `scipy.sparse.csr_matrix`s to a `torch.Tensor` with `sparse_csr` layout.
-    """
+    """Collator of `scipy.sparse.csr_matrix` instances"""
 
-    def convert(self, value: scipy.sparse.csr_matrix) -> torch.Tensor:
-        return torch.sparse_csr_tensor(
-            value.indptr, value.indices, value.data, value.shape
-        )
+    def __init__(self, to_csr: bool = True):
+        """
+        :param to_csr: Convert/collate to `torch.Tensors` with `sparse_csr` layout if True
+            or `sparse_coo` layout if False
+        """
+        self.to_csr = to_csr
 
-    def collate(self, batch: Sequence[scipy.sparse.csr_matrix]) -> torch.Tensor:
-        return self.convert(scipy.sparse.vstack(batch))
+    def convert(
+        self, value: scipy.sparse.csr_matrix, _collating: bool = False
+    ) -> torch.Tensor:
+        if self.to_csr:
+            return torch.sparse_csr_tensor(
+                value.indptr, value.indices, value.data, value.shape
+            )
 
+        # if not collating, convert (1, N) sparse arrays to 1D sparse COO tensors
+        if not _collating and value.shape[0] == 1:
+            return torch.sparse_coo_tensor(
+                value.indices.reshape(1, -1), value.data, value.shape[1:]
+            )
 
-class ScipySparseCSRToCOOCollator(ScipySparseCSRCollator):
-    """
-    Collator of `scipy.sparse.csr_matrix`s to a `torch.Tensor` with `sparse_coo` layout.
-    """
-
-    def convert(self, value: scipy.sparse.csr_matrix) -> torch.Tensor:
         coo = value.tocoo()
         coords = np.stack((coo.row, coo.col))
         return torch.sparse_coo_tensor(coords, coo.data, coo.shape)
+
+    def collate(self, batch: Sequence[scipy.sparse.csr_matrix]) -> torch.Tensor:
+        return self.convert(scipy.sparse.vstack(batch), _collating=True)
