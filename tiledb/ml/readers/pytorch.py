@@ -46,10 +46,18 @@ def PyTorchTileDBDataLoader(
     Users should NOT pass (TileDB-ML either doesn't support or implements internally the corresponding functionality)
     the following arguments: 'shuffle', 'sampler', 'batch_sampler', 'worker_init_fn' and 'collate_fn'.
     """
+    is_batched = kwargs.get("batch_size", 1) is not None
+
     schemas = []
     for array_params in all_array_params:
         schema = array_params.tensor_schema
         if schema.kind in (TensorKind.SPARSE_COO, TensorKind.SPARSE_CSR):
+            # unbatched 3D arrays generate 2D tensors so they can be converted to CSR
+            # anything else with ndim>=3 cannot
+            if schema.kind is TensorKind.SPARSE_CSR:
+                ndim = len(schema.shape)
+                if ndim > 3 or ndim == 3 and is_batched:
+                    raise ValueError(f"Cannot generate CSR tensors for {ndim}D array")
             schema = MappedTensorSchema(schema, methodcaller("to_sparse_array"))
         schemas.append(schema)
 
@@ -90,7 +98,6 @@ def PyTorchTileDBDataLoader(
         kwargs["num_workers"] = 0
 
     # construct an appropriate collator based on the schemas
-    is_batched = kwargs.get("batch_size", 1) is not None
     kwargs["collate_fn"] = get_collate_fn(schemas, is_batched)
 
     # return the DataLoader for the final datapipe
