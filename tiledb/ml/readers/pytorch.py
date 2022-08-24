@@ -2,7 +2,7 @@
 
 from functools import partial
 from operator import methodcaller
-from typing import Any, Callable, Iterator, Mapping, Sequence, Tuple, Union
+from typing import Any, Callable, Iterator, Sequence, Tuple, Union
 
 import numpy as np
 import scipy.sparse
@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader, IterDataPipe
 from torchdata.datapipes.iter import IterableWrapper
 
 from ._ranges import InclusiveRange
-from ._tensor_schema import TensorKind, TensorSchema
+from ._tensor_schema import MappedTensorSchema, TensorKind, TensorSchema
 from .types import ArrayParams
 
 Tensor = Union[np.ndarray, sparse.COO, scipy.sparse.csr_matrix]
@@ -50,9 +50,13 @@ def PyTorchTileDBDataLoader(
     Users should NOT pass (TileDB-ML either doesn't support or implements internally the corresponding functionality)
     the following arguments: 'shuffle', 'sampler', 'batch_sampler', 'worker_init_fn' and 'collate_fn'.
     """
-    schemas = tuple(
-        array_params.to_tensor_schema(_transforms) for array_params in all_array_params
-    )
+    schemas = []
+    for array_params in all_array_params:
+        schema = array_params.tensor_schema
+        if schema.kind in (TensorKind.SPARSE_COO, TensorKind.SPARSE_CSR):
+            schema = MappedTensorSchema(schema, methodcaller("to_sparse_array"))
+        schemas.append(schema)
+
     key_range = schemas[0].key_range
     if not all(key_range.equal_values(schema.key_range) for schema in schemas[1:]):
         raise ValueError(f"All arrays must have the same key range: {key_range}")
@@ -231,11 +235,3 @@ def _get_tensor_collator(
         return collator
     else:
         return _CompositeCollator(*(collator,) * num_fields)
-
-
-_transforms: Mapping[TensorKind, Union[Callable[[Any], Any], bool]] = {
-    TensorKind.DENSE: True,
-    TensorKind.SPARSE_COO: methodcaller("to_sparse_array"),
-    TensorKind.SPARSE_CSR: methodcaller("to_sparse_array"),
-    TensorKind.RAGGED: hasattr(torch, "nested_tensor"),
-}

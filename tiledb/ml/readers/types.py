@@ -1,16 +1,11 @@
 from dataclasses import dataclass, field
-from typing import Any, Callable, Mapping, Optional, Sequence, Union
+from typing import Any, Mapping, Optional, Sequence, Union
 
 import numpy as np
 
 import tiledb
 
-from ._tensor_schema import (
-    MappedTensorSchema,
-    TensorKind,
-    TensorSchema,
-    TensorSchemaFactories,
-)
+from ._tensor_schema import TensorKind, TensorSchema, TensorSchemaFactories
 
 
 @dataclass(frozen=True)
@@ -60,22 +55,9 @@ class ArrayParams:
         )
         object.__setattr__(self, "_tensor_schema_kwargs", tensor_schema_kwargs)
 
-    def to_tensor_schema(
-        self,
-        transforms: Mapping[TensorKind, Union[Callable[[Any], Any], bool]] = {},
-    ) -> TensorSchema[Any]:
-        """
-        Create a TensorSchema from an ArrayParams instance.
-
-        :param transforms: A mapping of `TensorKind`s to transformation callables.
-            If `array_params.tensor_kind` (or the inferred tensor_kind for `array_params`)
-            has a callable value in `transforms`, the returned `TensorSchema` will map
-            each tensor yielded by its `iter_tensors` method with this callable.
-
-            A value in transforms may also be a boolean value:
-            - If False, a `NotImplementedError` is raised.
-            - If True, no transformation will be applied (same as if the key is missing).
-        """
+    @property
+    def tensor_schema(self) -> TensorSchema[Any]:
+        """Create a `TensorSchema` from this `ArrayParams` instance."""
         if self.tensor_kind is not None:
             tensor_kind = self.tensor_kind
         elif not self.array.schema.sparse:
@@ -88,13 +70,5 @@ class ArrayParams:
         else:
             tensor_kind = TensorKind.SPARSE_COO
 
-        transform = transforms.get(tensor_kind, True)
-        if not transform:
-            raise NotImplementedError(
-                f"Mapping to {tensor_kind} tensors is not implemented"
-            )
         factory = TensorSchemaFactories[tensor_kind]
-        tensor_schema = factory(kind=tensor_kind, **self._tensor_schema_kwargs)
-        if transform is not True:
-            tensor_schema = MappedTensorSchema(tensor_schema, transform)
-        return tensor_schema
+        return factory(kind=tensor_kind, **self._tensor_schema_kwargs)

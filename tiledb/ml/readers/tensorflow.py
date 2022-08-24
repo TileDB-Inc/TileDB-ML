@@ -1,11 +1,17 @@
 """Functionality for loading data from TileDB arrays to the Tensorflow Data API."""
 
-from typing import Any, Callable, Mapping, Sequence, Union
+from typing import Sequence, Union
 
 import numpy as np
 import tensorflow as tf
 
-from ._tensor_schema import RaggedArray, SparseData, TensorKind, TensorSchema
+from ._tensor_schema import (
+    MappedTensorSchema,
+    RaggedArray,
+    SparseData,
+    TensorKind,
+    TensorSchema,
+)
 from .types import ArrayParams
 
 Tensor = Union[np.ndarray, tf.SparseTensor]
@@ -21,9 +27,17 @@ def TensorflowTileDBDataset(
         used to fetch inputs asynchronously and in parallel. Note: when `num_workers` > 1
         yielded batches may be shuffled even if `shuffle_buffer_size` is zero.
     """
-    schemas = tuple(
-        array_params.to_tensor_schema(_transforms) for array_params in all_array_params
-    )
+    schemas = []
+    for array_params in all_array_params:
+        schema = array_params.tensor_schema
+        if schema.kind is TensorKind.SPARSE_CSR:
+            raise NotImplementedError(f"{schema.kind} tensors not supported")
+        elif schema.kind is TensorKind.SPARSE_COO:
+            schema = MappedTensorSchema(schema, _to_sparse_tensor)
+        elif schema.kind is TensorKind.RAGGED:
+            schema = MappedTensorSchema(schema, _to_ragged_tensor)
+        schemas.append(schema)
+
     key_range = schemas[0].key_range
     if not all(key_range.equal_values(schema.key_range) for schema in schemas[1:]):
         raise ValueError(f"All arrays must have the same key range: {key_range}")
@@ -83,11 +97,3 @@ def _to_sparse_tensor(sd: SparseData) -> tf.SparseTensor:
 
 def _to_ragged_tensor(ra: RaggedArray) -> tf.RaggedTensor:
     return tf.ragged.constant(ra, dtype=ra[0].dtype)
-
-
-_transforms: Mapping[TensorKind, Union[Callable[[Any], Any], bool]] = {
-    TensorKind.DENSE: True,
-    TensorKind.SPARSE_COO: _to_sparse_tensor,
-    TensorKind.SPARSE_CSR: False,
-    TensorKind.RAGGED: _to_ragged_tensor,
-}
