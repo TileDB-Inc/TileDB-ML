@@ -7,8 +7,6 @@ from typing import Any, Sequence
 
 import numpy as np
 import pytest
-import scipy.sparse
-import sparse
 import tensorflow as tf
 import torch
 
@@ -51,7 +49,7 @@ def parametrize_for_dataset(
     key_dim_dtype=(np.dtype(np.int32), np.dtype("datetime64[D]"), np.dtype(np.bytes_)),
     non_key_dim_dtype=(np.dtype(np.int32), np.dtype(np.float32)),
     num_fields=(0, 1, 2),
-    batch_size=(8,),
+    batch_size=(8, None),
     shuffle_buffer_size=(16,),
     num_workers=(0, 2),
 ):
@@ -240,44 +238,73 @@ def validate_tensor_generator(generator, x_spec, y_spec, batch_size):
 
 def _validate_tensor(tensor, spec, batch_size):
     tensor_kind = _get_tensor_kind(tensor)
-    assert tensor_kind is spec.tensor_kind
-
-    spec_row_shape = spec.shape[1:]
-    if tensor_kind is not TensorKind.RAGGED:
-        num_rows, *row_shape = tensor.shape
-        assert tuple(row_shape) == spec_row_shape
+    if spec.tensor_kind is not TensorKind.RAGGED:
+        assert tensor_kind is spec.tensor_kind
+        if batch_size is not None:
+            # batched tensor: the length of the first dimension is the size of the batch,
+            # which may be smaller than the requested batch_size
+            num_rows, *row_shape = tensor.shape
+            assert num_rows <= batch_size, (num_rows, batch_size)
+        elif spec.tensor_kind is TensorKind.SPARSE_CSR and len(spec.shape) == 2:
+            # unbatched CSR 1D tensor has (1, N) shape
+            num_rows, *row_shape = tensor.shape
+            assert num_rows == 1, num_rows
+        else:
+            # unbatched non-CSR tensor: num_rows is implicitly 1
+            row_shape = tensor.shape
+        assert tuple(row_shape) == spec.shape[1:]
     else:
-        # every ragged array row has at most `np.prod(spec_row_shape)` elements,
-        # the product of all non-key dimension sizes
-        row_lengths = tuple(map(len, tensor))
-        assert all(row_length <= np.prod(spec_row_shape) for row_length in row_lengths)
-        num_rows = len(row_lengths)
+        # every ragged tensor row has at most `max_row_len` elements, the product of all
+        # non-key dimension sizes
+        max_row_len = np.prod(spec.shape[1:])
+        if batch_size is not None:
+            assert tensor_kind is spec.tensor_kind
+            row_lens = tuple(map(len, tensor))
+            assert all(row_len <= max_row_len for row_len in row_lens)
+            num_rows = len(row_lens)
+            assert num_rows <= batch_size, (num_rows, batch_size)
+        else:
+            # in case of no batching, a 1D dense tensor is returned instead of a ragged
+            # tensor with a single nested tensor
+            assert tensor_kind is TensorKind.DENSE
+            assert len(tensor) <= max_row_len
 
-    # num_rows may be less than batch_size
-    assert num_rows <= batch_size, (num_rows, batch_size)
+
+def assert_tensors_almost_equal_array(batches, array, spec, batch_size, to_dense):
+    if spec.tensor_kind is TensorKind.RAGGED:
+        tensor_kind = _get_tensor_kind(batches[0])
+        if tensor_kind is TensorKind.RAGGED:
+            tensors = [tensor for batch in batches for tensor in batch]
+        else:
+            assert tensor_kind is TensorKind.DENSE
+            tensors = batches
+        # compare each tensor with the non-zero values of the respective array row
+        assert len(tensors) == len(array)
+        for tensor_row, row in zip(tensors, array):
+            np.testing.assert_array_almost_equal(tensor_row, row[np.nonzero(row)])
+    else:
+        if spec.tensor_kind in (TensorKind.SPARSE_COO, TensorKind.SPARSE_CSR):
+            batches = list(map(to_dense, batches))
+        if batch_size is not None or spec.tensor_kind is TensorKind.SPARSE_CSR:
+            np.testing.assert_array_almost_equal(np.concatenate(batches), array)
+        else:
+            np.testing.assert_array_almost_equal(np.stack(batches), array)
 
 
 def _get_tensor_kind(tensor) -> TensorKind:
     if isinstance(tensor, tf.Tensor):
         return TensorKind.DENSE
+    if isinstance(tensor, tf.SparseTensor):
+        return TensorKind.SPARSE_COO
+    if isinstance(tensor, tf.RaggedTensor):
+        return TensorKind.RAGGED
     if isinstance(tensor, torch.Tensor):
         if getattr(tensor, "is_nested", False):
             return TensorKind.RAGGED
-        return _torch_tensor_layout_to_kind[tensor.layout]
-    return _tensor_type_to_kind[type(tensor)]
-
-
-_tensor_type_to_kind = {
-    np.ndarray: TensorKind.DENSE,
-    sparse.COO: TensorKind.SPARSE_COO,
-    scipy.sparse.coo_matrix: TensorKind.SPARSE_COO,
-    scipy.sparse.csr_matrix: TensorKind.SPARSE_CSR,
-    tf.SparseTensor: TensorKind.SPARSE_COO,
-    tf.RaggedTensor: TensorKind.RAGGED,
-}
-
-_torch_tensor_layout_to_kind = {
-    torch.strided: TensorKind.DENSE,
-    torch.sparse_coo: TensorKind.SPARSE_COO,
-    torch.sparse_csr: TensorKind.SPARSE_CSR,
-}
+        if tensor.layout is torch.strided:
+            return TensorKind.DENSE
+        if tensor.layout is torch.sparse_coo:
+            return TensorKind.SPARSE_COO
+        if tensor.layout is torch.sparse_csr:
+            return TensorKind.SPARSE_CSR
+    assert False, f"{tensor} is not a tensor"

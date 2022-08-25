@@ -1,20 +1,24 @@
 """Tests for TileDB integration with Tensorflow Data API."""
 
-import numpy as np
 import pytest
 import tensorflow as tf
 
 from tiledb.ml.readers.tensorflow import TensorflowTileDBDataset
 
-from .utils import ingest_in_tiledb, parametrize_for_dataset, validate_tensor_generator
+from .utils import (
+    assert_tensors_almost_equal_array,
+    ingest_in_tiledb,
+    parametrize_for_dataset,
+    validate_tensor_generator,
+)
 
 
-def dataset_batching_shuffling(
-    dataset: tf.data.Dataset, batch_size: int, shuffle_buffer_size: int
-) -> tf.data.Dataset:
+def dataset_batching_shuffling(dataset, batch_size, shuffle_buffer_size):
     if shuffle_buffer_size > 0:
         dataset = dataset.shuffle(shuffle_buffer_size)
-    return dataset.batch(batch_size)
+    if batch_size is not None:
+        dataset = dataset.batch(batch_size)
+    return dataset
 
 
 class TestTensorflowTileDBDataset:
@@ -86,22 +90,13 @@ class TestTensorflowTileDBDataset:
                 )
                 # since num_fields is 0, fields are all the array attributes of each array
                 # the first item of each batch corresponds to the first attribute (="data")
-                x_batch_tensors, y_batch_tensors = [], []
+                x_batches, y_batches = [], []
                 for x_tensors, y_tensors in dataset:
-                    x_batch_tensors.append(x_tensors[0])
-                    y_batch_tensors.append(y_tensors[0])
-                assert_tensors_almost_equal_array(x_batch_tensors, x_data)
-                assert_tensors_almost_equal_array(y_batch_tensors, y_data)
-
-
-def assert_tensors_almost_equal_array(batch_tensors, array):
-    if isinstance(batch_tensors[0], tf.RaggedTensor):
-        # compare each ragged tensor row with the non-zero values of the respective array row
-        tensors = [tensor for batch_tensor in batch_tensors for tensor in batch_tensor]
-        assert len(tensors) == len(array)
-        for tensor_row, row in zip(tensors, array):
-            np.testing.assert_array_almost_equal(tensor_row, row[np.nonzero(row)])
-    else:
-        if isinstance(batch_tensors[0], tf.SparseTensor):
-            batch_tensors = list(map(tf.sparse.to_dense, batch_tensors))
-        np.testing.assert_array_almost_equal(np.concatenate(batch_tensors), array)
+                    x_batches.append(x_tensors[0])
+                    y_batches.append(y_tensors[0])
+                assert_tensors_almost_equal_array(
+                    x_batches, x_data, x_spec, batch_size, tf.sparse.to_dense
+                )
+                assert_tensors_almost_equal_array(
+                    y_batches, y_data, y_spec, batch_size, tf.sparse.to_dense
+                )
