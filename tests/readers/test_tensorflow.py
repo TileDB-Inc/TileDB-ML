@@ -22,12 +22,14 @@ def dataset_batching_shuffling(dataset, batch_size, shuffle_buffer_size):
 
 
 class TestTensorflowTileDBDataset:
-    @parametrize_for_dataset(x_prefer_csr=[False], y_prefer_csr=[False])
+    @parametrize_for_dataset()
     def test_dataset(
         self, tmpdir, x_spec, y_spec, batch_size, shuffle_buffer_size, num_workers
     ):
         with ingest_in_tiledb(tmpdir, x_spec) as (x_params, x_data):
+            x_schema = x_params.tensor_schema
             with ingest_in_tiledb(tmpdir, y_spec) as (y_params, y_data):
+                y_schema = y_params.tensor_schema
                 dataset = TensorflowTileDBDataset(
                     x_params,
                     y_params,
@@ -39,14 +41,14 @@ class TestTensorflowTileDBDataset:
                     shuffle_buffer_size=shuffle_buffer_size,
                 )
                 assert isinstance(dataset, tf.data.Dataset)
-                validate_tensor_generator(dataset, x_spec, y_spec, batch_size)
+                validate_tensor_generator(
+                    dataset, x_schema, y_schema, x_spec, y_spec, batch_size
+                )
 
     @parametrize_for_dataset(
         # Add one extra key on X
         x_shape=((108, 10), (108, 10, 3)),
         y_shape=((107, 5), (107, 5, 2)),
-        x_prefer_csr=[False],
-        y_prefer_csr=[False],
     )
     def test_unequal_num_keys(
         self, tmpdir, x_spec, y_spec, batch_size, shuffle_buffer_size, num_workers
@@ -54,19 +56,13 @@ class TestTensorflowTileDBDataset:
         with ingest_in_tiledb(tmpdir, x_spec) as (x_params, x_data):
             with ingest_in_tiledb(tmpdir, y_spec) as (y_params, y_data):
                 with pytest.raises(ValueError) as ex:
-                    TensorflowTileDBDataset(
-                        x_params,
-                        y_params,
-                        num_workers=num_workers,
-                    )
+                    TensorflowTileDBDataset(x_params, y_params, num_workers=num_workers)
                 assert "All arrays must have the same key range" in str(ex.value)
 
     @parametrize_for_dataset(
         num_fields=[0],
         shuffle_buffer_size=[0],
         num_workers=[0],
-        x_prefer_csr=[False],
-        y_prefer_csr=[False],
     )
     def test_dataset_order(
         self, tmpdir, x_spec, y_spec, batch_size, shuffle_buffer_size, num_workers
@@ -76,8 +72,11 @@ class TestTensorflowTileDBDataset:
         The order is guaranteed only for sequential processing (num_workers=0) and
         no shuffling (shuffle_buffer_size=0).
         """
+        to_dense = tf.sparse.to_dense
         with ingest_in_tiledb(tmpdir, x_spec) as (x_params, x_data):
+            x_tensor_kind = x_params.tensor_schema.kind
             with ingest_in_tiledb(tmpdir, y_spec) as (y_params, y_data):
+                y_tensor_kind = y_params.tensor_schema.kind
                 dataset = TensorflowTileDBDataset(
                     x_params,
                     y_params,
@@ -95,8 +94,8 @@ class TestTensorflowTileDBDataset:
                     x_batches.append(x_tensors[0])
                     y_batches.append(y_tensors[0])
                 assert_tensors_almost_equal_array(
-                    x_batches, x_data, x_spec, batch_size, tf.sparse.to_dense
+                    x_batches, x_data, x_tensor_kind, batch_size, to_dense
                 )
                 assert_tensors_almost_equal_array(
-                    y_batches, y_data, y_spec, batch_size, tf.sparse.to_dense
+                    y_batches, y_data, y_tensor_kind, batch_size, to_dense
                 )
