@@ -177,14 +177,14 @@ class TestRowCollator:
         )
 
 
-class Test_Collator_from_schema:
+class Test_Collator_from_schemas:
     @pytest.mark.parametrize(
         "tensor_kind,to_nested",
         [(pc.TensorKind.DENSE, False), (pc.TensorKind.RAGGED, True)],
     )
     def test_numpy(self, mocker, tensor_kind, to_nested):
         schema = mocker.Mock(kind=tensor_kind, num_fields=1)
-        collator = pc.Collator.from_schema(schema)
+        collator = pc.Collator.from_schemas(schema)
         assert isinstance(collator, pc.NumpyArrayCollator)
         assert collator.to_nested is to_nested
         self._test_multiple_fields(schema, collator)
@@ -200,22 +200,19 @@ class Test_Collator_from_schema:
     )
     def test_sparse(self, mocker, tensor_kind, shape, collator_cls, to_csr):
         schema = mocker.Mock(kind=tensor_kind, shape=shape, num_fields=1)
-        collator = pc.Collator.from_schema(schema)
+        collator = pc.Collator.from_schemas(schema)
         assert isinstance(collator, collator_cls)
         assert collator.to_csr is to_csr
         self._test_multiple_fields(schema, collator)
 
-    @pytest.mark.parametrize("is_batched", [True, False])
-    def test_get_collate_fn(self, mocker, is_batched):
+    def test_multiple(self, mocker):
         schemas = (
             mocker.Mock(kind=pc.TensorKind.DENSE, num_fields=1),
             mocker.Mock(kind=pc.TensorKind.SPARSE_CSR, shape=(3, 4, 2), num_fields=2),
             mocker.Mock(kind=pc.TensorKind.SPARSE_COO, shape=(3, 4), num_fields=3),
         )
-        collate_fn = pc.get_collate_fn(schemas, is_batched)
-        assert collate_fn.__name__ == "collate" if is_batched else "convert"
 
-        multi_collator = collate_fn.__self__
+        multi_collator = pc.Collator.from_schemas(*schemas)
         assert isinstance(multi_collator, pc.RowCollator)
         assert len(multi_collator.column_collators) == 3
 
@@ -240,6 +237,6 @@ class Test_Collator_from_schema:
     @staticmethod
     def _test_multiple_fields(schema, collator):
         schema.num_fields = 2
-        row_collator = pc.Collator.from_schema(schema)
+        row_collator = pc.Collator.from_schemas(schema)
         assert isinstance(row_collator, pc.RowCollator)
         assert row_collator.column_collators == (collator, collator)
