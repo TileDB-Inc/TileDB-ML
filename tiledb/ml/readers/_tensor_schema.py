@@ -81,18 +81,18 @@ class TensorSchema(ABC, Generic[Tensor]):
         :raises ValueError: If the array does not have integer domain.
         """
         shape = [len(self.key_range)]
-        for i, (start, stop) in enumerate(self._ned[1:], 1):
+        for i, (dim_start, dim_stop) in enumerate(self._ned[1:], 1):
             selector = self._dim_selectors.get(i)
             if selector is None:
-                if isinstance(start, int) and isinstance(stop, int):
-                    dim_length = stop - start + 1
-                else:
+                selector = slice(None)
+            if isinstance(selector, slice):
+                start = selector.start if selector.start is not None else dim_start
+                stop = selector.stop if selector.stop is not None else dim_stop
+                if not (isinstance(start, int) and isinstance(stop, int)):
                     raise ValueError("Shape not defined for non-integer domain")
-            elif isinstance(selector, slice):
-                dim_length = selector.stop - selector.start + 1
+                shape.append(stop - start + 1)
             else:
-                dim_length = len(selector)
-            shape.append(dim_length)
+                shape.append(len(selector))
         return tuple(shape)
 
     @property
@@ -240,24 +240,25 @@ class DenseTensorSchema(TensorSchema[np.ndarray]):
         # depends on the size, tile extent and selector of each dimension after the first one.
         shape = self.shape
         tiles_per_slice = 1
-        for i, tile in enumerate(dim_tiles[1:], 1):
+        for i, dim_tile in enumerate(dim_tiles[1:], 1):
             selector = self._dim_selectors.get(i)
             if selector is None:
-                tiles_per_slice *= ceil(shape[i] / tile)
+                tiles_per_slice *= ceil(shape[i] / dim_tile)
             else:
+                dim_start, dim_stop = self._ned[i]
 
-                def get_tile_idx(value: int, start: int = self._ned[i][0]) -> int:
+                def get_tile_idx(value: int) -> int:
                     """Get the index of the tile with the given value in the i-th dimension"""
-                    return int((value - start) / tile)
+                    return int((value - dim_start) / dim_tile)
 
-                if isinstance(selector, Sequence):
+                if isinstance(selector, slice):
+                    # count the number of tiles between start and stop (inclusive)
+                    start = selector.start if selector.start is not None else dim_start
+                    stop = selector.stop if selector.stop is not None else dim_stop
+                    tiles_per_slice *= get_tile_idx(stop) - get_tile_idx(start) + 1
+                else:
                     # count the number of unique tiles for the i-th dimension
                     tiles_per_slice *= len(set(map(get_tile_idx, selector)))
-                else:
-                    # count the number of tiles between start and stop (inclusive)
-                    start_tile_idx = get_tile_idx(selector.start)
-                    stop_tile_idx = get_tile_idx(selector.stop)
-                    tiles_per_slice *= stop_tile_idx - start_tile_idx + 1
 
         # Compute the size in bytes of each slice of `rows_per_slice` rows
         bytes_per_slice = bytes_per_cell * cells_per_tile * tiles_per_slice
