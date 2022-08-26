@@ -42,7 +42,7 @@ class TensorKind(enum.Enum):
 
 
 Tensor = TypeVar("Tensor")
-Selector = Union[int, slice, Sequence[int]]
+Selector = Union[slice, Sequence[int]]
 
 
 @dataclass(frozen=True)  # type: ignore  # https://github.com/python/mypy/issues/5374
@@ -88,14 +88,10 @@ class TensorSchema(ABC, Generic[Tensor]):
                     dim_length = stop - start + 1
                 else:
                     raise ValueError("Shape not defined for non-integer domain")
-            elif isinstance(secondary_slice, int):
-                dim_length = 1
             elif isinstance(secondary_slice, slice):
                 dim_length = secondary_slice.stop - secondary_slice.start + 1
-            elif isinstance(secondary_slice, Sequence):
-                dim_length = len(secondary_slice)
             else:
-                raise ValueError("Incorrect type for secondary_slice")
+                dim_length = len(secondary_slice)
             shape.append(dim_length)
         return tuple(shape)
 
@@ -246,7 +242,9 @@ class DenseTensorSchema(TensorSchema[np.ndarray]):
         tiles_per_slice = 1
         for i, tile in enumerate(dim_tiles[1:], 1):
             secondary_slice = self._secondary_slices.get(i)
-            if isinstance(secondary_slice, (Sequence, slice)):
+            if secondary_slice is None:
+                tiles_per_slice *= ceil(shape[i] / tile)
+            else:
 
                 def get_tile_idx(value: int, start: int = self._ned[i][0]) -> int:
                     """Get the index of the tile with the given value in the i-th dimension"""
@@ -260,8 +258,6 @@ class DenseTensorSchema(TensorSchema[np.ndarray]):
                     start_tile_idx = get_tile_idx(secondary_slice.start)
                     stop_tile_idx = get_tile_idx(secondary_slice.stop)
                     tiles_per_slice *= stop_tile_idx - start_tile_idx + 1
-            else:
-                tiles_per_slice *= ceil(shape[i] / tile)
 
         # Compute the size in bytes of each slice of `rows_per_slice` rows
         bytes_per_slice = bytes_per_cell * cells_per_tile * tiles_per_slice

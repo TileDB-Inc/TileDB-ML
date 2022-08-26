@@ -17,8 +17,8 @@ class ArrayParams:
     :param key_dim: name or index of key dimension of array
     :param fields: fields (dimensions and attributes) to be retrieved from array
     :param secondary_slices: additional slices to slice on non-key indices. Should be a
-        mapping from the desired dimension name to be sliced to a slice object, list of
-        indices or single index.
+        mapping from the desired dimension name to be sliced to a slice object or sequence
+        of indices.
     :param tensor_kind: kind of tensor desired
     :param _tensor_schema_kwargs: other kwargs to pass to the tensor schema instantiated in
     `to_tensor_schema`.
@@ -66,6 +66,8 @@ class ArrayParams:
             dim_index = all_dims.index(dim)
             if dim_index == 0:
                 raise NotImplementedError("Key dimension slicing is not implemented")
+            if not isinstance(secondary_slice, (slice, Sequence)):
+                raise TypeError("secondary_slice must be slice or sequence")
             secondary_slices_indices[dim_index] = secondary_slice
 
         tensor_schema_kwargs = dict(
