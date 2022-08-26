@@ -99,7 +99,7 @@ def parametrize_fields(*fields):
     ],
 )
 @pytest.mark.parametrize(
-    "secondary_slices",
+    "dim_selectors",
     [
         {},
         {"d1": slice(0, 2)},
@@ -111,13 +111,13 @@ def parametrize_fields(*fields):
 )
 @parametrize_fields("d0", "d1", "d2", "af8", "af4", "au1")
 def test_max_partition_weight_dense(
-    dense_uri, fields, key_dim, memory_budget, secondary_slices
+    dense_uri, fields, key_dim, memory_budget, dim_selectors
 ):
-    if key_dim in secondary_slices:  # remove key_dim from secondary_slices
-        secondary_slices = {k: v for k, v in secondary_slices.items() if k != key_dim}
+    if key_dim in dim_selectors:  # remove key_dim from dim_selectors
+        dim_selectors = {k: v for k, v in dim_selectors.items() if k != key_dim}
     config = {"py.max_incomplete_retries": 0, "sm.memory_budget": memory_budget}
     with tiledb.open(dense_uri, config=config) as a:
-        schema = ArrayParams(a, key_dim, fields, secondary_slices).tensor_schema
+        schema = ArrayParams(a, key_dim, fields, dim_selectors).tensor_schema
         max_weight = schema.max_partition_weight
         for key_range in schema.key_range.partition_by_weight(max_weight):
             # query succeeds without incomplete retries

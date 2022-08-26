@@ -57,7 +57,7 @@ class TensorSchema(ABC, Generic[Tensor]):
     _fields: Sequence[str]
     _all_dims: Sequence[str]
     _ned: Sequence[Tuple[Any, Any]]
-    _secondary_slices: Dict[int, Selector]
+    _dim_selectors: Dict[int, Selector]
     _query_kwargs: Dict[str, Any]
 
     @property
@@ -72,26 +72,26 @@ class TensorSchema(ABC, Generic[Tensor]):
 
     @property
     def shape(self) -> Sequence[Optional[int]]:
-        """Shape of the silced array, with the key dimension moved first.
+        """Shape of the selected array, with the key dimension moved first.
 
-        **Note**: For sparse arrays, the returned shape reflects the non-empty domain of
-        the array, not the full array shape.
+        The size of each dimension is determined by:
+        - either the respective selector in `_dim_selectors` (if given)
+        - or by the non-empty domain otherwise.
 
-        :raises ValueError: If the array does not have integer domain or if secondary_slice contains unsupported types
+        :raises ValueError: If the array does not have integer domain.
         """
-
         shape = [len(self.key_range)]
         for i, (start, stop) in enumerate(self._ned[1:], 1):
-            secondary_slice = self._secondary_slices.get(i)
-            if secondary_slice is None:
+            selector = self._dim_selectors.get(i)
+            if selector is None:
                 if isinstance(start, int) and isinstance(stop, int):
                     dim_length = stop - start + 1
                 else:
                     raise ValueError("Shape not defined for non-integer domain")
-            elif isinstance(secondary_slice, slice):
-                dim_length = secondary_slice.stop - secondary_slice.start + 1
+            elif isinstance(selector, slice):
+                dim_length = selector.stop - selector.start + 1
             else:
-                dim_length = len(secondary_slice)
+                dim_length = len(selector)
             shape.append(dim_length)
         return tuple(shape)
 
@@ -101,7 +101,7 @@ class TensorSchema(ABC, Generic[Tensor]):
         return KeyDimQuery(
             self._array,
             self._key_dim_index,
-            self._secondary_slices,
+            self._dim_selectors,
             **self._query_kwargs,
         )
 
@@ -237,12 +237,12 @@ class DenseTensorSchema(TensorSchema[np.ndarray]):
         rows_per_slice = dim_tiles[0]
 
         # Reading a slice of `rows_per_slice` rows requires reading a number of tiles that
-        # depends on the size, secondary slice, and tile extent of each dimension after the first one.
+        # depends on the size, tile extent and selector of each dimension after the first one.
         shape = self.shape
         tiles_per_slice = 1
         for i, tile in enumerate(dim_tiles[1:], 1):
-            secondary_slice = self._secondary_slices.get(i)
-            if secondary_slice is None:
+            selector = self._dim_selectors.get(i)
+            if selector is None:
                 tiles_per_slice *= ceil(shape[i] / tile)
             else:
 
@@ -250,13 +250,13 @@ class DenseTensorSchema(TensorSchema[np.ndarray]):
                     """Get the index of the tile with the given value in the i-th dimension"""
                     return int((value - start) / tile)
 
-                if isinstance(secondary_slice, Sequence):
+                if isinstance(selector, Sequence):
                     # count the number of unique tiles for the i-th dimension
-                    tiles_per_slice *= len(set(map(get_tile_idx, secondary_slice)))
+                    tiles_per_slice *= len(set(map(get_tile_idx, selector)))
                 else:
                     # count the number of tiles between start and stop (inclusive)
-                    start_tile_idx = get_tile_idx(secondary_slice.start)
-                    stop_tile_idx = get_tile_idx(secondary_slice.stop)
+                    start_tile_idx = get_tile_idx(selector.start)
+                    stop_tile_idx = get_tile_idx(selector.stop)
                     tiles_per_slice *= stop_tile_idx - start_tile_idx + 1
 
         # Compute the size in bytes of each slice of `rows_per_slice` rows
@@ -447,16 +447,16 @@ class KeyDimQuery:
         self,
         array: tiledb.Array,
         key_dim_index: int,
-        secondary_slices: Dict[int, Selector],
+        dim_selectors: Dict[int, Selector],
         **kwargs: Any,
     ):
         self._multi_index = array.query(**kwargs).multi_index
         selectors: List[Selector] = [slice(None)] * array.ndim
-        for dim_index, selector in secondary_slices.items():
+        for i, selector in dim_selectors.items():
             # key_dim_index got swapped with 0th index, so swap back
-            if dim_index == key_dim_index:
-                dim_index = 0
-            selectors[dim_index] = selector
+            if i == key_dim_index:
+                i = 0
+            selectors[i] = selector
         self._leading_selectors = tuple(selectors[:key_dim_index])
         self._trailing_selectors = tuple(selectors[key_dim_index + 1 :])
 

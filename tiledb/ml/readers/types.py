@@ -11,23 +11,23 @@ from ._tensor_schema import Selector, TensorKind, TensorSchema, TensorSchemaFact
 @dataclass(frozen=True)
 class ArrayParams:
     """
-    Class for defining the parameters for accessing an array.
-    Constructor arguments:
-    :param array: TileDB Array to be accessed
-    :param key_dim: name or index of key dimension of array
-    :param fields: fields (dimensions and attributes) to be retrieved from array
-    :param secondary_slices: additional slices to slice on non-key indices. Should be a
-        mapping from the desired dimension name to be sliced to a slice object or sequence
-        of indices.
-    :param tensor_kind: kind of tensor desired
-    :param _tensor_schema_kwargs: other kwargs to pass to the tensor schema instantiated in
-    `to_tensor_schema`.
+    Data class specifying the parameters for loading tensors from a TileDB array.
+
+    Public attributes:
+    - array: TileDB array to be accessed
+    - key_dim: Name (or index) of the array key dimension. Defaults to the first dimension.
+    - fields: Fields (dimensions and attributes) to be retrieved from array. Defaults to
+        all attributes of the array.
+    - dim_selectors: Mapping from dimension name to a slice or sequence of indices of this
+        dimension to select. Currently implemented only for non-key dimensions of dense arrays
+    - tensor_kind: kind of tensor desired. If not specified, the default tensor kind is
+        determined based on the array schema.
     """
 
     array: tiledb.Array
     key_dim: Union[int, str] = 0
     fields: Sequence[str] = ()
-    secondary_slices: Mapping[str, Selector] = field(default_factory=dict)
+    dim_selectors: Mapping[str, Selector] = field(default_factory=dict)
     tensor_kind: Optional[TensorKind] = None
     _tensor_schema_kwargs: Mapping[str, Any] = field(init=False, repr=False)
 
@@ -61,14 +61,14 @@ class ArrayParams:
             all_dims[0], all_dims[key_dim_index] = all_dims[key_dim_index], all_dims[0]
             ned[0], ned[key_dim_index] = ned[key_dim_index], ned[0]
 
-        secondary_slices_indices = {}
-        for dim, secondary_slice in self.secondary_slices.items():
-            dim_index = all_dims.index(dim)
-            if dim_index == 0:
+        dim_selector_indices = {}
+        for dim, selector in self.dim_selectors.items():
+            i = all_dims.index(dim)
+            if i == 0:
                 raise NotImplementedError("Key dimension slicing is not implemented")
-            if not isinstance(secondary_slice, (slice, Sequence)):
-                raise TypeError("secondary_slice must be slice or sequence")
-            secondary_slices_indices[dim_index] = secondary_slice
+            if not isinstance(selector, (slice, Sequence)):
+                raise TypeError("dim_selectors values must be slices or sequences")
+            dim_selector_indices[i] = selector
 
         tensor_schema_kwargs = dict(
             _array=self.array,
@@ -76,7 +76,7 @@ class ArrayParams:
             _fields=tuple(final_fields),
             _all_dims=tuple(all_dims),
             _ned=tuple(ned),
-            _secondary_slices=secondary_slices_indices,
+            _dim_selectors=dim_selector_indices,
             _query_kwargs={"attrs": tuple(attrs), "dims": tuple(dims)},
         )
         object.__setattr__(self, "_tensor_schema_kwargs", tensor_schema_kwargs)
@@ -96,9 +96,9 @@ class ArrayParams:
         else:
             tensor_kind = TensorKind.SPARSE_COO
 
-        if self.secondary_slices and tensor_kind is not TensorKind.DENSE:
+        if self.dim_selectors and tensor_kind is not TensorKind.DENSE:
             raise NotImplementedError(
-                "Slicing on secondary indices is only implemented for dense arrays"
+                "dim_selectors is currently implemented only for dense arrays"
             )
 
         factory = TensorSchemaFactories[tensor_kind]
