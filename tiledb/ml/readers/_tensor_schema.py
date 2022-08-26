@@ -246,11 +246,20 @@ class DenseTensorSchema(TensorSchema[np.ndarray]):
         tiles_per_slice = 1
         for i, tile in enumerate(dim_tiles[1:], 1):
             secondary_slice = self._secondary_slices.get(i)
-            if isinstance(secondary_slice, Sequence):
-                dim_start = self._ned[i][0]
-                tiles_per_slice *= len(
-                    set((x - dim_start) // tile for x in secondary_slice)
-                )
+            if isinstance(secondary_slice, (Sequence, slice)):
+
+                def get_tile_idx(value: int, start: int = self._ned[i][0]) -> int:
+                    """Get the index of the tile with the given value in the i-th dimension"""
+                    return int((value - start) / tile)
+
+                if isinstance(secondary_slice, Sequence):
+                    # count the number of unique tiles for the i-th dimension
+                    tiles_per_slice *= len(set(map(get_tile_idx, secondary_slice)))
+                else:
+                    # count the number of tiles between start and stop (inclusive)
+                    start_tile_idx = get_tile_idx(secondary_slice.start)
+                    stop_tile_idx = get_tile_idx(secondary_slice.stop)
+                    tiles_per_slice *= stop_tile_idx - start_tile_idx + 1
             else:
                 tiles_per_slice *= ceil(shape[i] / tile)
 
