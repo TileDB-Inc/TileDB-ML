@@ -214,7 +214,7 @@ def validate_tensor_generator(
 
 
 def _validate_tensor(tensor, schema_tensor_kind, spec_row_shape, batch_size):
-    tensor_kind = _get_tensor_kind(tensor)
+    tensor_kind = get_tensor_kind(tensor)
     if schema_tensor_kind is not TensorKind.RAGGED:
         assert tensor_kind is schema_tensor_kind
         if batch_size is not None:
@@ -251,7 +251,7 @@ def assert_tensors_almost_equal_array(
     batches, array, schema_tensor_kind, batch_size, to_dense
 ):
     if schema_tensor_kind is TensorKind.RAGGED:
-        tensor_kind = _get_tensor_kind(batches[0])
+        tensor_kind = get_tensor_kind(batches[0])
         if tensor_kind is TensorKind.RAGGED:
             tensors = [tensor for batch in batches for tensor in batch]
         else:
@@ -270,7 +270,7 @@ def assert_tensors_almost_equal_array(
             np.testing.assert_array_almost_equal(np.stack(batches), array)
 
 
-def _get_tensor_kind(tensor) -> TensorKind:
+def get_tensor_kind(tensor) -> TensorKind:
     if isinstance(tensor, tf.Tensor):
         return TensorKind.DENSE
     if isinstance(tensor, tf.SparseTensor):
