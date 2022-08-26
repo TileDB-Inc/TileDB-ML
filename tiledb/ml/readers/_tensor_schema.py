@@ -12,6 +12,7 @@ from typing import (
     Dict,
     Generic,
     Iterable,
+    List,
     Optional,
     Sequence,
     Tuple,
@@ -41,6 +42,7 @@ class TensorKind(enum.Enum):
 
 
 Tensor = TypeVar("Tensor")
+Selector = Union[int, slice, Sequence[int]]
 
 
 @dataclass(frozen=True)  # type: ignore  # https://github.com/python/mypy/issues/5374
@@ -55,7 +57,7 @@ class TensorSchema(ABC, Generic[Tensor]):
     _fields: Sequence[str]
     _all_dims: Sequence[str]
     _ned: Sequence[Tuple[Any, Any]]
-    _secondary_slices: Dict[int, Union[int, slice, Sequence[int]]]
+    _secondary_slices: Dict[int, Selector]
     _query_kwargs: Dict[str, Any]
 
     @property
@@ -80,28 +82,32 @@ class TensorSchema(ABC, Generic[Tensor]):
 
         shape = [len(self.key_range)]
         for i, (start, stop) in enumerate(self._ned[1:], 1):
-            if i in self._secondary_slices:
-                secondary_slice = self._secondary_slices[i]
-                if isinstance(secondary_slice, int):
-                    dim_length = 1
-                elif isinstance(secondary_slice, slice):
-                    dim_length = secondary_slice.stop - secondary_slice.start + 1
-                elif isinstance(secondary_slice, list):
-                    dim_length = len(secondary_slice)
+            secondary_slice = self._secondary_slices.get(i)
+            if secondary_slice is None:
+                if isinstance(start, int) and isinstance(stop, int):
+                    dim_length = stop - start + 1
                 else:
-                    raise ValueError("Incorrect type for secondary_slice")
-
-            elif isinstance(start, int) and isinstance(stop, int):
-                dim_length = stop - start + 1
+                    raise ValueError("Shape not defined for non-integer domain")
+            elif isinstance(secondary_slice, int):
+                dim_length = 1
+            elif isinstance(secondary_slice, slice):
+                dim_length = secondary_slice.stop - secondary_slice.start + 1
+            elif isinstance(secondary_slice, Sequence):
+                dim_length = len(secondary_slice)
             else:
-                raise ValueError("Shape not defined for non-integer domain")
+                raise ValueError("Incorrect type for secondary_slice")
             shape.append(dim_length)
         return tuple(shape)
 
     @property
     def query(self) -> KeyDimQuery:
         """A sliceable object for querying the TileDB array along the key dimension"""
-        return KeyDimQuery(self._array, self._key_dim_index, self._secondary_slices, **self._query_kwargs)
+        return KeyDimQuery(
+            self._array,
+            self._key_dim_index,
+            self._secondary_slices,
+            **self._query_kwargs,
+        )
 
     @property
     def key_dim(self) -> str:
@@ -236,14 +242,17 @@ class DenseTensorSchema(TensorSchema[np.ndarray]):
 
         # Reading a slice of `rows_per_slice` rows requires reading a number of tiles that
         # depends on the size, secondary slice, and tile extent of each dimension after the first one.
-        assert len(self.shape) == len(dim_tiles)
-        
+        shape = self.shape
         tiles_per_slice = 1
         for i, tile in enumerate(dim_tiles[1:], 1):
-            if i in self._secondary_slices and isinstance(self._secondary_slices[i], list):
-                tiles_per_slice *= len(set([(x - self._ned[i][0]) // tile for x in self._secondary_slices[i]]))
+            secondary_slice = self._secondary_slices.get(i)
+            if isinstance(secondary_slice, Sequence):
+                dim_start = self._ned[i][0]
+                tiles_per_slice *= len(
+                    set((x - dim_start) // tile for x in secondary_slice)
+                )
             else:
-                tiles_per_slice *=  ceil(self.shape[i] / tile)
+                tiles_per_slice *= ceil(shape[i] / tile)
 
         # Compute the size in bytes of each slice of `rows_per_slice` rows
         bytes_per_slice = bytes_per_cell * cells_per_tile * tiles_per_slice
@@ -429,21 +438,24 @@ TensorSchemaFactories: Dict[TensorKind, Type[TensorSchema[Any]]] = {
 
 
 class KeyDimQuery:
-    def __init__(self, array: tiledb.Array, key_dim_index: int, secondary_slices: Dict[int, Union[int, slice, Sequence[int]]], **kwargs: Any):
+    def __init__(
+        self,
+        array: tiledb.Array,
+        key_dim_index: int,
+        secondary_slices: Dict[int, Selector],
+        **kwargs: Any,
+    ):
         self._multi_index = array.query(**kwargs).multi_index
-        self._key_dim_index = key_dim_index
-        self._slices = [slice(None),] * array.ndim
-        for secondary_index, secondary_slice in secondary_slices.items():
-            # key_dim_index got swapped with 0th index in dimension indexing convention, so swap back
-            if secondary_index == self._key_dim_index:
-                secondary_index = 0
-            self._slices[secondary_index] = secondary_slice
-
+        selectors: List[Selector] = [slice(None)] * array.ndim
+        for dim_index, selector in secondary_slices.items():
+            # key_dim_index got swapped with 0th index, so swap back
+            if dim_index == key_dim_index:
+                dim_index = 0
+            selectors[dim_index] = selector
+        self._leading_selectors = tuple(selectors[:key_dim_index])
+        self._trailing_selectors = tuple(selectors[key_dim_index + 1 :])
 
     def __getitem__(self, key_dim_slice: slice) -> Dict[str, np.ndarray]:
         """Query the TileDB array by `dim_key=key_dim_slice`."""
-        slices = (*self._slices[:self._key_dim_index], key_dim_slice, *self._slices[self._key_dim_index + 1:])
-        return cast(
-            Dict[str, np.ndarray],
-            self._multi_index[slices],
-        )
+        selectors = (*self._leading_selectors, key_dim_slice, *self._trailing_selectors)
+        return cast(Dict[str, np.ndarray], self._multi_index[selectors])
