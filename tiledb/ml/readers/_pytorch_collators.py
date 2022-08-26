@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import Any, Callable, Generic, Sequence, TypeVar
 
 import numpy as np
@@ -18,7 +19,7 @@ def get_collate_fn(
     Return an appropriate callable to be used as the `collate_fn` parameter of Dataloader.
     """
     collators = tuple(map(Collator.from_schema, schemas))
-    collator = RowCollator(*collators) if len(collators) > 1 else collators[0]
+    collator = RowCollator(collators) if len(collators) > 1 else collators[0]
     return collator.collate if is_batched else collator.convert
 
 
@@ -60,9 +61,10 @@ class Collator(ABC, Generic[T]):
             collator = cls(to_csr)
 
         num_fields = schema.num_fields
-        return RowCollator(*(collator,) * num_fields) if num_fields > 1 else collator
+        return RowCollator((collator,) * num_fields) if num_fields > 1 else collator
 
 
+@dataclass(frozen=True)
 class RowCollator(Collator[Sequence[Any]]):
     """
     Collator of "row" tuples.
@@ -72,35 +74,33 @@ class RowCollator(Collator[Sequence[Any]]):
     - The i-th column values are collated by the i-th collator given in the constructor.
     """
 
-    def __init__(self, *column_collators: Collator[Any]):
-        self._column_collators = column_collators
+    column_collators: Sequence[Collator[Any]]
 
     def convert(self, value: Sequence[Any]) -> Sequence[torch.Tensor]:
-        assert len(value) == len(self._column_collators)
+        assert len(value) == len(self.column_collators)
         return tuple(
-            collator.convert(value)
-            for collator, value in zip(self._column_collators, value)
+            collator.convert(item)
+            for collator, item in zip(self.column_collators, value)
         )
 
     def collate(self, batch: Sequence[Sequence[Any]]) -> Sequence[torch.Tensor]:
         columns = tuple(zip(*batch))
-        assert len(columns) == len(self._column_collators)
+        assert len(columns) == len(self.column_collators)
         return tuple(
             collator.collate(column)
-            for collator, column in zip(self._column_collators, columns)
+            for collator, column in zip(self.column_collators, columns)
         )
 
 
+@dataclass(frozen=True)
 class NumpyArrayCollator(Collator[np.ndarray]):
-    """Collator of Numpy arrays"""
+    """Collator of Numpy arrays
 
-    def __init__(self, to_nested: bool = False):
-        """
-        :param to_nested: If true, collate 1D Numpy arrays with possibly different
-            length to nested `torch.Tensor`s. Otherwise, all the arrays to be collated
-            must have the same shape.
-        """
-        self.to_nested = to_nested
+    to_nested: If true, collate 1D Numpy arrays with possibly different length to nested
+        `torch.Tensor`s. Otherwise, all the arrays to be collated must have the same shape
+    """
+
+    to_nested: bool = False
 
     def convert(self, value: np.ndarray) -> torch.Tensor:
         return torch.from_numpy(value)
@@ -112,15 +112,15 @@ class NumpyArrayCollator(Collator[np.ndarray]):
             return torch.from_numpy(np.stack(batch))
 
 
+@dataclass(frozen=True)
 class SparseCOOCollator(Collator[sparse.COO]):
-    """Collator of sparse.COO instances"""
+    """Collator of sparse.COO instances
 
-    def __init__(self, to_csr: bool = False):
-        """
-        :param to_csr: Convert/collate to `torch.Tensor`s with `sparse_csr` layout if True
-            or `sparse_coo` layout if False
-        """
-        self.to_csr = to_csr
+    to_csr: Collate to `torch.Tensor`s with `sparse_csr` layout if true and `sparse_coo`
+        layout if False
+    """
+
+    to_csr: bool = False
 
     def convert(self, value: sparse.COO) -> torch.Tensor:
         if self.to_csr:
@@ -133,15 +133,15 @@ class SparseCOOCollator(Collator[sparse.COO]):
         return self.convert(sparse.stack(batch))
 
 
+@dataclass(frozen=True)
 class ScipySparseCSRCollator(Collator[scipy.sparse.csr_matrix]):
-    """Collator of `scipy.sparse.csr_matrix` instances"""
+    """Collator of `scipy.sparse.csr_matrix` instances
 
-    def __init__(self, to_csr: bool = True):
-        """
-        :param to_csr: Convert/collate to `torch.Tensor`s with `sparse_csr` layout if True
-            or `sparse_coo` layout if False
-        """
-        self.to_csr = to_csr
+    to_csr: Collate to `torch.Tensor`s with `sparse_csr` layout if true and `sparse_coo`
+        layout if False
+    """
+
+    to_csr: bool = False
 
     def convert(
         self, value: scipy.sparse.csr_matrix, _collating: bool = False
