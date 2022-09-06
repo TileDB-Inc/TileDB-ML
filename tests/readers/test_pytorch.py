@@ -108,12 +108,7 @@ class TestPyTorchTileDBDataLoader:
                     assert n1 == n2
 
     @pytest.mark.parametrize("spec", ArraySpec.combinations())
-    @pytest.mark.parametrize("batch_size", [8, None])
-    @pytest.mark.parametrize("shuffle_buffer_size", [0, 16])
-    @pytest.mark.parametrize("num_workers", [0, 2])
-    def test_multiple_arrays_unequal_key_ranges(
-        self, tmpdir, spec, batch_size, shuffle_buffer_size, num_workers
-    ):
+    def test_multiple_arrays_unequal_key_ranges(self, tmpdir, spec):
         y_spec = ArraySpec(
             # Add one extra key on Y
             shape=(spec.shape[0] + 1, *spec.shape[1:]),
@@ -126,13 +121,7 @@ class TestPyTorchTileDBDataLoader:
         with ingest_in_tiledb(tmpdir, spec) as (x_params, x_data):
             with ingest_in_tiledb(tmpdir, y_spec) as (y_params, y_data):
                 with pytest.raises(ValueError) as ex:
-                    PyTorchTileDBDataLoader(
-                        x_params,
-                        y_params,
-                        shuffle_buffer_size=shuffle_buffer_size,
-                        batch_size=batch_size,
-                        num_workers=num_workers,
-                    )
+                    PyTorchTileDBDataLoader(x_params, y_params)
                 assert "All arrays must have the same key range" in str(ex.value)
 
     @pytest.mark.parametrize("spec", ArraySpec.combinations(num_fields=[0]))
