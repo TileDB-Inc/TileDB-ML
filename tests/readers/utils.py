@@ -164,7 +164,8 @@ def ingest_in_tiledb(tmpdir, spec: ArraySpec):
     fields = np.random.choice(all_fields, size=spec.num_fields, replace=False).tolist()
 
     with tiledb.open(uri) as array:
-        yield ArrayParams(array, spec.key_dim, fields, spec.tensor_kind), original_data
+        params = ArrayParams(array, spec.key_dim, fields, tensor_kind=spec.tensor_kind)
+        yield params, original_data
 
 
 def _rand_array(shape: Sequence[int], sparse: bool = False) -> np.ndarray:

@@ -88,14 +88,36 @@ def parametrize_fields(*fields):
 
 
 @pytest.mark.parametrize(
-    "key_dim_index,memory_budget",
-    [(0, 16_000), (0, 32_000), (0, 64_000), (1, 500_000), (1, 600_000), (1, 700_000)],
+    "key_dim,memory_budget",
+    [
+        ("d0", 16_000),
+        ("d0", 32_000),
+        ("d0", 64_000),
+        ("d1", 500_000),
+        ("d1", 600_000),
+        ("d1", 700_000),
+    ],
+)
+@pytest.mark.parametrize(
+    "dim_selectors",
+    [
+        {},
+        {"d1": slice(0, 2)},
+        {"d0": slice(2, 400), "d1": slice(1, 2)},
+        {"d0": [1, 2, 3], "d1": slice(-1, None), "d2": slice(2, 2)},
+        {"d0": [1, 100, 143, 976], "d1": slice(None, 0)},
+        {"d0": [1, 100, 143, 1093, 1094], "d1": [-1, 0]},
+    ],
 )
 @parametrize_fields("d0", "d1", "d2", "af8", "af4", "au1")
-def test_max_partition_weight_dense(dense_uri, fields, key_dim_index, memory_budget):
+def test_max_partition_weight_dense(
+    dense_uri, fields, key_dim, memory_budget, dim_selectors
+):
+    if key_dim in dim_selectors:  # remove key_dim from dim_selectors
+        dim_selectors = {k: v for k, v in dim_selectors.items() if k != key_dim}
     config = {"py.max_incomplete_retries": 0, "sm.memory_budget": memory_budget}
     with tiledb.open(dense_uri, config=config) as a:
-        schema = ArrayParams(a, key_dim_index, fields).tensor_schema
+        schema = ArrayParams(a, key_dim, fields, dim_selectors).tensor_schema
         max_weight = schema.max_partition_weight
         for key_range in schema.key_range.partition_by_weight(max_weight):
             # query succeeds without incomplete retries
@@ -109,16 +131,16 @@ def test_max_partition_weight_dense(dense_uri, fields, key_dim_index, memory_bud
 
 
 @pytest.mark.parametrize("memory_budget", [2048, 4096])
-@pytest.mark.parametrize("key_dim_index", [0, 1, 3, 4])
+@pytest.mark.parametrize("key_dim", ["d0", "d1", "d3", "d4"])
 @parametrize_fields("d0", "d1", "d2", "d3", "d4", "af8", "af4", "au1")
-def test_max_partition_weight_sparse(sparse_uri, fields, key_dim_index, memory_budget):
+def test_max_partition_weight_sparse(sparse_uri, fields, key_dim, memory_budget):
     config = {
         "py.max_incomplete_retries": 0,
         "py.init_buffer_bytes": memory_budget,
     }
     with tiledb.open(sparse_uri, config=config) as a:
-        key_dim = a.dim(key_dim_index)
-        schema = ArrayParams(a, key_dim_index, fields).tensor_schema
+        key_dim_dtype = a.dim(key_dim).dtype
+        schema = ArrayParams(a, key_dim, fields).tensor_schema
         max_weight = schema.max_partition_weight
         for key_range in schema.key_range.partition_by_weight(max_weight):
             # query succeeds without incomplete retries
@@ -127,7 +149,7 @@ def test_max_partition_weight_sparse(sparse_uri, fields, key_dim_index, memory_b
             if key_range.max < schema.key_range.max:
                 # querying a larger slice should fail. `key_range.max + 1` makes sense
                 # only for integer key dim so test just integer key dims
-                if np.issubdtype(key_dim.dtype, np.integer):
+                if np.issubdtype(key_dim_dtype, np.integer):
                     with pytest.raises(tiledb.TileDBError) as ex:
                         schema.query[key_range.min : key_range.max + 1]
                     assert "py.max_incomplete_retries" in str(ex.value)

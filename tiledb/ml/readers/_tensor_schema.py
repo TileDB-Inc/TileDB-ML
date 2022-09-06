@@ -12,6 +12,7 @@ from typing import (
     Dict,
     Generic,
     Iterable,
+    List,
     Optional,
     Sequence,
     Tuple,
@@ -41,6 +42,7 @@ class TensorKind(enum.Enum):
 
 
 Tensor = TypeVar("Tensor")
+Selector = Union[slice, Sequence[int]]
 
 
 @dataclass(frozen=True)  # type: ignore  # https://github.com/python/mypy/issues/5374
@@ -55,6 +57,7 @@ class TensorSchema(ABC, Generic[Tensor]):
     _fields: Sequence[str]
     _all_dims: Sequence[str]
     _ned: Sequence[Tuple[Any, Any]]
+    _dim_selectors: Dict[int, Selector]
     _query_kwargs: Dict[str, Any]
 
     @property
@@ -69,25 +72,38 @@ class TensorSchema(ABC, Generic[Tensor]):
 
     @property
     def shape(self) -> Sequence[Optional[int]]:
-        """Shape of the array, with the key dimension moved first.
+        """Shape of the selected array, with the key dimension moved first.
 
-        **Note**: For sparse arrays, the returned shape reflects the non-empty domain of
-        the array, not the full array shape.
+        The size of each dimension is determined by:
+        - either the respective selector in `_dim_selectors` (if given)
+        - or by the non-empty domain otherwise.
 
         :raises ValueError: If the array does not have integer domain.
         """
         shape = [len(self.key_range)]
-        for start, stop in self._ned[1:]:
-            if isinstance(start, int) and isinstance(stop, int):
+        for i, (dim_start, dim_stop) in enumerate(self._ned[1:], 1):
+            selector = self._dim_selectors.get(i)
+            if selector is None:
+                selector = slice(None)
+            if isinstance(selector, slice):
+                start = selector.start if selector.start is not None else dim_start
+                stop = selector.stop if selector.stop is not None else dim_stop
+                if not (isinstance(start, int) and isinstance(stop, int)):
+                    raise ValueError("Shape not defined for non-integer domain")
                 shape.append(stop - start + 1)
             else:
-                raise ValueError("Shape not defined for non-integer domain")
+                shape.append(len(selector))
         return tuple(shape)
 
     @property
     def query(self) -> KeyDimQuery:
         """A sliceable object for querying the TileDB array along the key dimension"""
-        return KeyDimQuery(self._array, self._key_dim_index, **self._query_kwargs)
+        return KeyDimQuery(
+            self._array,
+            self._key_dim_index,
+            self._dim_selectors,
+            **self._query_kwargs,
+        )
 
     @property
     def key_dim(self) -> str:
@@ -221,11 +237,28 @@ class DenseTensorSchema(TensorSchema[np.ndarray]):
         rows_per_slice = dim_tiles[0]
 
         # Reading a slice of `rows_per_slice` rows requires reading a number of tiles that
-        # depends on the size and tile extent of each dimension after the first one.
-        assert len(self.shape) == len(dim_tiles)
-        tiles_per_slice = np.prod(
-            [ceil(size / tile) for size, tile in zip(self.shape[1:], dim_tiles[1:])]
-        )
+        # depends on the size, tile extent and selector of each dimension after the first one.
+        shape = self.shape
+        tiles_per_slice = 1
+        for i, dim_tile in enumerate(dim_tiles[1:], 1):
+            selector = self._dim_selectors.get(i)
+            if selector is None:
+                tiles_per_slice *= ceil(shape[i] / dim_tile)
+            else:
+                dim_start, dim_stop = self._ned[i]
+
+                def get_tile_idx(value: int) -> int:
+                    """Get the index of the tile with the given value in the i-th dimension"""
+                    return int((value - dim_start) / dim_tile)
+
+                if isinstance(selector, slice):
+                    # count the number of tiles between start and stop (inclusive)
+                    start = selector.start if selector.start is not None else dim_start
+                    stop = selector.stop if selector.stop is not None else dim_stop
+                    tiles_per_slice *= get_tile_idx(stop) - get_tile_idx(start) + 1
+                else:
+                    # count the number of unique tiles for the i-th dimension
+                    tiles_per_slice *= len(set(map(get_tile_idx, selector)))
 
         # Compute the size in bytes of each slice of `rows_per_slice` rows
         bytes_per_slice = bytes_per_cell * cells_per_tile * tiles_per_slice
@@ -411,13 +444,24 @@ TensorSchemaFactories: Dict[TensorKind, Type[TensorSchema[Any]]] = {
 
 
 class KeyDimQuery:
-    def __init__(self, array: tiledb.Array, key_dim_index: int, **kwargs: Any):
+    def __init__(
+        self,
+        array: tiledb.Array,
+        key_dim_index: int,
+        dim_selectors: Dict[int, Selector],
+        **kwargs: Any,
+    ):
         self._multi_index = array.query(**kwargs).multi_index
-        self._leading_dim_slices = (slice(None),) * key_dim_index
+        selectors: List[Selector] = [slice(None)] * array.ndim
+        for i, selector in dim_selectors.items():
+            # key_dim_index got swapped with 0th index, so swap back
+            if i == key_dim_index:
+                i = 0
+            selectors[i] = selector
+        self._leading_selectors = tuple(selectors[:key_dim_index])
+        self._trailing_selectors = tuple(selectors[key_dim_index + 1 :])
 
     def __getitem__(self, key_dim_slice: slice) -> Dict[str, np.ndarray]:
         """Query the TileDB array by `dim_key=key_dim_slice`."""
-        return cast(
-            Dict[str, np.ndarray],
-            self._multi_index[(*self._leading_dim_slices, key_dim_slice)],
-        )
+        selectors = (*self._leading_selectors, key_dim_slice, *self._trailing_selectors)
+        return cast(Dict[str, np.ndarray], self._multi_index[selectors])

@@ -5,14 +5,29 @@ import numpy as np
 
 import tiledb
 
-from ._tensor_schema import TensorKind, TensorSchema, TensorSchemaFactories
+from ._tensor_schema import Selector, TensorKind, TensorSchema, TensorSchemaFactories
 
 
 @dataclass(frozen=True)
 class ArrayParams:
+    """
+    Data class specifying the parameters for loading tensors from a TileDB array.
+
+    Public attributes:
+    - array: TileDB array to be accessed
+    - key_dim: Name (or index) of the array key dimension. Defaults to the first dimension.
+    - fields: Fields (dimensions and attributes) to be retrieved from array. Defaults to
+        all attributes of the array.
+    - dim_selectors: Mapping from dimension name to a slice or sequence of indices of this
+        dimension to select. Currently implemented only for non-key dimensions of dense arrays
+    - tensor_kind: kind of tensor desired. If not specified, the default tensor kind is
+        determined based on the array schema.
+    """
+
     array: tiledb.Array
     key_dim: Union[int, str] = 0
     fields: Sequence[str] = ()
+    dim_selectors: Mapping[str, Selector] = field(default_factory=dict)
     tensor_kind: Optional[TensorKind] = None
     _tensor_schema_kwargs: Mapping[str, Any] = field(init=False, repr=False)
 
@@ -40,10 +55,20 @@ class ArrayParams:
             if isinstance(self.key_dim, int)
             else all_dims.index(self.key_dim)
         )
+
         if key_dim_index > 0:
             # Swap key dimension to first position
             all_dims[0], all_dims[key_dim_index] = all_dims[key_dim_index], all_dims[0]
             ned[0], ned[key_dim_index] = ned[key_dim_index], ned[0]
+
+        dim_selector_indices = {}
+        for dim, selector in self.dim_selectors.items():
+            i = all_dims.index(dim)
+            if i == 0:
+                raise NotImplementedError("Key dimension slicing is not implemented")
+            if not isinstance(selector, (slice, Sequence)):
+                raise TypeError("dim_selectors values must be slices or sequences")
+            dim_selector_indices[i] = selector
 
         tensor_schema_kwargs = dict(
             _array=self.array,
@@ -51,6 +76,7 @@ class ArrayParams:
             _fields=tuple(final_fields),
             _all_dims=tuple(all_dims),
             _ned=tuple(ned),
+            _dim_selectors=dim_selector_indices,
             _query_kwargs={"attrs": tuple(attrs), "dims": tuple(dims)},
         )
         object.__setattr__(self, "_tensor_schema_kwargs", tensor_schema_kwargs)
@@ -69,6 +95,11 @@ class ArrayParams:
             tensor_kind = TensorKind.RAGGED
         else:
             tensor_kind = TensorKind.SPARSE_COO
+
+        if self.dim_selectors and tensor_kind is not TensorKind.DENSE:
+            raise NotImplementedError(
+                "dim_selectors is currently implemented only for dense arrays"
+            )
 
         factory = TensorSchemaFactories[tensor_kind]
         return factory(kind=tensor_kind, **self._tensor_schema_kwargs)
