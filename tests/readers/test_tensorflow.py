@@ -10,12 +10,11 @@ from .utils import (
     ArraySpec,
     assert_tensors_almost_equal_array,
     ingest_in_tiledb,
-    parametrize_for_dataset,
     validate_tensor_generator,
 )
 
 
-def dataset_batching_shuffling(dataset, batch_size, shuffle_buffer_size):
+def dataset_batching_shuffling(dataset, batch_size=None, shuffle_buffer_size=0):
     if shuffle_buffer_size > 0:
         dataset = dataset.shuffle(shuffle_buffer_size)
     if batch_size is not None:
@@ -24,7 +23,10 @@ def dataset_batching_shuffling(dataset, batch_size, shuffle_buffer_size):
 
 
 class TestTensorflowTileDBDataset:
-    @parametrize_for_dataset()
+    @pytest.mark.parametrize("spec", ArraySpec.combinations())
+    @pytest.mark.parametrize("batch_size", [8, None])
+    @pytest.mark.parametrize("shuffle_buffer_size", [0, 16])
+    @pytest.mark.parametrize("num_workers", [0, 2])
     def test_dataset(self, tmpdir, spec, batch_size, shuffle_buffer_size, num_workers):
         with ingest_in_tiledb(tmpdir, spec) as (params, data):
             dataset = TensorflowTileDBDataset(params, num_workers=num_workers)
@@ -36,7 +38,10 @@ class TestTensorflowTileDBDataset:
             assert isinstance(dataset, tf.data.Dataset)
             validate_tensor_generator(dataset, params.tensor_schema, spec, batch_size)
 
-    @parametrize_for_dataset()
+    @pytest.mark.parametrize("spec", ArraySpec.combinations())
+    @pytest.mark.parametrize("batch_size", [8, None])
+    @pytest.mark.parametrize("shuffle_buffer_size", [0, 16])
+    @pytest.mark.parametrize("num_workers", [0, 2])
     def test_multiple_arrays(
         self, tmpdir, spec, batch_size, shuffle_buffer_size, num_workers
     ):
@@ -58,7 +63,10 @@ class TestTensorflowTileDBDataset:
                     batch_size,
                 )
 
-    @parametrize_for_dataset()
+    @pytest.mark.parametrize("spec", ArraySpec.combinations())
+    @pytest.mark.parametrize("batch_size", [8, None])
+    @pytest.mark.parametrize("shuffle_buffer_size", [0, 16])
+    @pytest.mark.parametrize("num_workers", [0, 2])
     def test_multiple_arrays_unequal_key_ranges(
         self, tmpdir, spec, batch_size, shuffle_buffer_size, num_workers
     ):
@@ -77,12 +85,9 @@ class TestTensorflowTileDBDataset:
                     TensorflowTileDBDataset(x_params, y_params, num_workers=num_workers)
                 assert "All arrays must have the same key range" in str(ex.value)
 
-    @parametrize_for_dataset(
-        num_fields=[0],
-        shuffle_buffer_size=[0],
-        num_workers=[0],
-    )
-    def test_order(self, tmpdir, spec, batch_size, shuffle_buffer_size, num_workers):
+    @pytest.mark.parametrize("spec", ArraySpec.combinations(num_fields=[0]))
+    @pytest.mark.parametrize("batch_size", [8, None])
+    def test_order(self, tmpdir, spec, batch_size):
         """Test we can read the data in the same order as written.
 
         The order is guaranteed only for sequential processing (num_workers=0) and
@@ -90,12 +95,8 @@ class TestTensorflowTileDBDataset:
         """
         to_dense = tf.sparse.to_dense
         with ingest_in_tiledb(tmpdir, spec) as (params, data):
-            dataset = TensorflowTileDBDataset(params, num_workers=num_workers)
-            dataset = dataset_batching_shuffling(
-                dataset=dataset,
-                batch_size=batch_size,
-                shuffle_buffer_size=shuffle_buffer_size,
-            )
+            dataset = TensorflowTileDBDataset(params)
+            dataset = dataset_batching_shuffling(dataset=dataset, batch_size=batch_size)
             # since num_fields is 0, fields are all the array attributes of each array
             # the first item of each batch corresponds to the first attribute (="data")
             batches = [tensors[0] for tensors in dataset]
@@ -103,14 +104,15 @@ class TestTensorflowTileDBDataset:
                 batches, data, params.tensor_schema.kind, batch_size, to_dense
             )
 
-    @parametrize_for_dataset(
-        sparse=(True,),
-        non_key_dim_dtype=(np.dtype(np.int32),),
-        num_workers=[0],
+    @pytest.mark.parametrize(
+        "spec",
+        ArraySpec.combinations(sparse=(True,), non_key_dim_dtype=(np.dtype(np.int32),)),
     )
-    def test_csr(self, tmpdir, spec, batch_size, shuffle_buffer_size, num_workers):
+    @pytest.mark.parametrize("batch_size", [8, None])
+    @pytest.mark.parametrize("shuffle_buffer_size", [0, 16])
+    def test_csr(self, tmpdir, spec, batch_size, shuffle_buffer_size):
         tensor_kind = TensorKind.SPARSE_CSR
         with ingest_in_tiledb(tmpdir, spec, tensor_kind) as (params, data):
             with pytest.raises(NotImplementedError) as ex:
-                TensorflowTileDBDataset(params, num_workers=num_workers)
+                TensorflowTileDBDataset(params)
             assert "TensorKind.SPARSE_CSR tensors not supported" in str(ex.value)

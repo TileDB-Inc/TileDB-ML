@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from typing import Any, Sequence
 
 import numpy as np
-import pytest
 import tensorflow as tf
 import torch
 
@@ -23,55 +22,31 @@ class ArraySpec:
     non_key_dim_dtype: np.dtype
     num_fields: int
 
-
-def parametrize_for_dataset(
-    *,
-    sparse=(True, False),
-    shape=((107, 10), (107, 10, 3)),
-    key_dim=(0, 1),
-    key_dim_dtype=(np.dtype(np.int32), np.dtype("datetime64[D]"), np.dtype(np.bytes_)),
-    non_key_dim_dtype=(np.dtype(np.int32), np.dtype(np.float32)),
-    num_fields=(0, 1, 2),
-    batch_size=(8, None),
-    shuffle_buffer_size=(0, 16),
-    num_workers=(0, 2),
-):
-    argnames = ("spec", "batch_size", "shuffle_buffer_size", "num_workers")
-    argvalues = []
-    for (
-        sparse_,
-        shape_,
-        key_dim_,
-        key_dim_dtype_,
-        non_key_dim_dtype_,
-        num_fields_,
-        batch_size_,
-        shuffle_buffer_size_,
-        num_workers_,
-    ) in it.product(
-        sparse,
-        shape,
-        key_dim,
-        key_dim_dtype,
-        non_key_dim_dtype,
-        num_fields,
-        batch_size,
-        shuffle_buffer_size,
-        num_workers,
+    @staticmethod
+    def combinations(
+        *,
+        sparse=(True, False),
+        shape=((107, 10), (107, 10, 3)),
+        key_dim=(0, 1),
+        key_dim_dtype=(
+            np.dtype(np.int32),
+            np.dtype("datetime64[D]"),
+            np.dtype(np.bytes_),
+        ),
+        non_key_dim_dtype=(np.dtype(np.int32), np.dtype(np.float32)),
+        num_fields=(0, 1, 2),
     ):
-        # for dense arrays all dtypes must be integer
-        if not sparse_:
-            if not np.issubdtype(key_dim_dtype_, np.integer):
-                continue
-            if not np.issubdtype(non_key_dim_dtype_, np.integer):
-                continue
-
-        spec = ArraySpec(
-            sparse_, shape_, key_dim_, key_dim_dtype_, non_key_dim_dtype_, num_fields_
-        )
-        argvalues.append((spec, batch_size_, shuffle_buffer_size_, num_workers_))
-
-    return pytest.mark.parametrize(argnames, argvalues)
+        for combo in it.product(
+            sparse, shape, key_dim, key_dim_dtype, non_key_dim_dtype, num_fields
+        ):
+            spec = ArraySpec(*combo)
+            # for dense arrays key_dim_dtype and non_key_dim_dtype must be integer
+            if not spec.sparse:
+                if not np.issubdtype(spec.key_dim_dtype, np.integer):
+                    continue
+                if not np.issubdtype(spec.non_key_dim_dtype, np.integer):
+                    continue
+            yield spec
 
 
 @contextmanager

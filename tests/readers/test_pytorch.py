@@ -11,13 +11,15 @@ from .utils import (
     ArraySpec,
     assert_tensors_almost_equal_array,
     ingest_in_tiledb,
-    parametrize_for_dataset,
     validate_tensor_generator,
 )
 
 
 class TestPyTorchTileDBDataLoader:
-    @parametrize_for_dataset()
+    @pytest.mark.parametrize("spec", ArraySpec.combinations())
+    @pytest.mark.parametrize("batch_size", [8, None])
+    @pytest.mark.parametrize("shuffle_buffer_size", [0, 16])
+    @pytest.mark.parametrize("num_workers", [0, 2])
     def test_dataloader(
         self, tmpdir, spec, batch_size, shuffle_buffer_size, num_workers
     ):
@@ -42,12 +44,13 @@ class TestPyTorchTileDBDataLoader:
                 n2 = sum(1 for _ in dataloader)
                 assert n1 == n2
 
-    @parametrize_for_dataset(
-        sparse=(True,),
-        non_key_dim_dtype=(np.dtype(np.int32),),
-        num_workers=[0],
+    @pytest.mark.parametrize(
+        "spec",
+        ArraySpec.combinations(sparse=(True,), non_key_dim_dtype=(np.dtype(np.int32),)),
     )
-    def test_csr(self, tmpdir, spec, batch_size, shuffle_buffer_size, num_workers):
+    @pytest.mark.parametrize("batch_size", [8, None])
+    @pytest.mark.parametrize("shuffle_buffer_size", [0, 16])
+    def test_csr(self, tmpdir, spec, batch_size, shuffle_buffer_size):
         tensor_kind = TensorKind.SPARSE_CSR
         with ingest_in_tiledb(tmpdir, spec, tensor_kind) as (params, data):
             try:
@@ -55,7 +58,6 @@ class TestPyTorchTileDBDataLoader:
                     params,
                     shuffle_buffer_size=shuffle_buffer_size,
                     batch_size=batch_size,
-                    num_workers=num_workers,
                 )
             except ValueError as ex:
                 assert str(ex) == "Cannot generate CSR tensors for 3D array"
@@ -72,7 +74,10 @@ class TestPyTorchTileDBDataLoader:
                 n2 = sum(1 for _ in dataloader)
                 assert n1 == n2
 
-    @parametrize_for_dataset()
+    @pytest.mark.parametrize("spec", ArraySpec.combinations())
+    @pytest.mark.parametrize("batch_size", [8, None])
+    @pytest.mark.parametrize("shuffle_buffer_size", [0, 16])
+    @pytest.mark.parametrize("num_workers", [0, 2])
     def test_multiple_arrays(
         self, tmpdir, spec, batch_size, shuffle_buffer_size, num_workers
     ):
@@ -102,7 +107,10 @@ class TestPyTorchTileDBDataLoader:
                     n2 = sum(1 for _ in dataloader)
                     assert n1 == n2
 
-    @parametrize_for_dataset()
+    @pytest.mark.parametrize("spec", ArraySpec.combinations())
+    @pytest.mark.parametrize("batch_size", [8, None])
+    @pytest.mark.parametrize("shuffle_buffer_size", [0, 16])
+    @pytest.mark.parametrize("num_workers", [0, 2])
     def test_multiple_arrays_unequal_key_ranges(
         self, tmpdir, spec, batch_size, shuffle_buffer_size, num_workers
     ):
@@ -127,12 +135,9 @@ class TestPyTorchTileDBDataLoader:
                     )
                 assert "All arrays must have the same key range" in str(ex.value)
 
-    @parametrize_for_dataset(
-        num_fields=[0],
-        shuffle_buffer_size=[0],
-        num_workers=[0],
-    )
-    def test_order(self, tmpdir, spec, batch_size, shuffle_buffer_size, num_workers):
+    @pytest.mark.parametrize("spec", ArraySpec.combinations(num_fields=[0]))
+    @pytest.mark.parametrize("batch_size", [8, None])
+    def test_order(self, tmpdir, spec, batch_size):
         """Test we can read the data in the same order as written.
 
         The order is guaranteed only for sequential processing (num_workers=0) and
@@ -140,12 +145,7 @@ class TestPyTorchTileDBDataLoader:
         """
         to_dense = methodcaller("to_dense")
         with ingest_in_tiledb(tmpdir, spec) as (params, data):
-            dataloader = PyTorchTileDBDataLoader(
-                params,
-                shuffle_buffer_size=shuffle_buffer_size,
-                batch_size=batch_size,
-                num_workers=num_workers,
-            )
+            dataloader = PyTorchTileDBDataLoader(params, batch_size=batch_size)
             # since num_fields is 0, fields are all the array attributes of each array
             # the first item of each batch corresponds to the first attribute (="data")
             batches = [tensors[0] for tensors in dataloader]
