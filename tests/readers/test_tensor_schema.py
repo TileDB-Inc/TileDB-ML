@@ -80,10 +80,10 @@ def sparse_uri(tmp_path_factory, non_zero_per_row=3):
     return uri
 
 
-def parametrize_fields(*fields):
+def parametrize_fields(*fields, num=3):
     return pytest.mark.parametrize(
         "fields",
-        list(it.chain.from_iterable(it.combinations(fields, i) for i in range(4))),
+        list(it.chain.from_iterable(it.combinations(fields, i) for i in range(num))),
     )
 
 
@@ -105,7 +105,7 @@ def parametrize_fields(*fields):
         {"d1": slice(0, 2)},
         {"d0": slice(2, 400), "d1": slice(1, 2)},
         {"d0": [1, 2, 3], "d1": slice(-1, None), "d2": slice(2, 2)},
-        {"d0": [1, 100, 143, 976], "d1": slice(None, 0)},
+        {"d0": [1, 100, 143, 976], "d1": slice(None, 0), "d2": [1]},
         {"d0": [1, 100, 143, 1093, 1094], "d1": [-1, 0]},
     ],
 )
