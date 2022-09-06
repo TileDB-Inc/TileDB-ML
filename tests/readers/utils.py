@@ -36,7 +36,7 @@ def parametrize_for_dataset(
     non_key_dim_dtype=(np.dtype(np.int32), np.dtype(np.float32)),
     num_fields=(0, 1, 2),
     batch_size=(8, None),
-    shuffle_buffer_size=(16,),
+    shuffle_buffer_size=(0, 16),
     num_workers=(0, 2),
 ):
     argnames = ("x_spec", "y_spec", "batch_size", "shuffle_buffer_size", "num_workers")
