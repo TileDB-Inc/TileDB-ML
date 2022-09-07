@@ -28,43 +28,29 @@ class TestTensorflowTileDBDataset:
     @pytest.mark.parametrize("shuffle_buffer_size", [0, 16])
     @pytest.mark.parametrize("num_workers", [0, 2])
     def test_dataset(self, tmpdir, spec, batch_size, shuffle_buffer_size, num_workers):
-        with ingest_in_tiledb(tmpdir, spec) as (params, data):
-            dataset = TensorflowTileDBDataset(params, num_workers=num_workers)
+        def test(*all_array_params):
             dataset = dataset_batching_shuffling(
-                dataset=dataset,
+                TensorflowTileDBDataset(*all_array_params, num_workers=num_workers),
                 batch_size=batch_size,
                 shuffle_buffer_size=shuffle_buffer_size,
             )
             assert isinstance(dataset, tf.data.Dataset)
-            validate_tensor_generator(dataset, params.tensor_schema, spec, batch_size)
+            validate_tensor_generator(
+                dataset,
+                [params.tensor_schema for params in all_array_params],
+                [spec] * len(all_array_params),
+                batch_size,
+            )
 
-    @pytest.mark.parametrize("spec", ArraySpec.combinations())
-    @pytest.mark.parametrize("batch_size", [8, None])
-    @pytest.mark.parametrize("shuffle_buffer_size", [0, 16])
-    @pytest.mark.parametrize("num_workers", [0, 2])
-    def test_multiple_arrays(
-        self, tmpdir, spec, batch_size, shuffle_buffer_size, num_workers
-    ):
         with ingest_in_tiledb(tmpdir, spec) as (x_params, x_data):
+            # load tensors from single array
+            test(x_params)
             with ingest_in_tiledb(tmpdir, spec) as (y_params, y_data):
-                dataset = TensorflowTileDBDataset(
-                    x_params, y_params, num_workers=num_workers
-                )
-                dataset = dataset_batching_shuffling(
-                    dataset=dataset,
-                    batch_size=batch_size,
-                    shuffle_buffer_size=shuffle_buffer_size,
-                )
-                assert isinstance(dataset, tf.data.Dataset)
-                validate_tensor_generator(
-                    dataset,
-                    [x_params.tensor_schema, y_params.tensor_schema],
-                    [spec, spec],
-                    batch_size,
-                )
+                # load tensors from two arrays
+                test(x_params, y_params)
 
     @pytest.mark.parametrize("spec", ArraySpec.combinations())
-    def test_multiple_arrays_unequal_key_ranges(self, tmpdir, spec):
+    def test_unequal_key_ranges(self, tmpdir, spec):
         y_spec = ArraySpec(
             # Add one extra key on Y
             shape=(spec.shape[0] + 1, *spec.shape[1:]),

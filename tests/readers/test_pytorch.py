@@ -23,10 +23,10 @@ class TestPyTorchTileDBDataLoader:
     def test_dataloader(
         self, tmpdir, spec, batch_size, shuffle_buffer_size, num_workers
     ):
-        with ingest_in_tiledb(tmpdir, spec) as (params, data):
+        def test(*all_array_params):
             try:
                 dataloader = PyTorchTileDBDataLoader(
-                    params,
+                    *all_array_params,
                     shuffle_buffer_size=shuffle_buffer_size,
                     batch_size=batch_size,
                     num_workers=num_workers,
@@ -36,13 +36,23 @@ class TestPyTorchTileDBDataLoader:
             else:
                 assert isinstance(dataloader, torch.utils.data.DataLoader)
                 validate_tensor_generator(
-                    dataloader, params.tensor_schema, spec, batch_size
+                    dataloader,
+                    [params.tensor_schema for params in all_array_params],
+                    [spec] * len(all_array_params),
+                    batch_size,
                 )
                 # ensure the dataloader can be iterated again
                 n1 = sum(1 for _ in dataloader)
                 assert n1 != 0
                 n2 = sum(1 for _ in dataloader)
                 assert n1 == n2
+
+        with ingest_in_tiledb(tmpdir, spec) as (x_params, x_data):
+            # load tensors from single array
+            test(x_params)
+            with ingest_in_tiledb(tmpdir, spec) as (y_params, y_data):
+                # load tensors from two arrays
+                test(x_params, y_params)
 
     @pytest.mark.parametrize(
         "spec",
@@ -75,40 +85,7 @@ class TestPyTorchTileDBDataLoader:
                 assert n1 == n2
 
     @pytest.mark.parametrize("spec", ArraySpec.combinations())
-    @pytest.mark.parametrize("batch_size", [8, None])
-    @pytest.mark.parametrize("shuffle_buffer_size", [0, 16])
-    @pytest.mark.parametrize("num_workers", [0, 2])
-    def test_multiple_arrays(
-        self, tmpdir, spec, batch_size, shuffle_buffer_size, num_workers
-    ):
-        with ingest_in_tiledb(tmpdir, spec) as (x_params, x_data):
-            with ingest_in_tiledb(tmpdir, spec) as (y_params, y_data):
-                try:
-                    dataloader = PyTorchTileDBDataLoader(
-                        x_params,
-                        y_params,
-                        shuffle_buffer_size=shuffle_buffer_size,
-                        batch_size=batch_size,
-                        num_workers=num_workers,
-                    )
-                except NotImplementedError:
-                    assert num_workers and spec.sparse
-                else:
-                    assert isinstance(dataloader, torch.utils.data.DataLoader)
-                    validate_tensor_generator(
-                        dataloader,
-                        [x_params.tensor_schema, y_params.tensor_schema],
-                        [spec, spec],
-                        batch_size,
-                    )
-                    # ensure the dataloader can be iterated again
-                    n1 = sum(1 for _ in dataloader)
-                    assert n1 != 0
-                    n2 = sum(1 for _ in dataloader)
-                    assert n1 == n2
-
-    @pytest.mark.parametrize("spec", ArraySpec.combinations())
-    def test_multiple_arrays_unequal_key_ranges(self, tmpdir, spec):
+    def test_unequal_key_ranges(self, tmpdir, spec):
         y_spec = ArraySpec(
             # Add one extra key on Y
             shape=(spec.shape[0] + 1, *spec.shape[1:]),
