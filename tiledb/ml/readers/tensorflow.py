@@ -8,7 +8,7 @@ import tensorflow as tf
 from ._tensor_schema import (
     MappedTensorSchema,
     RaggedArray,
-    SparseData,
+    SparseArray,
     TensorKind,
     TensorSchema,
 )
@@ -84,8 +84,7 @@ def _get_tensor_specs(
     return specs if len(specs) > 1 else specs[0]
 
 
-def _to_sparse_tensor(sd: SparseData) -> tf.SparseTensor:
-    sa = sd.to_sparse_array()
+def _to_sparse_tensor(sa: SparseArray) -> tf.SparseTensor:
     coords = getattr(sa, "coords", None)
     if coords is None:
         # sa is a scipy.sparse.csr_matrix

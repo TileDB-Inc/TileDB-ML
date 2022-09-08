@@ -47,7 +47,7 @@ class Collator(ABC, Generic[T]):
             assert schema.kind in (TensorKind.SPARSE_COO, TensorKind.SPARSE_CSR)
             to_csr = schema.kind is TensorKind.SPARSE_CSR
             # The sparse arrays to be converted/collated are scipy.sparse.csr_matrix if
-            # (and only if) the schema ndim == 2; see SparseData.to_sparse_array()
+            # (and only if) the schema ndim == 2
             if len(schema.shape) == 2:
                 collator = ScipySparseCSRCollator(to_csr)
             else:
