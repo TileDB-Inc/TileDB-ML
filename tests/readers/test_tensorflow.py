@@ -59,6 +59,7 @@ class TestTensorflowTileDBDataset:
             key_dim_dtype=spec.key_dim_dtype,
             non_key_dim_dtype=spec.non_key_dim_dtype,
             num_fields=spec.num_fields,
+            tensor_kind=spec.tensor_kind,
         )
         with ingest_in_tiledb(tmpdir, spec) as (x_params, x_data):
             with ingest_in_tiledb(tmpdir, y_spec) as (y_params, y_data):
@@ -87,11 +88,14 @@ class TestTensorflowTileDBDataset:
 
     @pytest.mark.parametrize(
         "spec",
-        ArraySpec.combinations(sparse=(True,), non_key_dim_dtype=(np.dtype(np.int32),)),
+        ArraySpec.combinations(
+            sparse=[True],
+            non_key_dim_dtype=[np.dtype(np.int32)],
+            tensor_kind=[TensorKind.SPARSE_CSR],
+        ),
     )
     def test_csr(self, tmpdir, spec):
-        tensor_kind = TensorKind.SPARSE_CSR
-        with ingest_in_tiledb(tmpdir, spec, tensor_kind) as (params, data):
+        with ingest_in_tiledb(tmpdir, spec) as (params, data):
             with pytest.raises(NotImplementedError) as ex:
                 TensorflowTileDBDataset(params)
             assert "TensorKind.SPARSE_CSR tensors not supported" in str(ex.value)

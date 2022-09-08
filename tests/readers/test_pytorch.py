@@ -39,7 +39,10 @@ class TestPyTorchTileDBDataLoader:
                     num_workers=num_workers,
                 )
             except NotImplementedError:
-                assert num_workers and (torchdata.__version__ < "0.4" or spec.sparse)
+                assert num_workers and (
+                    torchdata.__version__ < "0.4"
+                    or spec.tensor_kind is not TensorKind.DENSE
+                )
             else:
                 assert isinstance(dataloader, torch.utils.data.DataLoader)
                 validate_tensor_generator(
@@ -63,13 +66,16 @@ class TestPyTorchTileDBDataLoader:
 
     @pytest.mark.parametrize(
         "spec",
-        ArraySpec.combinations(sparse=(True,), non_key_dim_dtype=(np.dtype(np.int32),)),
+        ArraySpec.combinations(
+            sparse=[True],
+            non_key_dim_dtype=[np.dtype(np.int32)],
+            tensor_kind=[TensorKind.SPARSE_CSR],
+        ),
     )
     @pytest.mark.parametrize("batch_size", [8, None])
     @pytest.mark.parametrize("shuffle_buffer_size", [0, 16])
     def test_csr(self, tmpdir, spec, batch_size, shuffle_buffer_size):
-        tensor_kind = TensorKind.SPARSE_CSR
-        with ingest_in_tiledb(tmpdir, spec, tensor_kind) as (params, data):
+        with ingest_in_tiledb(tmpdir, spec) as (params, data):
             try:
                 dataloader = PyTorchTileDBDataLoader(
                     params,
@@ -103,6 +109,7 @@ class TestPyTorchTileDBDataLoader:
             key_dim_dtype=spec.key_dim_dtype,
             non_key_dim_dtype=spec.non_key_dim_dtype,
             num_fields=spec.num_fields,
+            tensor_kind=spec.tensor_kind,
         )
         with ingest_in_tiledb(tmpdir, spec) as (x_params, x_data):
             with ingest_in_tiledb(tmpdir, y_spec) as (y_params, y_data):
