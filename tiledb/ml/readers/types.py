@@ -29,7 +29,7 @@ class ArrayParams:
     fields: Sequence[str] = ()
     dim_selectors: Mapping[str, Selector] = field(default_factory=dict)
     tensor_kind: Optional[TensorKind] = None
-    _tensor_schema_kwargs: Mapping[str, Any] = field(init=False, repr=False)
+    tensor_schema: TensorSchema[Any] = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         all_attrs = [self.array.attr(i).name for i in range(self.array.nattr)]
@@ -61,6 +61,11 @@ class ArrayParams:
             all_dims[0], all_dims[key_dim_index] = all_dims[key_dim_index], all_dims[0]
             ned[0], ned[key_dim_index] = ned[key_dim_index], ned[0]
 
+        sparse = self.array.schema.sparse
+        if self.dim_selectors and sparse:
+            raise NotImplementedError(
+                "dim_selectors is currently implemented only for dense arrays"
+            )
         dim_selector_indices = {}
         for dim, selector in self.dim_selectors.items():
             i = all_dims.index(dim)
@@ -70,7 +75,20 @@ class ArrayParams:
                 raise TypeError("dim_selectors values must be slices or sequences")
             dim_selector_indices[i] = selector
 
-        tensor_schema_kwargs = dict(
+        if self.tensor_kind is not None:
+            tensor_kind = self.tensor_kind
+        elif not sparse:
+            tensor_kind = TensorKind.DENSE
+        elif not all(
+            np.issubdtype(self.array.dim(dim).dtype, np.integer) for dim in all_dims[1:]
+        ):
+            tensor_kind = TensorKind.RAGGED
+        else:
+            tensor_kind = TensorKind.SPARSE_COO
+
+        factory = TensorSchemaFactories[tensor_kind]
+        tensor_schema = factory(
+            kind=tensor_kind,
             _array=self.array,
             _key_dim_index=key_dim_index,
             _fields=tuple(final_fields),
@@ -79,27 +97,4 @@ class ArrayParams:
             _dim_selectors=dim_selector_indices,
             _query_kwargs={"attrs": tuple(attrs), "dims": tuple(dims)},
         )
-        object.__setattr__(self, "_tensor_schema_kwargs", tensor_schema_kwargs)
-
-    @property
-    def tensor_schema(self) -> TensorSchema[Any]:
-        """Create a `TensorSchema` from this `ArrayParams` instance."""
-        if self.tensor_kind is not None:
-            tensor_kind = self.tensor_kind
-        elif not self.array.schema.sparse:
-            tensor_kind = TensorKind.DENSE
-        elif not all(
-            np.issubdtype(self.array.dim(dim).dtype, np.integer)
-            for dim in self._tensor_schema_kwargs["_all_dims"][1:]
-        ):
-            tensor_kind = TensorKind.RAGGED
-        else:
-            tensor_kind = TensorKind.SPARSE_COO
-
-        if self.dim_selectors and tensor_kind is not TensorKind.DENSE:
-            raise NotImplementedError(
-                "dim_selectors is currently implemented only for dense arrays"
-            )
-
-        factory = TensorSchemaFactories[tensor_kind]
-        return factory(kind=tensor_kind, **self._tensor_schema_kwargs)
+        object.__setattr__(self, "tensor_schema", tensor_schema)
