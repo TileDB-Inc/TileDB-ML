@@ -1,8 +1,11 @@
 """Functionality for loading data from TileDB arrays to the Tensorflow Data API."""
 
+from functools import singledispatch
 from typing import Sequence, Union
 
 import numpy as np
+import scipy.sparse
+import sparse
 import tensorflow as tf
 
 from ._tensor_schema import (
@@ -84,13 +87,24 @@ def _get_tensor_specs(
     return specs if len(specs) > 1 else specs[0]
 
 
+@singledispatch
 def _to_sparse_tensor(sa: SparseArray) -> tf.SparseTensor:
-    coords = getattr(sa, "coords", None)
-    if coords is None:
-        # sa is a scipy.sparse.csr_matrix
-        coo = sa.tocoo()
-        coords = np.array((coo.row, coo.col))
-    return tf.SparseTensor(coords.T, sa.data, sa.shape)
+    """Create a tf.SparseTensor from a sparse array"""
+    raise NotImplementedError
+
+
+@_to_sparse_tensor.register(scipy.sparse.csr_matrix)
+def _csr_to_sparse_tensor(csr: scipy.sparse.csr_matrix) -> tf.SparseTensor:
+    """Create a tf.SparseTensor from a scipy.sparse.csr_matrix instance"""
+    coo = csr.tocoo()
+    coords = np.array((coo.row, coo.col))
+    return tf.SparseTensor(coords.T, coo.data, coo.shape)
+
+
+@_to_sparse_tensor.register(sparse.COO)
+def _coo_to_sparse_tensor(coo: sparse.COO) -> tf.SparseTensor:
+    """Create a tf.SparseTensor from a sparse.COO instance"""
+    return tf.SparseTensor(coo.coords.T, coo.data, coo.shape)
 
 
 def _to_ragged_tensor(ra: RaggedArray) -> tf.RaggedTensor:
