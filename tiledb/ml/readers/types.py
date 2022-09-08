@@ -86,7 +86,7 @@ class ArrayParams:
         else:
             tensor_kind = TensorKind.SPARSE_COO
 
-        factory = TensorSchemaFactories[tensor_kind]
+        factory = TensorSchemaFactories[sparse, tensor_kind]
         tensor_schema = factory(
             kind=tensor_kind,
             _array=self.array,
