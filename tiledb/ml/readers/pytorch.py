@@ -1,7 +1,6 @@
 """Functionality for loading data from TileDB arrays to the PyTorch Dataloader API."""
 
 from functools import partial
-from operator import methodcaller
 from typing import Any, Callable, Iterator, Sequence, Tuple, Union
 
 import numpy as np
@@ -12,7 +11,7 @@ from torchdata.datapipes.iter import IterableWrapper
 
 from ._pytorch_collators import Collator
 from ._ranges import InclusiveRange
-from ._tensor_schema import MappedTensorSchema, TensorKind, TensorSchema
+from ._tensor_schema import TensorKind, TensorSchema
 from .types import ArrayParams
 
 TensorLike = Union[np.ndarray, sparse.COO, scipy.sparse.csr_matrix]
@@ -51,14 +50,12 @@ def PyTorchTileDBDataLoader(
     schemas = []
     for array_params in all_array_params:
         schema = array_params.tensor_schema
-        if schema.kind in (TensorKind.SPARSE_COO, TensorKind.SPARSE_CSR):
-            # unbatched 3D arrays generate 2D tensors so they can be converted to CSR
-            # anything else with ndim>=3 cannot
-            if schema.kind is TensorKind.SPARSE_CSR:
-                ndim = len(schema.shape)
-                if ndim > 3 or ndim == 3 and is_batched:
-                    raise ValueError(f"Cannot generate CSR tensors for {ndim}D array")
-            schema = MappedTensorSchema(schema, methodcaller("to_sparse_array"))
+        # unbatched 3D arrays generate 2D tensors so they can be converted to CSR
+        # anything else with ndim>=3 cannot
+        if schema.kind is TensorKind.SPARSE_CSR:
+            ndim = len(schema.shape)
+            if ndim > 3 or ndim == 3 and is_batched:
+                raise ValueError(f"Cannot generate CSR tensors for {ndim}D array")
         schemas.append(schema)
 
     key_range = schemas[0].key_range

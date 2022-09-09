@@ -324,22 +324,12 @@ class BaseSparseTensorSchema(TensorSchema[Tensor]):
         return max(1, memory_budget // ceil(max(bytes_per_cell)))
 
 
-@dataclass(frozen=True)
-class SparseData:
-    coords: np.ndarray
-    data: np.ndarray
-    shape: Sequence[int]
-
-    def to_sparse_array(self) -> Union[scipy.sparse.csr_matrix, sparse.COO]:
-        if len(self.shape) == 2:
-            return scipy.sparse.csr_matrix((self.data, self.coords), self.shape)
-        else:
-            return sparse.COO(self.coords, self.data, self.shape)
+SparseArray = Union[scipy.sparse.csr_matrix, sparse.COO]
 
 
-class SparseTensorSchema(BaseSparseTensorSchema[SparseData]):
+class SparseTensorSchema(BaseSparseTensorSchema[SparseArray]):
     """
-    TensorSchema for reading sparse TileDB arrays as SparseData instances.
+    TensorSchema for reading sparse TileDB arrays as SparseArray instances.
     """
 
     def __init__(self, **kwargs: Any):
@@ -348,8 +338,9 @@ class SparseTensorSchema(BaseSparseTensorSchema[SparseData]):
 
     def iter_tensors(
         self, key_ranges: Iterable[InclusiveRange[Any, int]]
-    ) -> Union[Iterable[SparseData], Iterable[Sequence[SparseData]]]:
+    ) -> Union[Iterable[SparseArray], Iterable[Sequence[SparseArray]]]:
         shape = list(cast(Sequence[int], self.shape))
+        SparseArrayFactory = _csr_matrix if len(shape) == 2 else sparse.COO
         query = self.query
         get_data = itemgetter(*self._fields)
         single_field = len(self._fields) == 1
@@ -372,11 +363,17 @@ class SparseTensorSchema(BaseSparseTensorSchema[SparseData]):
             )
             coords = np.array(coords)
 
-            # yield either a single SparseData or one SparseData per field
+            # yield either a single SparseArray or one SparseArray per field
             if single_field:
-                yield SparseData(coords, data, shape)
+                yield SparseArrayFactory(coords, data, shape)
             else:
-                yield tuple(SparseData(coords, d, shape) for d in data)
+                yield tuple(SparseArrayFactory(coords, d, shape) for d in data)
+
+
+def _csr_matrix(
+    coords: np.ndarray, data: np.ndarray, shape: Sequence[int]
+) -> scipy.sparse.csr_matrix:
+    return scipy.sparse.csr_matrix((data, coords), shape)
 
 
 RaggedArray = Sequence[np.ndarray]
