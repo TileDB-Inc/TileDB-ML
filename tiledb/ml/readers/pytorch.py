@@ -7,20 +7,16 @@ from typing import Any, Callable, Iterator, Sequence, Tuple, Union
 import numpy as np
 import scipy.sparse
 import sparse
-import torch
 from torch.utils.data import DataLoader, IterDataPipe
 from torchdata.datapipes.iter import IterableWrapper
 
+from ._pytorch_collators import Collator
 from ._ranges import InclusiveRange
 from ._tensor_schema import MappedTensorSchema, TensorKind, TensorSchema
 from .types import ArrayParams
 
-Tensor = Union[np.ndarray, sparse.COO, scipy.sparse.csr_matrix]
-TensorSequence = Union[
-    Sequence[np.ndarray], Sequence[sparse.COO], Sequence[scipy.sparse.csr_matrix]
-]
-TensorOrSequence = Union[Tensor, TensorSequence]
-OneOrMoreTensorsOrSequences = Union[TensorOrSequence, Tuple[TensorOrSequence, ...]]
+TensorLike = Union[np.ndarray, sparse.COO, scipy.sparse.csr_matrix]
+TensorLikeOrTuple = Union[TensorLike, Tuple[TensorLike, ...]]
 
 
 def PyTorchTileDBDataLoader(
@@ -50,10 +46,18 @@ def PyTorchTileDBDataLoader(
     Users should NOT pass (TileDB-ML either doesn't support or implements internally the corresponding functionality)
     the following arguments: 'shuffle', 'sampler', 'batch_sampler', 'worker_init_fn' and 'collate_fn'.
     """
+    is_batched = kwargs.get("batch_size", 1) is not None
+
     schemas = []
     for array_params in all_array_params:
         schema = array_params.tensor_schema
         if schema.kind in (TensorKind.SPARSE_COO, TensorKind.SPARSE_CSR):
+            # unbatched 3D arrays generate 2D tensors so they can be converted to CSR
+            # anything else with ndim>=3 cannot
+            if schema.kind is TensorKind.SPARSE_CSR:
+                ndim = len(schema.shape)
+                if ndim > 3 or ndim == 3 and is_batched:
+                    raise ValueError(f"Cannot generate CSR tensors for {ndim}D array")
             schema = MappedTensorSchema(schema, methodcaller("to_sparse_array"))
         schemas.append(schema)
 
@@ -93,12 +97,12 @@ def PyTorchTileDBDataLoader(
         # run the shuffling on this process, not on workers
         kwargs["num_workers"] = 0
 
-    # determine the collate function that transforms sequences of rows into `torch.Tensor`s
-    collators = tuple(map(_get_tensor_collator, schemas))
-    collate_fn = _CompositeCollator(*collators) if len(collators) > 1 else collators[0]
+    # construct an appropriate collate function
+    collator = Collator.from_schemas(*schemas)
+    kwargs["collate_fn"] = collator.collate if is_batched else collator.convert
 
     # return the DataLoader for the final datapipe
-    return DataLoader(datapipe, collate_fn=collate_fn, **kwargs)
+    return DataLoader(datapipe, **kwargs)
 
 
 class DeferredIterableIterDataPipe(IterDataPipe):
@@ -116,15 +120,15 @@ def _identity(x: Any) -> Any:
 
 
 def _get_unbatched_datapipe(
-    schemas: Sequence[TensorSchema[Tensor]],
+    schemas: Sequence[TensorSchema[TensorLike]],
     key_range: InclusiveRange[Any, int],
-) -> IterDataPipe[OneOrMoreTensorsOrSequences]:
+) -> IterDataPipe[Union[TensorLikeOrTuple, Tuple[TensorLikeOrTuple, ...]]]:
     """Return a datapipe over unbatched rows for the given schemas and key range.
 
-    If `len(schemas) == 1`, each item of the datapipe is either a single `Tensor` or a
-    sequence of `Tensor`s, depending on `schemas[0].num_fields`.
-    If `len(schemas) > 1`, each item of the datapipe is a tuple of (`Tensor` or sequence
-    of `Tensor`s, depending on `schema.num_fields`), one for each schema.
+    If `len(schemas) == 1`, each item of the datapipe is either a single `TensorLike`
+    or a sequence of `TensorLike`s, depending on `schemas[0].num_fields`.
+    If `len(schemas) > 1`, each item of the datapipe is a tuple of (`TensorLike` or
+    sequence of `TensorLike`s, depending on `schema.num_fields`), one for each schema.
     """
     schema_dps = [
         DeferredIterableIterDataPipe(_unbatch_tensors, schema, key_range)
@@ -137,12 +141,14 @@ def _get_unbatched_datapipe(
 
 
 def _unbatch_tensors(
-    schema: TensorSchema[Tensor], key_range: InclusiveRange[Any, int]
-) -> Iterator[TensorOrSequence]:
+    schema: TensorSchema[TensorLike], key_range: InclusiveRange[Any, int]
+) -> Iterator[TensorLikeOrTuple]:
     """
-    Generate batches of `Tensor`s for the given schema and key range and then unbatch them
-    into single "rows". Each row is either a single `Tensor` (if schema.num_fields == 1)
-    or a sequence of `Tensor`s (if schema.num_fields > 1).
+    Generate batches of `TensorLike`s for the given schema and key range and then unbatch
+    them into single "rows".
+
+    If `schema.num_fields == 1`, each "row" is a single `TensorLike`
+    If `schema.num_fields > 1`, each "row" is a sequence of `TensorLike`s
     """
     batches = schema.iter_tensors(
         key_range.partition_by_weight(schema.max_partition_weight)
@@ -152,86 +158,3 @@ def _unbatch_tensors(
         batches = (zip(*batch) for batch in batches)
     # flatten batches of rows
     return (row for batch in batches for row in batch)
-
-
-_SingleCollator = Callable[[TensorSequence], torch.Tensor]
-
-
-class _CompositeCollator:
-    """
-    A callable for collating "rows" of data by a separate collator for each "column".
-    Returns the collated columns collected into a tuple.
-    """
-
-    def __init__(self, *collators: _SingleCollator):
-        self._collators = collators
-
-    def __call__(self, rows: Sequence[TensorSequence]) -> Sequence[torch.Tensor]:
-        columns = tuple(zip(*rows))
-        collators = self._collators
-        assert len(columns) == len(collators)
-        return tuple(collator(column) for collator, column in zip(collators, columns))
-
-
-def _ndarray_collate(arrays: Sequence[np.ndarray]) -> torch.Tensor:
-    """Collate multiple Numpy arrays to a torch.Tensor with strided layout."""
-    # Specialized version of default_collate for collating Numpy arrays
-    # Faster than `torch.as_tensor(arrays)` (https://github.com/pytorch/pytorch/pull/51731)
-    # and `torch.stack([torch.as_tensor(array) for array in arrays]])`
-    return torch.from_numpy(np.stack(arrays))
-
-
-def _ragged_ndarray_collate(arrays: Sequence[np.ndarray]) -> torch.Tensor:
-    """Collate multiple 1D Numpy arrays of possibly different size to a NestedTensor."""
-    return torch.nested_tensor(tuple(map(torch.from_numpy, arrays)))
-
-
-def _coo_collate(arrays: Sequence[sparse.COO]) -> torch.Tensor:
-    """Collate multiple sparse.COO arrays to a torch.Tensor with sparse_coo layout."""
-    stacked = sparse.stack(arrays)
-    return torch.sparse_coo_tensor(stacked.coords, stacked.data, stacked.shape)
-
-
-def _csr_to_coo_collate(arrays: Sequence[scipy.sparse.csr_matrix]) -> torch.Tensor:
-    """Collate multiple Scipy CSR matrices to a torch.Tensor with sparse_coo layout."""
-    stacked = scipy.sparse.vstack(arrays).tocoo()
-    coords = np.stack((stacked.row, stacked.col))
-    return torch.sparse_coo_tensor(coords, stacked.data, stacked.shape)
-
-
-def _csr_collate(arrays: Sequence[scipy.sparse.csr_matrix]) -> torch.Tensor:
-    """Collate multiple Scipy CSR matrices to a torch.Tensor with sparse_csr layout."""
-    stacked = scipy.sparse.vstack(arrays)
-    return torch.sparse_csr_tensor(
-        torch.from_numpy(stacked.indptr),
-        torch.from_numpy(stacked.indices),
-        stacked.data,
-        stacked.shape,
-    )
-
-
-def _get_tensor_collator(
-    schema: TensorSchema[Tensor],
-) -> Union[_SingleCollator, _CompositeCollator]:
-    """Return a callable for collating a sequence into a tensor based on the given schema."""
-    if schema.kind is TensorKind.DENSE:
-        collator = _ndarray_collate
-    elif schema.kind is TensorKind.RAGGED:
-        collator = _ragged_ndarray_collate
-    elif schema.kind is TensorKind.SPARSE_COO:
-        if len(schema.shape) != 2:
-            collator = _coo_collate
-        else:
-            collator = _csr_to_coo_collate
-    elif schema.kind is TensorKind.SPARSE_CSR:
-        if len(schema.shape) != 2:
-            raise ValueError("SPARSE_CSR is supported only for 2D tensors")
-        collator = _csr_collate
-    else:
-        assert False, schema.kind
-
-    num_fields = schema.num_fields
-    if num_fields == 1:
-        return collator
-    else:
-        return _CompositeCollator(*(collator,) * num_fields)
