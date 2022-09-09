@@ -24,8 +24,7 @@ def TensorflowTileDBDataset(
     """Return a tf.data.Dataset for loading data from TileDB arrays.
     :param all_array_params: One or more `ArrayParams` instances, one per TileDB array.
     :param num_workers: If greater than zero, create a threadpool of `num_workers` threads
-        used to fetch inputs asynchronously and in parallel. Note: when `num_workers` > 1
-        yielded batches may be shuffled even if `shuffle_buffer_size` is zero.
+        used to fetch inputs asynchronously and in parallel.
     """
     schemas = []
     for array_params in all_array_params:

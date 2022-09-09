@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from typing import Any, Sequence
 
 import numpy as np
-import pytest
 import tensorflow as tf
 import torch
 
@@ -23,66 +22,31 @@ class ArraySpec:
     non_key_dim_dtype: np.dtype
     num_fields: int
 
-
-def parametrize_for_dataset(
-    *,
-    x_sparse=(True, False),
-    y_sparse=(True, False),
-    x_shape=((107, 10), (107, 10, 3)),
-    y_shape=((107, 5), (107, 5, 2)),
-    x_key_dim=(0, 1),
-    y_key_dim=(0, 1),
-    key_dim_dtype=(np.dtype(np.int32), np.dtype("datetime64[D]"), np.dtype(np.bytes_)),
-    non_key_dim_dtype=(np.dtype(np.int32), np.dtype(np.float32)),
-    num_fields=(0, 1, 2),
-    batch_size=(8, None),
-    shuffle_buffer_size=(16,),
-    num_workers=(0, 2),
-):
-    argnames = ("x_spec", "y_spec", "batch_size", "shuffle_buffer_size", "num_workers")
-    argvalues = []
-    for (
-        x_sparse_,
-        y_sparse_,
-        x_shape_,
-        y_shape_,
-        x_key_dim_,
-        y_key_dim_,
-        key_dim_dtype_,
-        non_key_dim_dtype_,
-        num_fields_,
-        batch_size_,
-        shuffle_buffer_size_,
-        num_workers_,
-    ) in it.product(
-        x_sparse,
-        y_sparse,
-        x_shape,
-        y_shape,
-        x_key_dim,
-        y_key_dim,
-        key_dim_dtype,
-        non_key_dim_dtype,
-        num_fields,
-        batch_size,
-        shuffle_buffer_size,
-        num_workers,
+    @staticmethod
+    def combinations(
+        *,
+        sparse=(True, False),
+        shape=((107, 10), (107, 10, 3)),
+        key_dim=(0, 1),
+        key_dim_dtype=(
+            np.dtype(np.int32),
+            np.dtype("datetime64[D]"),
+            np.dtype(np.bytes_),
+        ),
+        non_key_dim_dtype=(np.dtype(np.int32), np.dtype(np.float32)),
+        num_fields=(0, 1, 2),
     ):
-        # if x and/or y is dense, all dtypes must be integer
-        if not x_sparse_ or not y_sparse_:
-            if not np.issubdtype(key_dim_dtype_, np.integer):
-                continue
-            if not np.issubdtype(non_key_dim_dtype_, np.integer):
-                continue
-
-        common_args = (key_dim_dtype_, non_key_dim_dtype_, num_fields_)
-        x_spec = ArraySpec(x_sparse_, x_shape_, x_key_dim_, *common_args)
-        y_spec = ArraySpec(y_sparse_, y_shape_, y_key_dim_, *common_args)
-        argvalues.append(
-            (x_spec, y_spec, batch_size_, shuffle_buffer_size_, num_workers_)
-        )
-
-    return pytest.mark.parametrize(argnames, argvalues)
+        for combo in it.product(
+            sparse, shape, key_dim, key_dim_dtype, non_key_dim_dtype, num_fields
+        ):
+            spec = ArraySpec(*combo)
+            # for dense arrays key_dim_dtype and non_key_dim_dtype must be integer
+            if not spec.sparse:
+                if not np.issubdtype(spec.key_dim_dtype, np.integer):
+                    continue
+                if not np.issubdtype(spec.non_key_dim_dtype, np.integer):
+                    continue
+            yield spec
 
 
 @contextmanager
@@ -203,14 +167,20 @@ def _int_to_bytes(n: int) -> bytes:
     return bytes(s)
 
 
-def validate_tensor_generator(
-    generator, x_schema, y_schema, x_spec, y_spec, batch_size
-):
-    for x_tensors, y_tensors in generator:
-        for x_tensor in x_tensors if isinstance(x_tensors, Sequence) else [x_tensors]:
-            _validate_tensor(x_tensor, x_schema.kind, x_spec.shape[1:], batch_size)
-        for y_tensor in y_tensors if isinstance(y_tensors, Sequence) else [y_tensors]:
-            _validate_tensor(y_tensor, y_schema.kind, y_spec.shape[1:], batch_size)
+def validate_tensor_generator(generator, schemas, specs, batch_size):
+    if not isinstance(schemas, Sequence):
+        schemas = [schemas]
+    if not isinstance(specs, Sequence):
+        specs = [specs]
+    for batches in generator:
+        if len(schemas) == 1:
+            batches = [batches]
+        assert len(schemas) == len(specs) == len(batches)
+        for schema, spec, batch in zip(schemas, specs, batches):
+            if not isinstance(batch, Sequence):
+                batch = [batch]
+            for tensor in batch:
+                _validate_tensor(tensor, schema.kind, spec.shape[1:], batch_size)
 
 
 def _validate_tensor(tensor, schema_tensor_kind, spec_row_shape, batch_size):
