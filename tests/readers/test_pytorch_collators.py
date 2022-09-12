@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 import scipy.sparse
 import sparse
+import torch
 
 from tiledb.ml.readers import _pytorch_collators as pc
 
@@ -30,6 +31,9 @@ class TestNumpyArrayCollator:
         assert get_tensor_kind(tensor) is pc.TensorKind.DENSE
         np.testing.assert_array_equal(tensor, value)
 
+    @pytest.mark.skipif(
+        not hasattr(torch, "nested"), reason="Nested tensors not supported"
+    )
     def test_collate_nested(self):
         batch = [np.random.rand(8), np.random.rand(3), np.random.rand(7)]
         tensor = pc.NumpyArrayCollator(to_nested=True).collate(batch)
