@@ -8,14 +8,8 @@ import scipy.sparse
 import sparse
 import tensorflow as tf
 
-from ._tensor_schema import (
-    MappedTensorSchema,
-    RaggedArray,
-    SparseArray,
-    TensorKind,
-    TensorSchema,
-)
-from .types import ArrayParams
+from ._tensor_schema import MappedTensorSchema, RaggedArray, SparseArray, TensorSchema
+from .types import ArrayParams, TensorKind
 
 Tensor = Union[np.ndarray, tf.SparseTensor]
 

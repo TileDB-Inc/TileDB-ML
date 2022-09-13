@@ -1,6 +1,7 @@
 from typing import Any, Callable, Mapping, Tuple
 
-from .base import Selector, TensorKind, TensorSchema
+from ..types import TensorKind
+from .base import TensorSchema
 from .dense import DenseTensorSchema
 from .mapped import MappedTensorSchema
 from .ragged import RaggedArray, RaggedTensorSchema

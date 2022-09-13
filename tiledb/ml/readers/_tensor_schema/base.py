@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import enum
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import (
@@ -21,20 +20,10 @@ import numpy as np
 
 import tiledb
 
+from ..types import Selector, TensorKind
 from .ranges import InclusiveRange
 
-
-class TensorKind(enum.Enum):
-    """Kind of tensor."""
-
-    DENSE = enum.auto()
-    SPARSE_COO = enum.auto()
-    SPARSE_CSR = enum.auto()
-    RAGGED = enum.auto()
-
-
 Tensor = TypeVar("Tensor")
-Selector = Union[slice, Sequence[int]]
 
 
 @dataclass(frozen=True)  # type: ignore  # https://github.com/python/mypy/issues/5374
