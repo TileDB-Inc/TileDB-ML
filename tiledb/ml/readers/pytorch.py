@@ -11,8 +11,8 @@ from torch.utils.data import DataLoader, IterDataPipe
 from torchdata.datapipes.iter import IterableWrapper
 
 from ._pytorch_collators import Collator
-from ._ranges import InclusiveRange
 from ._tensor_schema import TensorKind, TensorSchema
+from ._tensor_schema.ranges import InclusiveRange
 from .types import ArrayParams
 
 TensorLike = Union[np.ndarray, sparse.COO, scipy.sparse.csr_matrix]
