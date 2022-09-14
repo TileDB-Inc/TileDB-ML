@@ -132,24 +132,36 @@ def test_max_partition_weight_dense(
 
 @pytest.mark.parametrize("memory_budget", [2048, 4096])
 @pytest.mark.parametrize("key_dim", ["d0", "d1", "d3", "d4"])
+@pytest.mark.parametrize(
+    "dim_selectors",
+    [
+        {},
+        {"d0": slice(100, 200), "d1": list(range(-100, 100, 2))},
+        {"d3": slice(np.datetime64("2021-01-01"), np.datetime64("2021-12-31"))},
+        {"d2": slice(0.25, 0.75), "d4": slice("q", None)},
+        {"d0": list(range(1, 1000, 5)), "d2": slice(None, 0.25)},
+    ],
+)
 @parametrize_fields("d0", "d1", "d2", "d3", "d4", "af8", "af4", "au1")
-def test_max_partition_weight_sparse(sparse_uri, fields, key_dim, memory_budget):
+def test_max_partition_weight_sparse(
+    sparse_uri, fields, key_dim, memory_budget, dim_selectors
+):
     config = {
         "py.max_incomplete_retries": 0,
         "py.init_buffer_bytes": memory_budget,
     }
+    if key_dim in dim_selectors:  # remove key_dim from dim_selectors
+        dim_selectors = {k: v for k, v in dim_selectors.items() if k != key_dim}
     with tiledb.open(sparse_uri, config=config) as a:
-        key_dim_dtype = a.dim(key_dim).dtype
-        schema = ArrayParams(a, key_dim, fields).tensor_schema
+        schema = ArrayParams(a, key_dim, fields, dim_selectors).tensor_schema
         max_weight = schema.max_partition_weight
-        for key_range in schema.key_range.partition_by_weight(max_weight):
+        key_ranges = list(schema.key_range.partition_by_weight(max_weight))
+        for i, key_range in enumerate(key_ranges):
             # query succeeds without incomplete retries
             schema.query[key_range.min : key_range.max]
 
-            if key_range.max < schema.key_range.max:
-                # querying a larger slice should fail. `key_range.max + 1` makes sense
-                # only for integer key dim so test just integer key dims
-                if np.issubdtype(key_dim_dtype, np.integer):
-                    with pytest.raises(tiledb.TileDBError) as ex:
-                        schema.query[key_range.min : key_range.max + 1]
-                    assert "py.max_incomplete_retries" in str(ex.value)
+            if i < len(key_ranges) - 1:
+                # querying a larger slice should fail
+                with pytest.raises(tiledb.TileDBError) as ex:
+                    schema.query[key_range.min : key_ranges[i + 1].min]
+                assert "py.max_incomplete_retries" in str(ex.value)

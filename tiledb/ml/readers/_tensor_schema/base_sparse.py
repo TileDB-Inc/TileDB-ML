@@ -23,10 +23,10 @@ class BaseSparseTensorSchema(TensorSchema[Tensor]):
         try:
             return self._key_range
         except AttributeError:
-            key_counter: Counter[Any] = Counter()
+            key_counter = Counter[Any]()
             key_dim = self.key_dim
-            query = self._array.query(dims=(key_dim,), attrs=(), return_incomplete=True)
-            for result in query.multi_index[:]:
+            query = self._get_query(dims=(key_dim,), attrs=(), return_incomplete=True)
+            for result in query[:]:
                 key_counter.update(result[key_dim])
             self._key_range = InclusiveRange.factory(key_counter)
             return self._key_range
@@ -45,10 +45,9 @@ class BaseSparseTensorSchema(TensorSchema[Tensor]):
         #   cell (=8 bytes).
         offset_itemsize = np.dtype(np.uint64).itemsize
         attr_or_dim_dtype = self._array.schema.attr_or_dim_dtype
-        query = self._array.query(return_incomplete=True, **self._query_kwargs)
-        est_sizes = query.multi_index[:].estimated_result_sizes()
+        query = self._get_query(return_incomplete=True, **self._query_kwargs)
         bytes_per_cell = []
-        for field, est_result_size in est_sizes.items():
+        for field, est_result_size in query[:].estimated_result_sizes().items():
             if est_result_size.offsets_bytes == 0:
                 bytes_per_cell.append(attr_or_dim_dtype(field).itemsize)
             else:
