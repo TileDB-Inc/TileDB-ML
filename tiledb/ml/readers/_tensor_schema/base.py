@@ -7,13 +7,11 @@ from typing import (
     Dict,
     Generic,
     Iterable,
-    List,
     Optional,
     Sequence,
     Tuple,
     TypeVar,
     Union,
-    cast,
 )
 
 import numpy as np
@@ -21,6 +19,7 @@ import numpy as np
 import tiledb
 
 from ..types import Selector, TensorKind
+from .query import KeyDimQuery
 from .ranges import InclusiveRange
 
 Tensor = TypeVar("Tensor")
@@ -80,10 +79,7 @@ class TensorSchema(ABC, Generic[Tensor]):
     def query(self) -> KeyDimQuery:
         """A sliceable object for querying the TileDB array along the key dimension"""
         return KeyDimQuery(
-            self._array,
-            self._key_dim_index,
-            self._dim_selectors,
-            **self._query_kwargs,
+            self._array, self._key_dim_index, self._dim_selectors, **self._query_kwargs
         )
 
     @property
@@ -129,27 +125,3 @@ class TensorSchema(ABC, Generic[Tensor]):
 
         :param key_ranges: Inclusive ranges along the key dimension.
         """
-
-
-class KeyDimQuery:
-    def __init__(
-        self,
-        array: tiledb.Array,
-        key_dim_index: int,
-        dim_selectors: Dict[int, Selector],
-        **kwargs: Any,
-    ):
-        self._multi_index = array.query(**kwargs).multi_index
-        selectors: List[Selector] = [slice(None)] * array.ndim
-        for i, selector in dim_selectors.items():
-            # key_dim_index got swapped with 0th index, so swap back
-            if i == key_dim_index:
-                i = 0
-            selectors[i] = selector
-        self._leading_selectors = tuple(selectors[:key_dim_index])
-        self._trailing_selectors = tuple(selectors[key_dim_index + 1 :])
-
-    def __getitem__(self, key_dim_slice: slice) -> Dict[str, np.ndarray]:
-        """Query the TileDB array by `dim_key=key_dim_slice`."""
-        selectors = (*self._leading_selectors, key_dim_slice, *self._trailing_selectors)
-        return cast(Dict[str, np.ndarray], self._multi_index[selectors])
