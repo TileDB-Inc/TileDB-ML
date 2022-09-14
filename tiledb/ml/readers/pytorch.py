@@ -6,6 +6,7 @@ from typing import Any, Callable, Iterator, Sequence, Tuple, Union
 import numpy as np
 import scipy.sparse
 import sparse
+import torchdata
 from torch.utils.data import DataLoader, IterDataPipe
 from torchdata.datapipes.iter import IterableWrapper
 
@@ -65,6 +66,8 @@ def PyTorchTileDBDataLoader(
     datapipe_for_key_range = partial(_get_unbatched_datapipe, schemas)
     num_workers = kwargs.get("num_workers", 0)
     if num_workers:
+        if torchdata.__version__ < "0.4":
+            raise NotImplementedError("torchdata>=0.4 required for multiple workers")
         if any(schema.kind is not TensorKind.DENSE for schema in schemas):
             raise NotImplementedError("https://github.com/pytorch/pytorch/issues/20248")
 

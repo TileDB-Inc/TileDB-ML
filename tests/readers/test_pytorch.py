@@ -4,6 +4,7 @@ from operator import methodcaller
 import numpy as np
 import pytest
 import torch
+import torchdata
 
 from tiledb.ml.readers.pytorch import PyTorchTileDBDataLoader, TensorKind
 
@@ -14,9 +15,15 @@ from .utils import (
     validate_tensor_generator,
 )
 
+non_key_dim_dtype = [np.dtype(np.int32)]
+if hasattr(torch, "nested"):
+    non_key_dim_dtype.append(np.dtype(np.float32))
+
 
 class TestPyTorchTileDBDataLoader:
-    @pytest.mark.parametrize("spec", ArraySpec.combinations())
+    @pytest.mark.parametrize(
+        "spec", ArraySpec.combinations(non_key_dim_dtype=non_key_dim_dtype)
+    )
     @pytest.mark.parametrize("batch_size", [8, None])
     @pytest.mark.parametrize("shuffle_buffer_size", [0, 16])
     @pytest.mark.parametrize("num_workers", [0, 2])
@@ -32,7 +39,7 @@ class TestPyTorchTileDBDataLoader:
                     num_workers=num_workers,
                 )
             except NotImplementedError:
-                assert num_workers and spec.sparse
+                assert num_workers and (torchdata.__version__ < "0.4" or spec.sparse)
             else:
                 assert isinstance(dataloader, torch.utils.data.DataLoader)
                 validate_tensor_generator(
@@ -84,7 +91,9 @@ class TestPyTorchTileDBDataLoader:
                 n2 = sum(1 for _ in dataloader)
                 assert n1 == n2
 
-    @pytest.mark.parametrize("spec", ArraySpec.combinations())
+    @pytest.mark.parametrize(
+        "spec", ArraySpec.combinations(non_key_dim_dtype=non_key_dim_dtype)
+    )
     def test_unequal_key_ranges(self, tmpdir, spec):
         y_spec = ArraySpec(
             # Add one extra key on Y
@@ -101,7 +110,10 @@ class TestPyTorchTileDBDataLoader:
                     PyTorchTileDBDataLoader(x_params, y_params)
                 assert "All arrays must have the same key range" in str(ex.value)
 
-    @pytest.mark.parametrize("spec", ArraySpec.combinations(num_fields=[0]))
+    @pytest.mark.parametrize(
+        "spec",
+        ArraySpec.combinations(non_key_dim_dtype=non_key_dim_dtype, num_fields=[0]),
+    )
     @pytest.mark.parametrize("batch_size", [8, None])
     def test_order(self, tmpdir, spec, batch_size):
         """Test we can read the data in the same order as written.
