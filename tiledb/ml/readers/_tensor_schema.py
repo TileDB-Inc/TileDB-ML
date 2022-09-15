@@ -4,8 +4,9 @@ import enum
 from abc import ABC, abstractmethod
 from collections import Counter
 from dataclasses import dataclass
+from functools import singledispatch
 from math import ceil
-from operator import itemgetter
+from operator import itemgetter, methodcaller
 from typing import (
     Any,
     Callable,
@@ -16,7 +17,6 @@ from typing import (
     Optional,
     Sequence,
     Tuple,
-    Type,
     TypeVar,
     Union,
     cast,
@@ -165,12 +165,7 @@ class MappedTensorSchema(wrapt.ObjectProxy, Generic[Tensor, MappedTensor]):
         map_tensor: Callable[[Tensor], MappedTensor],
     ):
         super().__init__(wrapped)
-
-        def map_tensors(tensors: Sequence[Tensor]) -> Sequence[MappedTensor]:
-            return tuple(map(map_tensor, tensors))
-
         self._self_map_tensor = map_tensor
-        self._self_map_tensors = map_tensors
 
     def iter_tensors(
         self, key_ranges: Iterable[InclusiveRange[Any, int]]
@@ -179,7 +174,13 @@ class MappedTensorSchema(wrapt.ObjectProxy, Generic[Tensor, MappedTensor]):
         if self.num_fields == 1:
             return map(self._self_map_tensor, wrapped_iter_tensors)
         else:
-            return map(self._self_map_tensors, wrapped_iter_tensors)
+            return (
+                tuple(map(self._self_map_tensor, tensors))
+                for tensors in wrapped_iter_tensors
+            )
+
+    def __reduce_ex__(self, protocol):  # type: ignore
+        return MappedTensorSchema, (self.__wrapped__, self._self_map_tensor)
 
 
 class DenseTensorSchema(TensorSchema[np.ndarray]):
@@ -376,6 +377,23 @@ def _csr_matrix(
     return scipy.sparse.csr_matrix((data, coords), shape)
 
 
+def SparseToDenseTensorSchema(**kwargs: Any) -> TensorSchema[np.ndarray]:
+    """
+    Return a TensorSchema for reading sparse TileDB arrays as (dense) Numpy arrays.
+    """
+    return MappedTensorSchema(SparseTensorSchema(**kwargs), _to_dense)
+
+
+@singledispatch
+def _to_dense(sa: SparseArray) -> np.ndarray:
+    """Create a Numpy array from a sparse array"""
+    raise NotImplementedError
+
+
+_to_dense.register(sparse.COO)(methodcaller("todense"))  # type: ignore
+_to_dense.register(scipy.sparse.csr_matrix)(methodcaller("toarray"))  # type: ignore
+
+
 RaggedArray = Sequence[np.ndarray]
 
 
@@ -432,11 +450,15 @@ def argdiff(a: np.ndarray) -> np.ndarray:
     return idx
 
 
-TensorSchemaFactories: Dict[TensorKind, Type[TensorSchema[Any]]] = {
-    TensorKind.DENSE: DenseTensorSchema,
-    TensorKind.RAGGED: RaggedTensorSchema,
-    TensorKind.SPARSE_COO: SparseTensorSchema,
-    TensorKind.SPARSE_CSR: SparseTensorSchema,
+# mapping (is_sparse, tensor_kind): TensorSchema factory
+TensorSchemaFactories: Dict[
+    Tuple[bool, TensorKind], Callable[..., TensorSchema[Any]]
+] = {
+    (False, TensorKind.DENSE): DenseTensorSchema,
+    (True, TensorKind.DENSE): SparseToDenseTensorSchema,
+    (True, TensorKind.RAGGED): RaggedTensorSchema,
+    (True, TensorKind.SPARSE_COO): SparseTensorSchema,
+    (True, TensorKind.SPARSE_CSR): SparseTensorSchema,
 }
 
 

@@ -3,7 +3,7 @@ import os
 import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any, Sequence
+from typing import Any, Optional, Sequence
 
 import numpy as np
 import tensorflow as tf
@@ -21,6 +21,7 @@ class ArraySpec:
     key_dim_dtype: np.dtype
     non_key_dim_dtype: np.dtype
     num_fields: int
+    tensor_kind: Optional[TensorKind]
 
     @staticmethod
     def combinations(
@@ -34,23 +35,40 @@ class ArraySpec:
             np.dtype(np.bytes_),
         ),
         non_key_dim_dtype=(np.dtype(np.int32), np.dtype(np.float32)),
-        num_fields=(0, 1, 2),
+        num_fields=(0, 1),
+        tensor_kind=(None, TensorKind.DENSE),
     ):
         for combo in it.product(
-            sparse, shape, key_dim, key_dim_dtype, non_key_dim_dtype, num_fields
+            sparse,
+            shape,
+            key_dim,
+            key_dim_dtype,
+            non_key_dim_dtype,
+            num_fields,
+            tensor_kind,
         ):
             spec = ArraySpec(*combo)
-            # for dense arrays key_dim_dtype and non_key_dim_dtype must be integer
-            if not spec.sparse:
-                if not np.issubdtype(spec.key_dim_dtype, np.integer):
+            if not spec.sparse:  # dense array
+                # all dimension dtypes must be integer
+                if not all(
+                    np.issubdtype(dtype, np.integer)
+                    for dtype in (spec.key_dim_dtype, spec.non_key_dim_dtype)
+                ):
                     continue
-                if not np.issubdtype(spec.non_key_dim_dtype, np.integer):
+                # tensor_kind must be DENSE or None (which defaults to DENSE here)
+                # don't need to check both DENSE and None, just one of them
+                if spec.tensor_kind is not None:
                     continue
+            else:  # sparse array
+                # for non-RAGGED tensors, non_key_dim_dtype must be integer
+                if spec.tensor_kind not in (None, TensorKind.RAGGED):
+                    if not np.issubdtype(spec.non_key_dim_dtype, np.integer):
+                        continue
             yield spec
 
 
 @contextmanager
-def ingest_in_tiledb(tmpdir, spec, tensor_kind=None):
+def ingest_in_tiledb(tmpdir, spec):
     """Context manager for ingesting data into TileDB."""
     array_uuid = str(uuid.uuid4())
     uri = os.path.join(tmpdir, array_uuid)
@@ -101,7 +119,7 @@ def ingest_in_tiledb(tmpdir, spec, tensor_kind=None):
     fields = np.random.choice(all_fields, size=spec.num_fields, replace=False).tolist()
 
     with tiledb.open(uri) as array:
-        params = ArrayParams(array, spec.key_dim, fields, tensor_kind=tensor_kind)
+        params = ArrayParams(array, spec.key_dim, fields, tensor_kind=spec.tensor_kind)
         yield params, original_data
 
 
