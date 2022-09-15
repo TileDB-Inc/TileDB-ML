@@ -5,7 +5,11 @@ from datetime import timedelta
 import numpy as np
 import pytest
 
-from tiledb.ml.readers._ranges import InclusiveRange, IntRange, WeightedRange
+from tiledb.ml.readers._tensor_schema.ranges import (
+    InclusiveRange,
+    IntRange,
+    WeightedRange,
+)
 
 
 @pytest.mark.parametrize("values", [None, 42, 3.14])

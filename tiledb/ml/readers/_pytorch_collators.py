@@ -9,7 +9,8 @@ import scipy.sparse
 import sparse
 import torch
 
-from ._tensor_schema import TensorKind, TensorSchema
+from ._tensor_schema import TensorSchema
+from .types import TensorKind
 
 T = TypeVar("T")
 
