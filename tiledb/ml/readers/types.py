@@ -74,11 +74,6 @@ class ArrayParams:
             all_dims[0], all_dims[key_dim_index] = all_dims[key_dim_index], all_dims[0]
             ned[0], ned[key_dim_index] = ned[key_dim_index], ned[0]
 
-        sparse = self.array.schema.sparse
-        if self.dim_selectors and sparse:
-            raise NotImplementedError(
-                "dim_selectors is currently implemented only for dense arrays"
-            )
         dim_selector_indices = {}
         for dim, selector in self.dim_selectors.items():
             i = all_dims.index(dim)
@@ -90,7 +85,7 @@ class ArrayParams:
 
         if self.tensor_kind is not None:
             tensor_kind = self.tensor_kind
-        elif not sparse:
+        elif not self.array.schema.sparse:
             tensor_kind = TensorKind.DENSE
         elif not all(
             np.issubdtype(self.array.dim(dim).dtype, np.integer) for dim in all_dims[1:]

@@ -1,6 +1,4 @@
-from typing import Any, Dict, List, cast
-
-import numpy as np
+from typing import Any, List, Mapping
 
 import tiledb
 
@@ -12,7 +10,7 @@ class KeyDimQuery:
         self,
         array: tiledb.Array,
         key_dim_index: int,
-        dim_selectors: Dict[int, Selector],
+        dim_selectors: Mapping[int, Selector],
         **kwargs: Any,
     ):
         self._multi_index = array.query(**kwargs).multi_index
@@ -25,7 +23,7 @@ class KeyDimQuery:
         self._leading_selectors = tuple(selectors[:key_dim_index])
         self._trailing_selectors = tuple(selectors[key_dim_index + 1 :])
 
-    def __getitem__(self, key_dim_slice: slice) -> Dict[str, np.ndarray]:
+    def __getitem__(self, key_dim_slice: slice) -> Any:
         """Query the TileDB array by `dim_key=key_dim_slice`."""
         selectors = (*self._leading_selectors, key_dim_slice, *self._trailing_selectors)
-        return cast(Dict[str, np.ndarray], self._multi_index[selectors])
+        return self._multi_index[selectors]

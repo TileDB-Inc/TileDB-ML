@@ -78,9 +78,7 @@ class TensorSchema(ABC, Generic[Tensor]):
     @property
     def query(self) -> KeyDimQuery:
         """A sliceable object for querying the TileDB array along the key dimension"""
-        return KeyDimQuery(
-            self._array, self._key_dim_index, self._dim_selectors, **self._query_kwargs
-        )
+        return self._get_query(**self._query_kwargs)
 
     @property
     def key_dim(self) -> str:
@@ -125,3 +123,8 @@ class TensorSchema(ABC, Generic[Tensor]):
 
         :param key_ranges: Inclusive ranges along the key dimension.
         """
+
+    def _get_query(self, **kwargs: Any) -> KeyDimQuery:
+        return KeyDimQuery(
+            self._array, self._key_dim_index, self._dim_selectors, **kwargs
+        )
