@@ -77,10 +77,21 @@ class ArrayParams:
         dim_selector_indices = {}
         for dim, selector in self.dim_selectors.items():
             i = all_dims.index(dim)
-            if i == 0:
-                raise NotImplementedError("Key dimension slicing is not implemented")
             if not isinstance(selector, (slice, Sequence)):
                 raise TypeError("dim_selectors values must be slices or sequences")
+            if i == 0:
+                # key dimension selector
+                if not isinstance(selector, slice):
+                    raise TypeError("Key dimension selector must be a slice")
+                if selector.step is not None:
+                    raise ValueError("Stepped slice ranges are not supported")
+                # intersect the non-empty domain of the key dimension with the selected slice
+                min_key, max_key = ned[0]
+                if selector.start is not None and selector.start > min_key:
+                    min_key = selector.start
+                if selector.stop is not None and selector.stop < max_key:
+                    max_key = selector.stop
+                selector = slice(min_key, max_key)
             dim_selector_indices[i] = selector
 
         if self.tensor_kind is not None:

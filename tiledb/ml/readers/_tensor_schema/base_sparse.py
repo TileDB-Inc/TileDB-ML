@@ -26,7 +26,9 @@ class BaseSparseTensorSchema(TensorSchema[Tensor]):
             key_counter = Counter[Any]()
             key_dim = self.key_dim
             query = self._get_query(dims=(key_dim,), attrs=(), return_incomplete=True)
-            for result in query[:]:
+            key_dim_slice = self._dim_selectors.get(0, slice(None))
+            assert isinstance(key_dim_slice, slice)
+            for result in query[key_dim_slice]:
                 key_counter.update(result[key_dim])
             self._key_range = InclusiveRange.factory(key_counter)
             return self._key_range
