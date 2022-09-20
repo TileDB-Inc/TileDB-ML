@@ -22,7 +22,17 @@ class DenseTensorSchema(TensorSchema[np.ndarray]):
 
     @property
     def key_range(self) -> InclusiveRange[int, int]:
-        key_dim_min, key_dim_max = self._ned[0]
+        try:
+            key_dim_slice = self._dim_selectors[0]
+        except KeyError:
+            key_dim_min, key_dim_max = self._ned[0]
+        else:
+            assert isinstance(key_dim_slice, slice)
+            key_dim_min = key_dim_slice.start
+            key_dim_max = key_dim_slice.stop
+            raise NotImplementedError(
+                "Key dimension slicing is not yet implemented for dense arrays"
+            )
         return InclusiveRange.factory(range(key_dim_min, key_dim_max + 1))
 
     def iter_tensors(
