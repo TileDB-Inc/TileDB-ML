@@ -69,9 +69,14 @@ class InclusiveRange(ABC, Generic[V, W]):
         Two ranges are equal if they consist of the same values with the same weights.
         """
 
-    @abstractmethod
     def equal_values(self, other: InclusiveRange[V, W]) -> bool:
         """Check if two ranges consist of the same values."""
+        return (
+            len(self) == len(other)
+            and self.min == other.min
+            and self.max == other.max
+            and np.all(self.values == other.values)
+        )
 
     @abstractmethod
     def partition_by_count(self, k: int) -> Iterable[InclusiveRange[V, W]]:
@@ -194,8 +199,10 @@ class IntRange(InclusiveRange[int, int]):
             return NotImplemented
         return self.min == other.min and self.max == other.max
 
-    def equal_values(self, other: InclusiveRange[V, W]) -> bool:
-        return self == other
+    def equal_values(self, other: InclusiveRange[int, int]) -> bool:
+        if not isinstance(other, IntRange):
+            return super().equal_values(other)
+        return self.min == other.min and self.max == other.max
 
     def partition_by_count(self, k: int) -> Iterable[IntRange]:
         n = len(self)
@@ -253,14 +260,16 @@ class WeightedRange(InclusiveRange[VDtype, WDtype]):
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, WeightedRange):
             return NotImplemented
-        return bool(
+        return (
             len(self) == len(other)
             and np.all(self.values == other.values)
             and np.all(self.weights == other.weights)
         )
 
-    def equal_values(self, other: InclusiveRange[V, W]) -> bool:
-        return bool(len(self) == len(other) and np.all(self.values == other.values))
+    def equal_values(self, other: InclusiveRange[VDtype, WDtype]) -> bool:
+        if not isinstance(other, WeightedRange):
+            return super().equal_values(other)
+        return len(self) == len(other) and np.all(self.values == other.values)
 
     def indices(self, values: np.ndarray[VDtype, Any]) -> np.ndarray[np.int_, Any]:
         members = self.values

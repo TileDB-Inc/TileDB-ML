@@ -49,17 +49,26 @@ class TestIntRange:
     @pytest.mark.parametrize(
         "values",
         [
-            np.array(values, dtype=object),
             range(0, 10),
             range(10, 21),
             range(11, 20),
             range(10, 20, 2),
+            dict.fromkeys(values, 2),
+            np.array(values, dtype=object),
         ],
     )
     def test_not_equal(self, values):
-        r = InclusiveRange.factory(values)
-        assert self.r != r
-        assert not self.r.equal_values(r)
+        assert self.r != InclusiveRange.factory(values)
+
+    def test_equal_values(self):
+        assert self.r.equal_values(
+            InclusiveRange.factory(dict.fromkeys(self.values, 2))
+        )
+        assert self.r.equal_values(
+            InclusiveRange.factory(np.array(self.values, dtype=object))
+        )
+        assert not self.r.equal_values(InclusiveRange.factory(range(10, 21)))
+        assert not self.r.equal_values(InclusiveRange.factory(range(11, 20)))
 
     def test_indices(self):
         np.testing.assert_array_equal(
