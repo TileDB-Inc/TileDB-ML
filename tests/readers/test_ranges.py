@@ -5,23 +5,11 @@ from datetime import timedelta
 import numpy as np
 import pytest
 
-from tiledb.ml.readers._tensor_schema.ranges import (
-    InclusiveRange,
-    IntRange,
-    WeightedRange,
-)
-
-
-@pytest.mark.parametrize("values", [None, 42, 3.14])
-def test_inclusive_range_factory_type_error(values):
-    with pytest.raises(TypeError) as excinfo:
-        InclusiveRange.factory(values)
-    assert "Cannot create inclusive range" in str(excinfo.value)
+from tiledb.ml.readers._tensor_schema.ranges import IntRange, WeightedRange
 
 
 class TestIntRange:
-    values = range(10, 20)
-    r = InclusiveRange.factory(values)
+    r = IntRange(10, 19)
 
     def test_basic(self):
         assert self.r.min == 10
@@ -29,46 +17,20 @@ class TestIntRange:
         assert self.r.weight == 10
         assert len(self.r) == 10
 
-    @pytest.mark.parametrize(
-        "values",
-        [
-            values,
-            list(values),
-            set(values),
-            iter(values),
-            reversed(values),
-            Counter(values),
-            np.array(values),
-            range(19, 9, -1),
-            np.arange(19, 9, -1),
-        ],
-    )
-    def test_equal(self, values):
-        assert_equal_ranges(self.r, InclusiveRange.factory(values), IntRange)
-
-    @pytest.mark.parametrize(
-        "values",
-        [
-            range(0, 10),
-            range(10, 21),
-            range(11, 20),
-            range(10, 20, 2),
-            dict.fromkeys(values, 2),
-            np.array(values, dtype=object),
-        ],
-    )
-    def test_not_equal(self, values):
-        assert self.r != InclusiveRange.factory(values)
+    def test_equal(self):
+        assert_equal_ranges(self.r, IntRange(10, 19))
+        assert self.r != IntRange(0, 9)
+        assert self.r != IntRange(10, 20)
+        assert self.r != IntRange(11, 19)
+        assert self.r != WeightedRange.from_mapping(dict.fromkeys(self.r.values, 2))
 
     def test_equal_values(self):
+        assert self.r.equal_values(IntRange(10, 19))
+        assert not self.r.equal_values(IntRange(10, 20))
+        assert not self.r.equal_values(IntRange(11, 19))
         assert self.r.equal_values(
-            InclusiveRange.factory(dict.fromkeys(self.values, 2))
+            WeightedRange.from_mapping(dict.fromkeys(self.r.values, 2))
         )
-        assert self.r.equal_values(
-            InclusiveRange.factory(np.array(self.values, dtype=object))
-        )
-        assert not self.r.equal_values(InclusiveRange.factory(range(10, 21)))
-        assert not self.r.equal_values(InclusiveRange.factory(range(11, 20)))
 
     def test_indices(self):
         np.testing.assert_array_equal(
@@ -92,22 +54,22 @@ class TestIntRange:
     @pytest.mark.parametrize(
         "k,expected_bounds",
         [
-            (1, [(10, 20)]),
-            (2, [(10, 15), (15, 20)]),
-            (3, [(10, 14), (14, 17), (17, 20)]),
-            (4, [(10, 13), (13, 16), (16, 18), (18, 20)]),
-            (5, [(10, 12), (12, 14), (14, 16), (16, 18), (18, 20)]),
-            (6, [(10, 12), (12, 14), (14, 16), (16, 18), (18, 19), (19, 20)]),
-            (7, [(10, 12), (12, 14), (14, 16)] + [(i, i + 1) for i in range(16, 20)]),
-            (8, [(10, 12), (12, 14)] + [(i, i + 1) for i in range(14, 20)]),
-            (9, [(10, 12)] + [(i, i + 1) for i in range(12, 20)]),
-            (10, [(i, i + 1) for i in range(10, 20)]),
+            (1, [(10, 19)]),
+            (2, [(10, 14), (15, 19)]),
+            (3, [(10, 13), (14, 16), (17, 19)]),
+            (4, [(10, 12), (13, 15), (16, 17), (18, 19)]),
+            (5, [(10, 11), (12, 13), (14, 15), (16, 17), (18, 19)]),
+            (6, [(10, 11), (12, 13), (14, 15), (16, 17), (18, 18), (19, 19)]),
+            (7, [(10, 11), (12, 13), (14, 15)] + [(i, i) for i in range(16, 20)]),
+            (8, [(10, 11), (12, 13)] + [(i, i) for i in range(14, 20)]),
+            (9, [(10, 11)] + [(i, i) for i in range(12, 20)]),
+            (10, [(i, i) for i in range(10, 20)]),
         ],
     )
     def test_partition_by_count(self, k, expected_bounds):
         ranges = list(self.r.partition_by_count(k))
         assert len(ranges) == k
-        expected_ranges = [InclusiveRange.factory(range(*bs)) for bs in expected_bounds]
+        expected_ranges = [IntRange(*bounds) for bounds in expected_bounds]
         assert ranges == expected_ranges
 
     def test_partition_by_count_error(self):
@@ -119,23 +81,23 @@ class TestIntRange:
     @pytest.mark.parametrize(
         "max_weight,expected_bounds",
         [
-            (1, [(i, i + 1) for i in range(10, 20)]),
-            (2, [(10, 12), (12, 14), (14, 16), (16, 18), (18, 20)]),
-            (3, [(10, 13), (13, 16), (16, 19), (19, 20)]),
-            (4, [(10, 14), (14, 18), (18, 20)]),
-            (5, [(10, 15), (15, 20)]),
-            (6, [(10, 16), (16, 20)]),
-            (7, [(10, 17), (17, 20)]),
-            (8, [(10, 18), (18, 20)]),
-            (9, [(10, 19), (19, 20)]),
-            (10, [(10, 20)]),
-            (11, [(10, 20)]),
+            (1, [(i, i) for i in range(10, 20)]),
+            (2, [(10, 11), (12, 13), (14, 15), (16, 17), (18, 19)]),
+            (3, [(10, 12), (13, 15), (16, 18), (19, 19)]),
+            (4, [(10, 13), (14, 17), (18, 19)]),
+            (5, [(10, 14), (15, 19)]),
+            (6, [(10, 15), (16, 19)]),
+            (7, [(10, 16), (17, 19)]),
+            (8, [(10, 17), (18, 19)]),
+            (9, [(10, 18), (19, 19)]),
+            (10, [(10, 19)]),
+            (11, [(10, 19)]),
         ],
     )
     def test_partition_by_weight(self, max_weight, expected_bounds):
         ranges = list(self.r.partition_by_weight(max_weight))
         assert max(r.weight for r in ranges) <= max_weight
-        expected_ranges = [InclusiveRange.factory(range(*bs)) for bs in expected_bounds]
+        expected_ranges = [IntRange(*bounds) for bounds in expected_bounds]
         assert ranges == expected_ranges
 
     def test_pickle(self):
@@ -144,8 +106,10 @@ class TestIntRange:
 
 class TestWeightedRange:
     values = ("e", "f", "a", "d", "a", "c", "d", "a", "f", "c", "f", "f", "b", "d")
-    r = InclusiveRange.factory(values)
-    r2 = InclusiveRange.factory({v: timedelta(c) for v, c in Counter(values).items()})
+    r = WeightedRange.from_mapping(Counter(values))
+    r2 = WeightedRange.from_mapping(
+        {v: timedelta(c) for v, c in Counter(values).items()}
+    )
 
     @pytest.mark.parametrize("r", [r, r2])
     def test_basic(self, r):
@@ -154,44 +118,19 @@ class TestWeightedRange:
         assert len(r) == 6
         assert r.weight == 14 if r is self.r else timedelta(14)
 
-    @pytest.mark.parametrize(
-        "values",
-        [
-            values,
-            list(values),
-            iter(values),
-            reversed(values),
-            Counter(values),
-            np.array(values),
-            np.array(values, dtype=object),
-        ],
-    )
-    def test_equal(self, values):
-        assert_equal_ranges(self.r, InclusiveRange.factory(values), WeightedRange)
-
-    def test_not_equal(self):
-        assert self.r != InclusiveRange.factory(set(self.values))
-        assert self.r != InclusiveRange.factory(range(len(set(self.values))))
+    def test_equal(self):
+        assert_equal_ranges(self.r, WeightedRange.from_mapping(Counter(self.values)))
+        assert self.r != WeightedRange.from_mapping(Counter(set(self.values)))
+        assert self.r != IntRange(0, len(set(self.values)) - 1)
 
     def test_equal_values(self):
-        assert self.r.equal_values(InclusiveRange.factory(set(self.values)))
-
-        r = InclusiveRange.factory([1, 2, 3, 3, 4, 5])
-        assert r.equal_values(InclusiveRange.factory(range(1, 6)))
-        assert not r.equal_values(InclusiveRange.factory(range(1, 7)))
-        assert not r.equal_values(InclusiveRange.factory(range(2, 7)))
-
-    def test_strided_range(self):
-        assert_equal_ranges(
-            InclusiveRange.factory(range(10, 20, 3)),
-            InclusiveRange.factory([10, 13, 16, 19]),
-            WeightedRange,
+        assert self.r.equal_values(
+            WeightedRange.from_mapping(Counter(set(self.values)))
         )
-        assert_equal_ranges(
-            InclusiveRange.factory(range(20, 10, -3)),
-            InclusiveRange.factory([11, 14, 17, 20]),
-            WeightedRange,
-        )
+        r = WeightedRange.from_mapping(Counter([1, 2, 3, 3, 4, 5]))
+        assert r.equal_values(IntRange(1, 5))
+        assert not r.equal_values(IntRange(1, 6))
+        assert not r.equal_values(IntRange(2, 5))
 
     def test_indices(self):
         np.testing.assert_array_equal(
@@ -228,7 +167,7 @@ class TestWeightedRange:
     def test_partition_by_count(self, k, expected_mappings):
         ranges = list(self.r.partition_by_count(k))
         assert len(ranges) == k
-        expected_ranges = list(map(InclusiveRange.factory, expected_mappings))
+        expected_ranges = list(map(WeightedRange.from_mapping, expected_mappings))
         assert ranges == expected_ranges
 
     @parametrize_by_count
@@ -236,7 +175,7 @@ class TestWeightedRange:
         ranges = list(self.r2.partition_by_count(k))
         assert len(ranges) == k
         expected_ranges = [
-            InclusiveRange.factory({v: timedelta(w) for v, w in mapping.items()})
+            WeightedRange.from_mapping({v: timedelta(w) for v, w in mapping.items()})
             for mapping in expected_mappings
         ]
         assert ranges == expected_ranges
@@ -270,7 +209,7 @@ class TestWeightedRange:
     def test_partition_by_weight(self, max_weight, expected_mappings):
         ranges = list(self.r.partition_by_weight(max_weight))
         assert max(r.weight for r in ranges) <= max_weight
-        expected_ranges = list(map(InclusiveRange.factory, expected_mappings))
+        expected_ranges = list(map(WeightedRange.from_mapping, expected_mappings))
         assert ranges == expected_ranges
 
     @parametrize_by_max_weight
@@ -279,7 +218,7 @@ class TestWeightedRange:
         ranges = list(self.r2.partition_by_weight(max_weight))
         assert max(r.weight for r in ranges) <= max_weight
         expected_ranges = [
-            InclusiveRange.factory({v: timedelta(w) for v, w in mapping.items()})
+            WeightedRange.from_mapping({v: timedelta(w) for v, w in mapping.items()})
             for mapping in expected_mappings
         ]
         assert ranges == expected_ranges
@@ -297,9 +236,7 @@ class TestWeightedRange:
         assert pickle.loads(pickle.dumps(self.r2)) == self.r2
 
 
-def assert_equal_ranges(r1, r2, cls):
-    assert isinstance(r1, cls)
-    assert isinstance(r2, cls)
+def assert_equal_ranges(r1, r2):
     assert r1.min == r2.min
     assert r1.max == r2.max
     assert r1.weight == r2.weight

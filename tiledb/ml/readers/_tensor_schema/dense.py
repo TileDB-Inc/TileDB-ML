@@ -5,7 +5,7 @@ from typing import Any, Iterable, Sequence, Union
 import numpy as np
 
 from .base import TensorSchema
-from .ranges import InclusiveRange
+from .ranges import InclusiveRange, IntRange
 
 
 class DenseTensorSchema(TensorSchema[np.ndarray]):
@@ -21,7 +21,7 @@ class DenseTensorSchema(TensorSchema[np.ndarray]):
             )
 
     @property
-    def key_range(self) -> InclusiveRange[int, int]:
+    def key_range(self) -> IntRange:
         try:
             key_dim_slice = self._dim_selectors[0]
         except KeyError:
@@ -33,7 +33,7 @@ class DenseTensorSchema(TensorSchema[np.ndarray]):
             raise NotImplementedError(
                 "Key dimension slicing is not yet implemented for dense arrays"
             )
-        return InclusiveRange.factory(range(key_dim_min, key_dim_max + 1))
+        return IntRange(key_dim_min, key_dim_max)
 
     def iter_tensors(
         self, key_ranges: Iterable[InclusiveRange[int, int]]

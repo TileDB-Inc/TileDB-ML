@@ -2,10 +2,8 @@ from __future__ import annotations
 
 import itertools as it
 from abc import ABC, abstractmethod
-from collections import Counter, abc
 from dataclasses import dataclass
-from functools import singledispatch
-from typing import Any, Generic, Iterable, Mapping, NoReturn, TypeVar, Union, cast
+from typing import Any, Generic, Iterable, Mapping, TypeVar, cast
 
 import numpy as np
 
@@ -88,69 +86,6 @@ class InclusiveRange(ABC, Generic[V, W]):
         Partition this range into the minimum number of subranges so that each subrange
         weight is at most `max_weight`.
         """
-
-    @singledispatch
-    @staticmethod
-    def factory(values: Any) -> InclusiveRange[Any, Any]:
-        """Create an inclusive range of comparable values.
-
-        :param values: Can be:
-        - an integer `range`. The weight of each value is 1.
-        - an iterable of (potentially non-unique) values. The weight of each unique value
-          is its cardinality.
-        - a mapping from (unique) values to weights.
-        """
-
-    @staticmethod
-    @factory.register(range)
-    def _from_range(values: range) -> Union[IntRange, WeightedRange[np.int_, np.int_]]:
-        if values.step < 0:
-            values = range(values.stop + 1, values.start + 1, -values.step)
-
-        if values.step == 1:
-            return IntRange(values.start, values.stop - 1)
-        else:
-            return WeightedRange(
-                np.arange(values.start, values.stop, values.step),
-                np.ones(len(values), dtype=int),
-            )
-
-    @staticmethod
-    @factory.register(abc.Iterable)
-    def _from_iterable(values: Iterable[V]) -> Union[IntRange, InclusiveRange[V, int]]:
-        return InclusiveRange._from_mapping(Counter(values))
-
-    @staticmethod
-    @factory.register(abc.Mapping)
-    def _from_mapping(mapping: Mapping[V, W]) -> Union[IntRange, InclusiveRange[V, W]]:
-        unique_sorted, weights = zip(*sorted(mapping.items()))
-        return InclusiveRange._from_ndarrays(np.array(unique_sorted), np.array(weights))
-
-    @staticmethod
-    @factory.register(np.ndarray)
-    def _from_ndarray(
-        values: np.ndarray[VDtype, Any],
-    ) -> Union[IntRange, WeightedRange[VDtype, np.int_]]:
-        unique_sorted, counts = np.unique(values, return_counts=True)
-        return InclusiveRange._from_ndarrays(unique_sorted, counts)
-
-    @staticmethod
-    def _from_ndarrays(
-        unique_sorted: np.ndarray[VDtype, Any], weights: np.ndarray[WDtype, Any]
-    ) -> Union[IntRange, WeightedRange[VDtype, WDtype]]:
-        if (
-            np.issubsctype(unique_sorted, np.integer)
-            and unique_sorted[-1] - unique_sorted[0] + 1 == len(unique_sorted)
-            and np.all(weights == 1)
-        ):
-            return IntRange(unique_sorted[0].item(), unique_sorted[-1].item())
-        else:
-            return WeightedRange(unique_sorted, weights)
-
-    @staticmethod
-    @factory.register(object)
-    def _from_object(values: object) -> NoReturn:
-        raise TypeError(f"Cannot create inclusive range from {values!r}")
 
     def __getstate__(self) -> Mapping[str, Any]:
         return {slot: getattr(self, slot) for slot in self.__slots__}
@@ -241,6 +176,12 @@ class WeightedRange(InclusiveRange[VDtype, WDtype]):
     def __post_init__(self) -> None:
         assert self.values.ndim == self.weights.ndim == 1
         assert len(self.values) == len(self.weights)
+
+    @classmethod
+    def from_mapping(cls, mapping: Mapping[V, W]) -> WeightedRange[VDtype, WDtype]:
+        """Create a WeightedRange from a mapping of (unique) values to weights."""
+        unique_sorted, weights = zip(*sorted(mapping.items()))
+        return cls(np.array(unique_sorted), np.array(weights))
 
     @property
     def min(self) -> VDtype:
