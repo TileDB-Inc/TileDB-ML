@@ -5,7 +5,11 @@ from datetime import timedelta
 import numpy as np
 import pytest
 
-from tiledb.ml.readers._tensor_schema.ranges import IntRange, WeightedRange
+from tiledb.ml.readers._tensor_schema.ranges import (
+    ConstrainedPartitionsIntRange,
+    IntRange,
+    WeightedRange,
+)
 
 
 class TestIntRange:
@@ -102,6 +106,64 @@ class TestIntRange:
 
     def test_pickle(self):
         assert pickle.loads(pickle.dumps(self.r)) == self.r
+
+
+class TestConstrainedPartitionsIntRange:
+    r = ConstrainedPartitionsIntRange(10, 29, range(1, 101, 4))
+
+    @pytest.mark.parametrize(
+        "k,expected_bounds",
+        [
+            (1, [(10, 29)]),
+            (2, [(10, 20), (21, 29)]),
+            (3, [(10, 16), (17, 24), (25, 29)]),
+            (4, [(10, 16), (17, 20), (21, 24), (25, 29)]),
+            (5, [(10, 12), (13, 16), (17, 20), (21, 24), (25, 29)]),
+            (6, [(10, 12), (13, 16), (17, 20), (21, 24), (25, 28), (29, 29)]),
+        ],
+    )
+    def test_partition_by_count(self, k, expected_bounds):
+        ranges = list(self.r.partition_by_count(k))
+        assert len(ranges) == k
+        # all partitions after the first must start at a start_offset
+        start_offsets = self.r.start_offsets
+        assert all(r.min in start_offsets for r in ranges[1:])
+        bounds = [(r.min, r.max) for r in ranges]
+        assert bounds == expected_bounds
+
+    @pytest.mark.parametrize("k", [7, 8, 9, 10])
+    def test_partition_by_count_error(self, k):
+        with pytest.raises(ValueError) as excinfo:
+            list(self.r.partition_by_count(k))
+        assert "Cannot partition range" in str(excinfo.value)
+
+    @pytest.mark.parametrize(
+        "max_weight,expected_bounds",
+        [
+            (4, [(10, 12), (13, 16), (17, 20), (21, 24), (25, 28), (29, 29)]),
+            (5, [(10, 12), (13, 16), (17, 20), (21, 24), (25, 29)]),
+            (6, [(10, 12), (13, 16), (17, 20), (21, 24), (25, 29)]),
+            (7, [(10, 16), (17, 20), (21, 24), (25, 29)]),
+            (8, [(10, 16), (17, 24), (25, 29)]),
+            (9, [(10, 16), (17, 24), (25, 29)]),
+            (10, [(10, 16), (17, 24), (25, 29)]),
+            (11, [(10, 20), (21, 29)]),
+        ],
+    )
+    def test_partition_by_weight(self, max_weight, expected_bounds):
+        ranges = list(self.r.partition_by_weight(max_weight))
+        assert max(r.weight for r in ranges) <= max_weight
+        # all partitions after the first must start at a start_offset
+        start_offsets = self.r.start_offsets
+        assert all(r.min in start_offsets for r in ranges[1:])
+        bounds = [(r.min, r.max) for r in ranges]
+        assert bounds == expected_bounds
+
+    @pytest.mark.parametrize("max_weight", [1, 2, 3])
+    def test_partition_by_weight_error(self, max_weight):
+        with pytest.raises(ValueError) as excinfo:
+            list(self.r.partition_by_weight(max_weight))
+        assert "Cannot partition range" in str(excinfo.value)
 
 
 class TestWeightedRange:
@@ -228,8 +290,9 @@ class TestWeightedRange:
     )
     def test_partition_by_weight_error(self, r, max_weights):
         for max_weight in max_weights:
-            with pytest.raises(ValueError):
+            with pytest.raises(ValueError) as excinfo:
                 list(r.partition_by_weight(max_weight))
+            assert "Cannot partition range" in str(excinfo.value)
 
     def test_pickle(self):
         assert pickle.loads(pickle.dumps(self.r)) == self.r
