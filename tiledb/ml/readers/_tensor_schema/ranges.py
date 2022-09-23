@@ -8,7 +8,12 @@ from typing import Any, Generic, Iterable, Mapping, TypeVar, cast
 
 import numpy as np
 
-__all__ = ["InclusiveRange"]
+__all__ = [
+    "InclusiveRange",
+    "IntRange",
+    "ConstrainedPartitionsIntRange",
+    "WeightedRange",
+]
 
 V = TypeVar("V")
 W = TypeVar("W")
@@ -175,7 +180,6 @@ class ConstrainedPartitionsIntRange(IntRange):
 
     def partition_by_count(self, k: int) -> Iterable[ConstrainedPartitionsIntRange]:
         start_offsets = self.start_offsets
-
         # find how many start offsets are in the (min, max] range
         i = bisect(start_offsets, self.min)
         j = bisect(start_offsets, self.max)
@@ -183,24 +187,12 @@ class ConstrainedPartitionsIntRange(IntRange):
         if k > num_offsets + 1:  # + 1 to account for self.min as the first offset
             raise ValueError(f"Cannot partition range into {k} partitions")
 
-        idx = 0
         start = self.min
         for i in range(k, 1, -1):
-            target_next_start = start + (self.max - start + 1) / i
-            idx = bisect(start_offsets, target_next_start, lo=idx)
-            assert idx > 0
-            # next_start is either start_offsets[idx - 1] or start_offsets[idx],
-            # the one that is closer to target_next_start
-            if (
-                target_next_start - start_offsets[idx - 1]
-                < start_offsets[idx] - target_next_start
-            ):
-                next_start = start_offsets[idx - 1]
-            else:
-                next_start = start_offsets[idx]
-            yield ConstrainedPartitionsIntRange(start, next_start - 1, start_offsets)
-            start = next_start
-        # yield last partition
+            target_length = round((self.max - start + 1) / i)
+            partition = self._next_partition(start, target_length)
+            yield partition
+            start = partition.max + 1
         yield ConstrainedPartitionsIntRange(start, self.max, start_offsets)
 
     def partition_by_weight(
@@ -213,17 +205,33 @@ class ConstrainedPartitionsIntRange(IntRange):
                 f"start_offsets.step={start_offsets.step}"
             )
 
-        idx = 0
         start = self.min
         max_start = self.max - max_weight
         while start <= max_start:
-            idx = bisect(start_offsets, start + max_weight, lo=idx)
-            assert idx > 0
-            next_start = start_offsets[idx - 1]
-            yield ConstrainedPartitionsIntRange(start, next_start - 1, start_offsets)
-            start = next_start
-        # yield last partition
+            partition = self._next_partition(start, max_weight, is_max_length=True)
+            yield partition
+            start = partition.max + 1
         yield ConstrainedPartitionsIntRange(start, self.max, start_offsets)
+
+    def _next_partition(
+        self, start: int, target_length: int, is_max_length: bool = False
+    ) -> ConstrainedPartitionsIntRange:
+        start_offsets = self.start_offsets
+        next_start = start + target_length
+        i = bisect(start_offsets, next_start)
+        assert i > 0
+        # next start is start_offsets[i - 1] if the target_length is a hard upper bound
+        # otherwise next_start is either start_offsets[i - 1] or start_offsets[i],
+        # depending on which one is closer to the target next start
+        if (
+            is_max_length
+            or i == len(start_offsets)
+            or next_start - start_offsets[i - 1] < start_offsets[i] - next_start
+        ):
+            next_start = start_offsets[i - 1]
+        else:
+            next_start = start_offsets[i]
+        return ConstrainedPartitionsIntRange(start, next_start - 1, start_offsets)
 
 
 @dataclass(frozen=True)
