@@ -94,7 +94,11 @@ class InclusiveRange(ABC, Generic[V, W]):
         """
 
     def __getstate__(self) -> Mapping[str, Any]:
-        return {slot: getattr(self, slot) for slot in self.__slots__}
+        return {
+            slot: getattr(self, slot)
+            for cls in self.__class__.mro()
+            for slot in getattr(cls, "__slots__", ())
+        }
 
     def __setstate__(self, state: Mapping[str, Any]) -> None:
         for slot, value in state.items():
