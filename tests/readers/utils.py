@@ -153,7 +153,7 @@ class _IndexTransformer:
         return tiledb.Dim(
             name=self.name,
             domain=(self.min_value, self(self.size - 1)),
-            tile=np.random.randint(1, self.size + 1),
+            tile=np.random.randint(1, self.size),
             dtype=self.dtype,
         )
 

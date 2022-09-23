@@ -30,11 +30,11 @@ class ArrayParams:
     - array: TileDB array to be accessed
     - key_dim: Name (or index) of the array key dimension. Defaults to the first dimension.
     - fields: Fields (dimensions and attributes) to be retrieved from array. Defaults to
-        all attributes of the array.
+      all attributes of the array.
     - dim_selectors: Mapping from dimension name to a slice or sequence of indices of this
-        dimension to select. Currently implemented only for non-key dimensions of dense arrays
-    - tensor_kind: kind of tensor desired. If not specified, the default tensor kind is
-        determined based on the array schema.
+      dimension to select.
+    - tensor_kind: kind of tensor desired. If not specified, it is determined based on the
+      array schema.
     """
 
     array: tiledb.Array
