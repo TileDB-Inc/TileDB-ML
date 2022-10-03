@@ -25,7 +25,7 @@ from .ranges import InclusiveRange
 Tensor = TypeVar("Tensor")
 
 
-@dataclass(frozen=True)  # type: ignore  # https://github.com/python/mypy/issues/5374
+@dataclass(frozen=True)
 class TensorSchema(ABC, Generic[Tensor]):
     """
     A class to encapsulate the information needed for mapping a TileDB array to tensors.

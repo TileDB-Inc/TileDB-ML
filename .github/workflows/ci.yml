@@ -37,12 +37,10 @@ jobs:
         pip install pytest-mock pytest-cov scikit-learn==1.0.2
         pip install -e .[cloud]
 
-    - name: Run mypy
+    - name: Run pre-commit hooks
       run: |
-        python -m venv mypyenv
-        mypyenv/bin/pip install mypy
-        mypyenv/bin/mypy .
-        rm -rf mypyenv
+        pip install pre-commit
+        pre-commit run -a
 
     - name: Run notebook examples
       run: |
