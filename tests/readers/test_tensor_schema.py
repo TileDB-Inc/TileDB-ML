@@ -15,8 +15,7 @@ def dense_uri(tmp_path_factory):
         sparse=False,
         domain=tiledb.Domain(
             tiledb.Dim(name="d0", domain=(0, 9999), dtype=np.int32, tile=123),
-            tiledb.Dim(name="d1", domain=(-2, 2), dtype=np.int32, tile=2),
-            tiledb.Dim(name="d2", domain=(1, 2), dtype=np.int32, tile=1),
+            tiledb.Dim(name="d1", domain=(-20, 19), dtype=np.int32, tile=4),
         ),
         attrs=[
             tiledb.Attr(name="af8", dtype=np.float64),
@@ -90,21 +89,31 @@ def parametrize_fields(*fields, num=3):
 @pytest.mark.parametrize(
     "key_dim,memory_budget,dim_selectors",
     [
-        ("d0", 16_000, {}),
-        ("d0", 32_000, {}),
-        ("d0", 64_000, {}),
-        ("d1", 500_000, {}),
-        ("d1", 600_000, {}),
+        ("d0", 160_000, {}),
+        ("d0", 160_000, {"d0": slice(1000, 9000)}),
+        ("d0", 160_000, {"d0": slice(None, 9000)}),
+        ("d0", 160_000, {"d0": slice(1000, None)}),
+        ("d0", 160_000, {"d1": slice(-10, 10)}),
+        ("d0", 160_000, {"d1": slice(-10, None)}),
+        ("d0", 160_000, {"d1": slice(None, 10)}),
+        ("d0", 160_000, {"d1": list(range(-10, 10, 3))}),
+        ("d0", 160_000, {"d0": slice(1000, 9000), "d1": slice(-10, 10)}),
+        ("d0", 160_000, {"d0": slice(None, 9000), "d1": slice(-10, None)}),
+        ("d0", 160_000, {"d0": slice(1000, None), "d1": slice(None, 10)}),
         ("d1", 700_000, {}),
-        ("d0", 16_000, {"d1": slice(0, 2)}),
-        ("d0", 32_000, {"d1": slice(None, 0)}),
-        ("d0", 64_000, {"d1": slice(-1, None), "d2": [1]}),
-        ("d1", 500_000, {"d0": [1, 2, 3]}),
-        ("d1", 600_000, {"d0": [1, 100, 143, 976], "d2": slice(2, 2)}),
-        ("d1", 700_000, {"d0": [1, 100, 143, 1093, 1094]}),
+        ("d1", 700_000, {"d1": slice(-10, 10)}),
+        ("d1", 700_000, {"d1": slice(None, 10)}),
+        ("d1", 700_000, {"d1": slice(-10, None)}),
+        ("d1", 700_000, {"d0": slice(1000, 9000)}),
+        ("d1", 700_000, {"d0": slice(None, 9000)}),
+        ("d1", 700_000, {"d0": slice(1000, None)}),
+        ("d1", 700_000, {"d0": list(range(100, 5000, 3))}),
+        ("d1", 700_000, {"d1": slice(-10, 10), "d0": slice(1000, 9000)}),
+        ("d1", 700_000, {"d1": slice(None, 10), "d0": slice(None, 9000)}),
+        ("d1", 700_000, {"d1": slice(-10, None), "d0": slice(1000, None)}),
     ],
 )
-@parametrize_fields("d0", "d1", "d2", "af8", "af4", "au1")
+@parametrize_fields("d0", "d1", "af8", "af4", "au1")
 def test_max_partition_weight_dense(
     dense_uri, fields, key_dim, memory_budget, dim_selectors
 ):
