@@ -55,7 +55,7 @@ class TileDBArtifact(ABC, Generic[Artifact]):
             models on TileDB-Cloud we need the user's namespace on TileDB-Cloud.
             Moreover, array's uri must have an s3 prefix.
         :param ctx: TileDB Context.
-        :param artifact: Machine learning artifact (e.g. model or callback) based on the framework we are using.
+        :param artifact: Machine learning artifact (e.g. machine learning model) based on the framework we are using.
         """
         self.namespace = namespace
         self.ctx = ctx
@@ -98,15 +98,41 @@ class TileDBArtifact(ABC, Generic[Artifact]):
         fields: Sequence[str],
     ) -> None:
         """Internal method that creates a TileDB array based on the model's spec."""
+
+        # The array will be be 1 dimensional with domain of 0 to max uint64. We use a tile extent of 1024 bytes
         dom = tiledb.Domain(
             tiledb.Dim(
-                name=domain_info[0],
-                domain=domain_info[1],
-                tile=1,
-                dtype=np.int32,
+                name="position",
+                domain=(0, np.iinfo(np.uint64).max - 1025),
+                tile=1024,
+                dtype=np.uint64,
                 ctx=self.ctx,
             ),
         )
+
+        # schema = tiledb.ArraySchema(
+        #     domain=dom,
+        #     sparse=False,
+        #     attrs=[
+        #         tiledb.Attr(
+        #             name="contents",
+        #             dtype=numpy.uint8,
+        #             filters=tiledb.FilterList([tiledb.ZstdFilter()]),
+        #         )
+        #     ],
+        #     ctx=tiledb_create_context,
+        # )
+
+        # dom = tiledb.Domain(
+        #     tiledb.Dim(
+        #         name=domain_info[0],
+        #         domain=domain_info[1],
+        #         tile=1,
+        #         dtype=np.int32,
+        #         ctx=self.ctx,
+        #     ),
+        # )
+
         attrs = [
             tiledb.Attr(
                 name=field,

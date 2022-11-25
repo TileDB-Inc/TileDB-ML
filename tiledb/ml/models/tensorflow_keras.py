@@ -59,7 +59,7 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
         update: bool = False,
         meta: Optional[Meta] = None,
         include_optimizer: bool = False,
-        include_callbacks: Optional[tf.keras.callbacks.CallbackList] = None,
+        callbacks: Optional[tf.keras.callbacks.CallbackList] = None,
     ) -> None:
         """
         Save a Tensorflow model as a TileDB array.
@@ -68,7 +68,7 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
             target location.
         :param meta: Extra metadata to save in a TileDB array.
         :param include_optimizer: Whether to save the optimizer or not.
-        :param include_callbacks: Callbacks list to store their data in array's metadata
+        :param callbacks: Callbacks list to store their data in array's metadata
         """
         if self.artifact is None:
             raise RuntimeError("Model is not initialized")
@@ -93,8 +93,8 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
         )
 
         # Add callbacks to the group
-        if include_callbacks:
-            for cb in include_callbacks:
+        if callbacks:
+            for cb in callbacks:
                 if isinstance(cb, tf.keras.callbacks.TensorBoard):
                     # Save TensorBoard callback
                     tb = TensorBoardTileDB(

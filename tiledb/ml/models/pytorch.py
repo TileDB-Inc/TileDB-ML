@@ -51,8 +51,7 @@ class PyTorchTileDBModel(TileDBArtifact[torch.nn.Module]):
         :param meta: Extra metadata to save in a TileDB array.
         :param model_info: Contains model info like loss, epoch etc, that could be needed
             to save a model's general checkpoint for inference and/or resuming training.
-        :param summary_writer: Contains summary writer object for storing tensorboard metadata
-                                in array's metadata
+        :param summary_writer: Contains summary writer object for storing tensorboard metadata as a TileDB array.
         """
         if self.artifact is None:
             raise RuntimeError("Model is not initialized")
