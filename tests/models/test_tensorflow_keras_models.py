@@ -12,16 +12,15 @@ import pytest
 import tensorflow as tf
 
 import tiledb
-from tiledb.ml.models.tensorflow_keras import (
-    TensorflowKerasTileDBModel,
-    tf_keras_is_keras,
-)
+from tiledb.ml.models.tensorflow_keras import TensorflowKerasTileDBModel
 
-if tf_keras_is_keras:
-    from keras import testing_utils
-else:
-    from tensorflow.python.keras import testing_utils
-
+try:
+    from keras.testing_infra.test_utils import (
+        get_small_functional_mlp,
+        get_small_sequential_mlp,
+    )
+except ImportError:
+    from keras.testing_utils import get_small_functional_mlp, get_small_sequential_mlp
 
 # Suppress all Tensorflow messages
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
@@ -75,11 +74,7 @@ loss_optimizer_metrics = pytest.mark.parametrize(
 
 api = pytest.mark.parametrize(
     "api",
-    [
-        testing_utils.get_small_sequential_mlp,
-        testing_utils.get_small_functional_mlp,
-        ConfigSubclassModel,
-    ],
+    [get_small_sequential_mlp, get_small_functional_mlp, ConfigSubclassModel],
 )
 
 
