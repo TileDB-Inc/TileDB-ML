@@ -63,6 +63,21 @@ class SklearnTileDBModel(TileDBArtifact[BaseEstimator]):
         model = pickle.loads(model_array_results["model_params"].item(0))
         return model
 
+    def load_v2(self, *, timestamp: Optional[Timestamp] = None) -> BaseEstimator:
+        """
+        Load a Sklearn model from a TileDB array.
+
+        :param timestamp: Range of timestamps to load fragments of the array which live
+            in the specified time range.
+        :return: A Sklearn model object.
+        """
+        # TODO: Change timestamp when issue in core is resolved
+
+        model_array = tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp)
+        model_array_results = model_array[:]
+        model = pickle.loads(model_array_results["model_params"].item(0))
+        return model
+
     def preview(self, *, display: str = "text") -> str:
         """
         Create a text representation of the model.

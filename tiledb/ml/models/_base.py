@@ -80,6 +80,14 @@ class TileDBArtifact(ABC, Generic[Artifact]):
             in the specified time range.
         """
 
+    @abstractmethod
+    def load_v2(self, *, timestamp: Optional[Timestamp] = None) -> Artifact:
+        """Abstract method that loads a machine learning model from a TileDB array.
+
+        :param timestamp: Range of timestamps to load fragments of the array which live
+            in the specified time range.
+        """
+
     def preview(self) -> str:
         return ""
 

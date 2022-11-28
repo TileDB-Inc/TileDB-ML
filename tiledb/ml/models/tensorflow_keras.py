@@ -13,8 +13,10 @@ import tensorflow as tf
 
 import tiledb
 
-from ._base import Meta, TileDBArtifact, Timestamp, current_milli_time, group_create
-from ._tensorboard import TensorBoardTileDB
+from ._base import Meta, TileDBArtifact, Timestamp, current_milli_time
+
+# group_create
+# from ._tensorboard import TensorBoardTileDB
 
 try:
     import keras
@@ -92,21 +94,125 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
             meta=meta,
         )
 
-        # Add callbacks to the group
-        if callbacks:
-            for cb in callbacks:
-                if isinstance(cb, tf.keras.callbacks.TensorBoard):
-                    # Save TensorBoard callback
-                    tb = TensorBoardTileDB(
-                        f"{self.uri}-tensorboard", self.ctx, self.namespace
-                    )
-                    tb.save(log_dir=os.path.join(cb.log_dir, "train"), update=update)
-
-            # Create group for first time when callback is activated
-            if not update:
-                group_create(self.uri, self.ctx)
+        # # Add callbacks to the group
+        # if callbacks:
+        #     for cb in callbacks:
+        #         if isinstance(cb, tf.keras.callbacks.TensorBoard):
+        #             # Save TensorBoard callback
+        #             tb = TensorBoardTileDB(
+        #                 f"{self.uri}-tensorboard", self.ctx, self.namespace
+        #             )
+        #             tb.save(log_dir=os.path.join(cb.log_dir, "train"), update=update)
+        #
+        #     # Create group for first time when callback is activated
+        #     if not update:
+        #         group_create(self.uri, self.ctx)
 
     def load(
+        self,
+        *,
+        timestamp: Optional[Timestamp] = None,
+        compile_model: bool = False,
+        custom_objects: Optional[Mapping[str, Any]] = None,
+        input_shape: Optional[Tuple[int, ...]] = None,
+        callback: bool = False,
+    ) -> tf.keras.Model:
+        """
+        Load a Tensorflow model from a TileDB array.
+
+        :param callback: Boolean variable if True will store Callback data into saved directory
+        :param timestamp: Range of timestamps to load fragments of the array which live
+            in the specified time range.
+        :param compile_model: Whether to compile the model after loading or not.
+        :param custom_objects: Mapping of names to custom classes or functions to be
+            considered during deserialization.
+        :param input_shape: The shape that the custom model expects as input
+        :return: Tensorflow model.
+        """
+        # TODO: Change timestamp when issue in core is resolved
+
+        with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
+            model_array_results = model_array[:]
+            model_config = json.loads(model_array.meta["model_config"])
+            model_class = model_config["class_name"]
+
+            if model_class not in ("Functional", "Sequential"):
+                with SharedObjectLoadingScope():
+                    with tf.keras.utils.CustomObjectScope(custom_objects or {}):
+                        if hasattr(model_config, "decode"):
+                            model_config = model_config.decode("utf-8")
+                        model = tf.keras.models.model_from_config(
+                            model_config, custom_objects=custom_objects
+                        )
+                        if not model.built:
+                            model.build(input_shape)
+
+                        # Load weights for layers
+                        self._load_custom_subclassed_model(model, model_array)
+            else:
+                cls = (
+                    tf.keras.Sequential
+                    if model_class == "Sequential"
+                    else tf.keras.Model
+                )
+                model = cls.from_config(model_config["config"])
+                model_weights = pickle.loads(
+                    model_array_results["model_weights"].item(0)
+                )
+                model.set_weights(model_weights)
+
+            if compile_model:
+                optimizer_weights = pickle.loads(
+                    model_array_results["optimizer_weights"].item(0)
+                )
+                training_config = json.loads(model_array.meta["training_config"])
+
+                # Compile model.
+                model.compile(
+                    **saving_utils.compile_args_from_training_config(
+                        training_config, custom_objects
+                    )
+                )
+                saving_utils.try_build_compiled_arguments(model)
+
+                # Set optimizer weights.
+                if optimizer_weights:
+                    try:
+                        model.optimizer._create_all_weights(model.trainable_variables)
+                    except (NotImplementedError, AttributeError):
+                        logging.warning(
+                            "Error when creating the weights of optimizer {}, making it "
+                            "impossible to restore the saved optimizer state. As a result, "
+                            "your model is starting with a freshly initialized optimizer."
+                        )
+
+                    try:
+                        model.optimizer.set_weights(optimizer_weights)
+                    except ValueError:
+                        logging.warning(
+                            "Error in loading the saved optimizer "
+                            "state. As a result, your model is "
+                            "starting with a freshly initialized "
+                            "optimizer."
+                        )
+        if callback:
+            try:
+                with tiledb.open(f"{self.uri}-tensorboard") as tb_array:
+                    for path, file_bytes in pickle.loads(
+                        tb_array[:]["tensorboard_data"][0]
+                    ).items():
+                        log_dir = os.path.dirname(path)
+                        if not os.path.exists(log_dir):
+                            os.mkdir(log_dir)
+                        with open(
+                            os.path.join(log_dir, os.path.basename(path)), "wb"
+                        ) as f:
+                            f.write(file_bytes)
+            except FileNotFoundError:
+                print(f"Array {self.uri}-tensorboard does not exist")
+        return model
+
+    def load_v2(
         self,
         *,
         timestamp: Optional[Timestamp] = None,

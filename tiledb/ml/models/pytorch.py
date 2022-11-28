@@ -10,8 +10,9 @@ from torch.utils.tensorboard import SummaryWriter
 
 import tiledb
 
-from ._base import Meta, TileDBArtifact, Timestamp, current_milli_time, group_create
-from ._tensorboard import TensorBoardTileDB
+from ._base import Meta, TileDBArtifact, Timestamp, current_milli_time  # group_create
+
+# from ._tensorboard import TensorBoardTileDB
 
 
 class PyTorchTileDBModel(TileDBArtifact[torch.nn.Module]):
@@ -91,16 +92,79 @@ class PyTorchTileDBModel(TileDBArtifact[torch.nn.Module]):
         )
 
         # Summary writer
-        if summary_writer:
-            tb = TensorBoardTileDB(f"{self.uri}-tensorboard", self.ctx, self.namespace)
-            tb.save(log_dir=os.path.join(summary_writer.log_dir), update=update)
-
-            # Create group for first time when callback is activated
-            if not update:
-                group_create(self.uri, self.ctx)
+        # if summary_writer:
+        #     tb = TensorBoardTileDB(f"{self.uri}-tensorboard", self.ctx, self.namespace)
+        #     tb.save(log_dir=os.path.join(summary_writer.log_dir), update=update)
+        #
+        #     # Create group for first time when callback is activated
+        #     if not update:
+        #         group_create(self.uri, self.ctx)
 
     # FIXME: This method should change to return the model, not the model_info dict
     def load(
+        self,
+        *,
+        timestamp: Optional[Timestamp] = None,
+        model: torch.nn.Module = None,
+        optimizer: Optimizer = None,
+        callback: bool = False,
+    ) -> Optional[Mapping[str, Any]]:
+        """
+        Load a PyTorch model from a TileDB array.
+
+        :param callback: Boolean variable if True will store Callback data into saved directory
+        :param timestamp: Range of timestamps to load fragments of the array which live
+            in the specified time range.
+        :param model: A defined PyTorch model.
+        :param optimizer: A defined PyTorch optimizer.
+        :return: A dictionary with attributes other than model or optimizer state_dict.
+        """
+
+        # TODO: Change timestamp when issue in core is resolved
+        model_array = tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp)
+        model_array_results = model_array[:]
+        schema = model_array.schema
+
+        model_state_dict = pickle.loads(model_array_results["model_state_dict"].item(0))
+        optimizer_state_dict = pickle.loads(
+            model_array_results["optimizer_state_dict"].item(0)
+        )
+
+        # Load model's state and optimizer dictionaries
+        model.load_state_dict(model_state_dict)
+        optimizer.load_state_dict(optimizer_state_dict)
+
+        # Get the rest of the attributes
+        out_dict = {}
+        for idx in range(schema.nattr):
+            attr_name = schema.attr(idx).name
+            if (
+                schema.attr(idx).name != "model_state_dict"
+                and schema.attr(idx).name != "optimizer_state_dict"
+            ):
+                out_dict[attr_name] = pickle.loads(
+                    model_array_results[attr_name].item(0)
+                )
+
+        if callback:
+            try:
+                with tiledb.open(f"{self.uri}-tensorboard") as tb_array:
+                    for path, file_bytes in pickle.loads(
+                        tb_array[:]["tensorboard_data"][0]
+                    ).items():
+                        log_dir = os.path.dirname(path)
+                        if not os.path.exists(log_dir):
+                            os.mkdir(log_dir)
+                        with open(
+                            os.path.join(log_dir, os.path.basename(path)), "wb"
+                        ) as f:
+                            f.write(file_bytes)
+            except FileNotFoundError:
+                print(f"Array {self.uri}-tensorboard does not exist")
+
+        return out_dict
+
+    def load_v2(
         self,
         *,
         timestamp: Optional[Timestamp] = None,
