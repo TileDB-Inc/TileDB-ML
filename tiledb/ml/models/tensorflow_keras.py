@@ -1,6 +1,5 @@
 """Functionality for saving and loading Tensorflow Keras models as TileDB arrays"""
 
-import glob
 import io
 import json
 import logging
@@ -397,20 +396,6 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
             optimizer_weights = tf.keras.backend.batch_get_value(optimizer.weights)
             return pickle.dumps(optimizer_weights, protocol=4)
         return b""
-
-    @staticmethod
-    def _serialize_tensorboard_files(log_dir: str = "") -> bytes:
-        """Serialize all Tensorboard files."""
-
-        if not os.path.exists(log_dir):
-            raise ValueError(f"{log_dir} does not exist")
-
-        event_files = {}
-        for path in glob.glob(f"{log_dir}/*tfevents*"):
-            with open(path, "rb") as f:
-                event_files[path] = f.read()
-
-        return pickle.dumps(event_files, protocol=4)
 
     def _load_custom_subclassed_model(
         self, model: tf.keras.Model, model_array: tiledb.Array

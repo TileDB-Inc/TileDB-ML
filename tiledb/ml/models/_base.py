@@ -1,5 +1,8 @@
 """Base Class for saving and loading machine learning models."""
 
+import glob
+import os
+import pickle
 import platform
 import time
 from abc import ABC, abstractmethod
@@ -155,3 +158,17 @@ class TileDBArtifact(ABC, Generic[Artifact]):
                 array.meta[key] = value
         for key, value in self._file_properties.items():
             array.meta[key] = value
+
+    @staticmethod
+    def _serialize_tensorboard_files(log_dir: str = "") -> bytes:
+        """Serialize all Tensorboard files."""
+
+        if not os.path.exists(log_dir):
+            raise ValueError(f"{log_dir} does not exist")
+
+        event_files = {}
+        for path in glob.glob(f"{log_dir}/*tfevents*"):
+            with open(path, "rb") as f:
+                event_files[path] = f.read()
+
+        return pickle.dumps(event_files, protocol=4)
