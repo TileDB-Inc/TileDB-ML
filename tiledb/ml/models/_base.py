@@ -80,15 +80,10 @@ class TileDBArtifact(ABC, Generic[Artifact]):
             in the specified time range.
         """
 
-    @abstractmethod
-    def load_v2(self, *, timestamp: Optional[Timestamp] = None) -> Artifact:
-        """Abstract method that loads a machine learning model from a TileDB array.
-
-        :param timestamp: Range of timestamps to load fragments of the array which live
-            in the specified time range.
-        """
-
     def preview(self) -> str:
+        """
+        Creates a string representation of a machine learning model.
+        """
         return ""
 
     def _get_file_properties(self) -> Mapping[str, str]:
@@ -102,7 +97,6 @@ class TileDBArtifact(ABC, Generic[Artifact]):
 
     def _create_array(
         self,
-        domain_info: Tuple[str, Tuple[int, int]],
         fields: Sequence[str],
     ) -> None:
         """Internal method that creates a TileDB array based on the model's spec."""
@@ -118,45 +112,24 @@ class TileDBArtifact(ABC, Generic[Artifact]):
             ),
         )
 
-        # schema = tiledb.ArraySchema(
-        #     domain=dom,
-        #     sparse=False,
-        #     attrs=[
-        #         tiledb.Attr(
-        #             name="contents",
-        #             dtype=numpy.uint8,
-        #             filters=tiledb.FilterList([tiledb.ZstdFilter()]),
-        #         )
-        #     ],
-        #     ctx=tiledb_create_context,
-        # )
-
-        # dom = tiledb.Domain(
-        #     tiledb.Dim(
-        #         name=domain_info[0],
-        #         domain=domain_info[1],
-        #         tile=1,
-        #         dtype=np.int32,
-        #         ctx=self.ctx,
-        #     ),
-        # )
-
         attrs = [
             tiledb.Attr(
                 name=field,
-                dtype=str if field == "layer_name" else bytes,
+                dtype=bytes,
                 var=True,
                 filters=tiledb.FilterList([tiledb.ZstdFilter()]),
                 ctx=self.ctx,
             )
             for field in fields
         ]
+
         schema = tiledb.ArraySchema(
             domain=dom,
             sparse=False,
             attrs=attrs,
             ctx=self.ctx,
         )
+
         tiledb.Array.create(self.uri, schema, ctx=self.ctx)
 
         # In case we are on TileDB-Cloud we have to update model array's file properties
