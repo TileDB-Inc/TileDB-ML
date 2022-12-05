@@ -118,8 +118,7 @@ class TileDBArtifact(ABC, Generic[Artifact]):
         attrs = [
             tiledb.Attr(
                 name=field,
-                dtype=bytes,
-                var=True,
+                dtype=np.uint8,
                 filters=tiledb.FilterList([tiledb.ZstdFilter()]),
                 ctx=self.ctx,
             )
