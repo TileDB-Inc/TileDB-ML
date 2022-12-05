@@ -264,9 +264,10 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
                     f" (existing keys: {set(model_meta)})"
                 )
 
-            model_weights = pickle.loads(
-                model_array[0:model_weights_size]["model_weights"]
-            )
+            md_weights_contents: np.ndarray = model_array[0:model_weights_size][
+                "model_weights"
+            ]
+            model_weights = pickle.loads(md_weights_contents.tobytes())
             model.set_weights(model_weights)
 
             if compile_model:
@@ -278,9 +279,10 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
                         f" (existing keys: {set(model_meta)})"
                     )
 
-                optimizer_weights = pickle.loads(
-                    model_array[0:optimizer_weights_size]["optimizer_weights"]
-                )
+                opt_weights_contents: np.ndarray = model_array[
+                    0:optimizer_weights_size
+                ]["optimizer_weights"]
+                optimizer_weights = pickle.loads(opt_weights_contents.tobytes())
                 training_config = json.loads(model_array.meta["training_config"])
 
                 # Compile model.

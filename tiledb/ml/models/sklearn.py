@@ -97,7 +97,10 @@ class SklearnTileDBModel(TileDBArtifact[BaseEstimator]):
                     f" (existing keys: {set(model_meta)})"
                 )
 
-            return pickle.loads(model_array[0:model_size]["model"])
+            model_contents: np.ndarray = model_array[0:model_size]["model"]
+            model_bytes = model_contents.tobytes()
+
+            return pickle.loads(model_bytes)
 
     def preview(self, *, display: str = "text") -> str:
         """

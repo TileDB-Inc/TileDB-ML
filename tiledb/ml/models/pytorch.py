@@ -195,9 +195,10 @@ class PyTorchTileDBModel(TileDBArtifact[torch.nn.Module]):
                 )
 
             # Load model's state dictionary
-            model_state_dict = pickle.loads(
-                model_array[0:model_state_dict_size]["model_state_dict"]
-            )
+            md_state_dict_contents: np.ndarray = model_array[0:model_state_dict_size][
+                "model_state_dict"
+            ]
+            model_state_dict = pickle.loads(md_state_dict_contents.tobytes())
             model.load_state_dict(model_state_dict)
 
             # Load model's state dictionary
@@ -210,10 +211,11 @@ class PyTorchTileDBModel(TileDBArtifact[torch.nn.Module]):
                         f" (existing keys: {set(model_meta)})"
                     )
 
-                optimizer_state_dict = pickle.loads(
-                    model_array[0:optimizer_state_dict_size]["optimizer_state_dict"]
-                )
-                optimizer.load_state_dict(optimizer_state_dict)
+                opt_state_dict_contents: np.ndarray = model_array[
+                    0:optimizer_state_dict_size
+                ]["optimizer_state_dict"]
+                opt_state_dict = pickle.loads(opt_state_dict_contents.tobytes())
+                optimizer.load_state_dict(opt_state_dict)
 
             if callback:
                 self._write_tensorboard_files(array=model_array)

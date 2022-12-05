@@ -184,7 +184,8 @@ class TileDBArtifact(ABC, Generic[Artifact]):
                 f" (existing keys: {set(meta)})"
             )
 
-        tensorboard_files = pickle.loads(array[0:tensorboard_size]["tensorboard"])
+        tensorboard_contents: np.ndarray = array[0:tensorboard_size]["tensorboard"]
+        tensorboard_files = pickle.loads(tensorboard_contents.tobytes())
 
         for path, file_bytes in tensorboard_files:
             log_dir = os.path.dirname(path)
