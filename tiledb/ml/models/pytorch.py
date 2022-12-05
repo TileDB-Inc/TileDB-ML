@@ -239,23 +239,23 @@ class PyTorchTileDBModel(TileDBArtifact[torch.nn.Module]):
         # TODO: Change timestamp when issue in core is resolved
         with tiledb.open(
             self.uri, "w", timestamp=current_milli_time(), ctx=self.ctx
-        ) as tf_model_tiledb:
+        ) as pt_model_tiledb:
 
             one_d_buffer = np.frombuffer(serialized_model_dict, dtype=np.uint8)
-            tf_model_tiledb[: len(one_d_buffer)] = {"model_state_dict": one_d_buffer}
-            tf_model_tiledb.meta["model_state_dict_size"] = len(one_d_buffer)
+            pt_model_tiledb[: len(one_d_buffer)] = {"model_state_dict": one_d_buffer}
+            pt_model_tiledb.meta["model_state_dict_size"] = len(one_d_buffer)
 
             if serialized_optimizer_dict:
                 one_d_buffer = np.frombuffer(serialized_optimizer_dict, dtype=np.uint8)
-                tf_model_tiledb[: len(one_d_buffer)] = {
+                pt_model_tiledb[: len(one_d_buffer)] = {
                     "optimizer_state_dict": one_d_buffer
                 }
-                tf_model_tiledb.meta["optimizer_state_dict_size"] = len(one_d_buffer)
+                pt_model_tiledb.meta["optimizer_state_dict_size"] = len(one_d_buffer)
 
             if serialized_tb_files:
                 one_d_buffer = np.frombuffer(serialized_tb_files, dtype=np.uint8)
-                tf_model_tiledb[: len(one_d_buffer)] = {"tensorboard": one_d_buffer}
-                tf_model_tiledb.meta["tensorboard_size"] = len(one_d_buffer)
+                pt_model_tiledb[: len(one_d_buffer)] = {"tensorboard": one_d_buffer}
+                pt_model_tiledb.meta["tensorboard_size"] = len(one_d_buffer)
 
             # Insert all model metadata
-            self.update_model_metadata(array=tf_model_tiledb, meta=meta)
+            self.update_model_metadata(array=pt_model_tiledb, meta=meta)
