@@ -39,44 +39,65 @@ class SklearnTileDBModel(TileDBArtifact[BaseEstimator]):
             target location.
         :param meta: Extra metadata to save in a TileDB array.
         """
+        if self.artifact is None:
+            raise RuntimeError("Model is not initialized")
+
         # Serialize model
         serialized_model = self._serialize_model()
 
         # Create TileDB model array
         if not update:
-            self.__create_array()
+            self._create_array(fields=["model"])
 
         self._write_array(serialized_model=serialized_model, meta=meta)
 
     def load(self, *, timestamp: Optional[Timestamp] = None) -> BaseEstimator:
         """
-        Load a Sklearn model from a TileDB array.
+        Load switch, i.e, decide between __load (TileDB-ML<=0.8.0) or __load_v2 (TileDB-ML>0.8.0).
 
+        Load a Sklearn model from a TileDB array.
         :param timestamp: Range of timestamps to load fragments of the array which live
             in the specified time range.
         :return: A Sklearn model object.
         """
         # TODO: Change timestamp when issue in core is resolved
 
-        model_array = tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp)
-        model_array_results = model_array[:]
-        model = pickle.loads(model_array_results["model_params"].item(0))
-        return model
+        with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
+            # Check if we try to load models with the old 1-cell schema.
+            if model_array.schema.domain.size < np.iinfo(np.uint64).max - 1025:
+                return self.__load(
+                    timestamp=timestamp,
+                )
+            return self.__load_v2(
+                timestamp=timestamp,
+            )
 
-    def load_v2(self, *, timestamp: Optional[Timestamp] = None) -> BaseEstimator:
+    def __load(self, *, timestamp: Optional[Timestamp] = None) -> BaseEstimator:
         """
         Load a Sklearn model from a TileDB array.
-
-        :param timestamp: Range of timestamps to load fragments of the array which live
-            in the specified time range.
-        :return: A Sklearn model object.
         """
-        # TODO: Change timestamp when issue in core is resolved
-
         model_array = tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp)
         model_array_results = model_array[:]
         model = pickle.loads(model_array_results["model_params"].item(0))
         return model
+
+    def __load_v2(self, *, timestamp: Optional[Timestamp] = None) -> BaseEstimator:
+        """
+        Load a Sklearn model from a TileDB array.
+        """
+
+        with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
+            model_meta = dict(model_array.meta.items())
+
+            try:
+                model_size = model_meta["model_size"]
+            except KeyError:
+                raise Exception(
+                    f"model_size metadata entry not present in {self.uri}"
+                    f" (existing keys: {set(model_meta)})"
+                )
+
+            return pickle.loads(model_array[0:model_size]["model"])
 
     def preview(self, *, display: str = "text") -> str:
         """
@@ -93,14 +114,6 @@ class SklearnTileDBModel(TileDBArtifact[BaseEstimator]):
         else:
             return ""
 
-    def __create_array(self) -> None:
-        """Create a TileDB array for a Sklearn model."""
-
-        assert self.artifact
-        domain_info = ("model", (1, 1))
-        fields = ["model_params"]
-        super()._create_array(domain_info, fields)
-
     def _write_array(self, serialized_model: bytes, meta: Optional[Meta]) -> None:
         """
         Write a Sklearn model to a TileDB array.
@@ -112,10 +125,13 @@ class SklearnTileDBModel(TileDBArtifact[BaseEstimator]):
 
         with tiledb.open(
             self.uri, "w", timestamp=current_milli_time(), ctx=self.ctx
-        ) as tf_model_tiledb:
-            # Insertion in TileDB array
-            tf_model_tiledb[:] = {"model_params": np.array([serialized_model])}
-            self.update_model_metadata(array=tf_model_tiledb, meta=meta)
+        ) as skt_model_tiledb:
+
+            one_d_buffer = np.frombuffer(serialized_model, dtype=np.uint8)
+            skt_model_tiledb[: len(one_d_buffer)] = {"model": one_d_buffer}
+            skt_model_tiledb.meta["model_size"] = len(one_d_buffer)
+
+            self.update_model_metadata(array=skt_model_tiledb, meta=meta)
 
     def _serialize_model(self) -> bytes:
         """
