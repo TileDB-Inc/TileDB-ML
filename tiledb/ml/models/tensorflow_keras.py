@@ -314,24 +314,8 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
                         )
 
         if callback:
-            try:
-                tensorboard_size = model_meta["tensorboard_size"]
-            except KeyError:
-                raise Exception(
-                    f"tensorboard_size metadata entry not present in {self.uri}"
-                    f" (existing keys: {set(model_meta)})"
-                )
+            self._write_tensorboard_files(array=model_array)
 
-            tensorboard_files = pickle.loads(
-                model_array[0:tensorboard_size]["tensorboard"]
-            )
-
-            for path, file_bytes in tensorboard_files:
-                log_dir = os.path.dirname(path)
-                if not os.path.exists(log_dir):
-                    os.mkdir(log_dir)
-                with open(os.path.join(log_dir, os.path.basename(path)), "wb") as f:
-                    f.write(file_bytes)
         return model
 
     def preview(self) -> str:

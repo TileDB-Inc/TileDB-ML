@@ -172,3 +172,24 @@ class TileDBArtifact(ABC, Generic[Artifact]):
                 event_files[path] = f.read()
 
         return pickle.dumps(event_files, protocol=4)
+
+    @staticmethod
+    def _write_tensorboard_files(array: tiledb.Array):  # type: ignore
+        meta = dict(array.meta.items())
+
+        try:
+            tensorboard_size = meta["tensorboard_size"]
+        except KeyError:
+            raise Exception(
+                f"tensorboard_size metadata entry not present in"
+                f" (existing keys: {set(meta)})"
+            )
+
+        tensorboard_files = pickle.loads(array[0:tensorboard_size]["tensorboard"])
+
+        for path, file_bytes in tensorboard_files:
+            log_dir = os.path.dirname(path)
+            if not os.path.exists(log_dir):
+                os.mkdir(log_dir)
+            with open(os.path.join(log_dir, os.path.basename(path)), "wb") as f:
+                f.write(file_bytes)
