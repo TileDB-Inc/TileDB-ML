@@ -243,21 +243,30 @@ class PyTorchTileDBModel(TileDBArtifact[torch.nn.Module]):
             self.uri, "w", timestamp=current_milli_time(), ctx=self.ctx
         ) as pt_model_tiledb:
 
-            one_d_buffer = np.frombuffer(serialized_model_dict, dtype=np.uint8)
-            pt_model_tiledb[: len(one_d_buffer)] = {"model_state_dict": one_d_buffer}
-            pt_model_tiledb.meta["model_state_dict_size"] = len(one_d_buffer)
+            one_d_buffer_md = np.frombuffer(serialized_model_dict, dtype=np.uint8)
+            pt_model_tiledb.meta["model_state_dict_size"] = len(one_d_buffer_md)
 
-            if serialized_optimizer_dict:
-                one_d_buffer = np.frombuffer(serialized_optimizer_dict, dtype=np.uint8)
-                pt_model_tiledb[: len(one_d_buffer)] = {
-                    "optimizer_state_dict": one_d_buffer
-                }
-                pt_model_tiledb.meta["optimizer_state_dict_size"] = len(one_d_buffer)
+            one_d_buffer_opt = np.frombuffer(serialized_optimizer_dict, dtype=np.uint8)
+            pt_model_tiledb.meta["optimizer_state_dict_size"] = len(one_d_buffer_opt)
 
-            if serialized_tb_files:
-                one_d_buffer = np.frombuffer(serialized_tb_files, dtype=np.uint8)
-                pt_model_tiledb[: len(one_d_buffer)] = {"tensorboard": one_d_buffer}
-                pt_model_tiledb.meta["tensorboard_size"] = len(one_d_buffer)
+            one_d_buffer_tb = np.frombuffer(serialized_tb_files, dtype=np.uint8)
+            pt_model_tiledb.meta["tensorboard_size"] = len(one_d_buffer_tb)
+
+            max_len = max(
+                len(one_d_buffer_md), len(one_d_buffer_opt), len(one_d_buffer_tb)
+            )
+
+            pt_model_tiledb[0:max_len] = {
+                "model_state_dict": np.pad(
+                    one_d_buffer_md, (0, max_len - len(one_d_buffer_md)), "constant"
+                ),
+                "optimizer_state_dict": np.pad(
+                    one_d_buffer_opt, (0, max_len - len(one_d_buffer_opt)), "constant"
+                ),
+                "tensorboard": np.pad(
+                    one_d_buffer_tb, (0, max_len - len(one_d_buffer_tb)), "constant"
+                ),
+            }
 
             # Insert all model metadata
             self.update_model_metadata(array=pt_model_tiledb, meta=meta)
