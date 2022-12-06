@@ -12,16 +12,15 @@ import pytest
 import tensorflow as tf
 
 import tiledb
-from tiledb.ml.models.tensorflow_keras import (
-    TensorflowKerasTileDBModel,
-    tf_keras_is_keras,
-)
+from tiledb.ml.models.tensorflow_keras import TensorflowKerasTileDBModel
 
-if tf_keras_is_keras:
-    from keras import testing_utils
-else:
-    from tensorflow.python.keras import testing_utils
-
+try:
+    from keras.testing_infra.test_utils import (
+        get_small_functional_mlp,
+        get_small_sequential_mlp,
+    )
+except ImportError:
+    from keras.testing_utils import get_small_functional_mlp, get_small_sequential_mlp
 
 # Suppress all Tensorflow messages
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
@@ -75,15 +74,27 @@ loss_optimizer_metrics = pytest.mark.parametrize(
 
 api = pytest.mark.parametrize(
     "api",
-    [
-        testing_utils.get_small_sequential_mlp,
-        testing_utils.get_small_functional_mlp,
-        ConfigSubclassModel,
-    ],
+    [get_small_sequential_mlp, get_small_functional_mlp],
 )
 
 
 class TestTensorflowKerasModel:
+    @loss_optimizer_metrics
+    def test_exception_on_subclassed_models(self, tmpdir, loss, optimizer, metrics):
+        model = ConfigSubclassModel(hidden_units=[16, 16, 10])
+
+        tiledb_uri = os.path.join(tmpdir, "model_array")
+
+        # Compiles the model if optimizer is present
+        if optimizer:
+            model.compile(loss=loss, optimizer=optimizer, metrics=[metrics])
+
+        if not model.built:
+            model.build(tuple(np.random.randint(20, size=2)))
+        tiledb_model_obj = TensorflowKerasTileDBModel(uri=tiledb_uri, model=model)
+        with pytest.raises(RuntimeError):
+            tiledb_model_obj.save(include_optimizer=True if optimizer else False)
+
     @api
     @loss_optimizer_metrics
     def test_save_model_to_tiledb_array(self, tmpdir, api, loss, optimizer, metrics):
@@ -126,7 +137,12 @@ class TestTensorflowKerasModel:
         if not model.built:
             model.build(input_shape)
         tiledb_model_obj = TensorflowKerasTileDBModel(uri=tiledb_uri, model=model)
-        tiledb_model_obj.save(include_optimizer=True if optimizer else False)
+
+        if isinstance(model, ConfigSubclassModel):
+            with pytest.raises(RuntimeError):
+                tiledb_model_obj.save(include_optimizer=True if optimizer else False)
+        else:
+            tiledb_model_obj.save(include_optimizer=True if optimizer else False)
 
         loaded_model = (
             tiledb_model_obj.load(
@@ -546,9 +562,11 @@ class TestTensorflowKerasModelCloud:
 
         log_files = read_files(os.path.join(tmpdir, "train"))
         assert log_files
-        tiledb_obj.save(include_callbacks=cb)
-        with tiledb.open(f"{tiledb_array}-tensorboard") as A:
-            assert pickle.loads(A[:]["tensorboard_data"][0]) == {
+
+        tiledb_obj.save(callbacks=cb)
+        with tiledb.open(tiledb_array) as A:
+            tb_size = A.meta["tensorboard_size"]
+            assert pickle.loads(A[0:tb_size]["tensorboard"]) == {
                 os.path.join(tmpdir, "train", "foo_tfevents_1"): b"test_bytes_1",
                 os.path.join(tmpdir, "train", "bar_tfevents_2"): b"test_bytes_2",
             }

@@ -7,6 +7,7 @@ import os
 import pickle
 from typing import Any, List, Mapping, Optional, Tuple
 
+import keras
 import numpy as np
 import tensorflow as tf
 
@@ -14,20 +15,9 @@ import tiledb
 
 from ._base import Meta, TileDBArtifact, Timestamp, current_milli_time
 
-try:
-    import keras
-
-    if keras.Model is not tf.keras.Model:
-        raise ImportError
-    tf_keras_is_keras = True
-except ImportError:
-    import tensorflow.python.keras as keras
-
-    tf_keras_is_keras = False
-
 SharedObjectLoadingScope = keras.utils.generic_utils.SharedObjectLoadingScope
 FunctionalOrSequential = (keras.models.Functional, keras.models.Sequential)
-TFOptimizer = keras.optimizer_v1.TFOptimizer
+TFOptimizer = keras.optimizers.TFOptimizer
 get_json_type = keras.saving.saved_model.json_utils.get_json_type
 preprocess_weights_for_loading = keras.saving.hdf5_format.preprocess_weights_for_loading
 saving_utils = keras.saving.saving_utils
@@ -315,8 +305,8 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
                             "optimizer."
                         )
 
-        if callback:
-            self._write_tensorboard_files(array=model_array)
+            if callback:
+                self._write_tensorboard_files(array=model_array)
 
         return model
 
@@ -342,23 +332,32 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
             self.uri, "w", timestamp=current_milli_time(), ctx=self.ctx
         ) as tf_model_tiledb:
 
-            one_d_buffer = np.frombuffer(serialized_model_weights, dtype=np.uint8)
-            tf_model_tiledb[: len(one_d_buffer)] = {"model_weights": one_d_buffer}
-            tf_model_tiledb.meta["model_weights_size"] = len(one_d_buffer)
+            one_d_buffer_md = np.frombuffer(serialized_model_weights, dtype=np.uint8)
+            tf_model_tiledb.meta["model_weights_size"] = len(one_d_buffer_md)
 
-            if serialized_optimizer_weights:
-                one_d_buffer = np.frombuffer(
-                    serialized_optimizer_weights, dtype=np.uint8
-                )
-                tf_model_tiledb[: len(one_d_buffer)] = {
-                    "optimizer_weights": one_d_buffer
-                }
-                tf_model_tiledb.meta["optimizer_weights_size"] = len(one_d_buffer)
+            one_d_buffer_opt = np.frombuffer(
+                serialized_optimizer_weights, dtype=np.uint8
+            )
+            tf_model_tiledb.meta["optimizer_weights_size"] = len(one_d_buffer_opt)
 
-            if serialized_tb_files:
-                one_d_buffer = np.frombuffer(serialized_tb_files, dtype=np.uint8)
-                tf_model_tiledb[: len(one_d_buffer)] = {"tensorboard": one_d_buffer}
-                tf_model_tiledb.meta["tensorboard_size"] = len(one_d_buffer)
+            one_d_buffer_tb = np.frombuffer(serialized_tb_files, dtype=np.uint8)
+            tf_model_tiledb.meta["tensorboard_size"] = len(one_d_buffer_tb)
+
+            max_len = max(
+                len(one_d_buffer_md), len(one_d_buffer_opt), len(one_d_buffer_tb)
+            )
+
+            tf_model_tiledb[0:max_len] = {
+                "model_weights": np.pad(
+                    one_d_buffer_md, (0, max_len - len(one_d_buffer_md)), "constant"
+                ),
+                "optimizer_weights": np.pad(
+                    one_d_buffer_opt, (0, max_len - len(one_d_buffer_opt)), "constant"
+                ),
+                "tensorboard": np.pad(
+                    one_d_buffer_tb, (0, max_len - len(one_d_buffer_tb)), "constant"
+                ),
+            }
 
             # Insert all model metadata
             model_metadata = saving_utils.model_metadata(
