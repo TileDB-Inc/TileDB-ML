@@ -6,7 +6,17 @@ import pickle
 import platform
 import time
 from abc import ABC, abstractmethod
-from typing import Any, Generic, Mapping, Optional, Sequence, Tuple, TypeVar
+from typing import (
+    Any,
+    Generic,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+    TypeVar,
+    Union,
+)
 
 import numpy as np
 
@@ -18,6 +28,8 @@ from ._file_properties import ModelFileProperties
 Artifact = TypeVar("Artifact")
 Meta = Mapping[str, Any]
 Timestamp = Tuple[int, int]
+
+Weights = Union[List[np.ndarray], Mapping[str, Any]]
 
 
 def current_milli_time() -> int:
@@ -81,6 +93,16 @@ class TileDBArtifact(ABC, Generic[Artifact]):
         Creates a string representation of a machine learning model.
         """
         return ""
+
+    def get_weights(self) -> Weights:
+        """
+        Returns the weights of a machine learning model
+        """
+
+    def get_optimizer_weights(self) -> Weights:
+        """
+        Return the weights of the optimizer of a machine learning model.
+        """
 
     def _get_file_properties(self) -> Mapping[str, str]:
         return {
@@ -165,24 +187,32 @@ class TileDBArtifact(ABC, Generic[Artifact]):
 
         return pickle.dumps(event_files, protocol=4)
 
-    @staticmethod
-    def _write_tensorboard_files(array: tiledb.Array):  # type: ignore
-        meta = dict(array.meta.items())
+    def get_tensorboard(self, timestamp: Optional[Timestamp] = None) -> None:
+        """
+        Writes Tensorboard files to directory.
+        """
+        with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
+            meta = dict(model_array.meta.items())
 
-        try:
-            tensorboard_size = meta["tensorboard_size"]
-        except KeyError:
-            raise Exception(
-                f"tensorboard_size metadata entry not present in"
-                f" (existing keys: {set(meta)})"
-            )
+            try:
+                tensorboard_size = meta["tensorboard_size"]
+            except KeyError:
+                raise Exception(
+                    f"tensorboard_size metadata entry not present in"
+                    f" (existing keys: {set(meta)})"
+                )
 
-        tensorboard_contents: np.ndarray = array[0:tensorboard_size]["tensorboard"]
-        tensorboard_files = pickle.loads(tensorboard_contents.tobytes())
+            if tensorboard_size:
+                tensorboard_contents: np.ndarray = model_array[0:tensorboard_size][
+                    "tensorboard"
+                ]
+                tensorboard_files = pickle.loads(tensorboard_contents.tobytes())
 
-        for path, file_bytes in tensorboard_files.items():
-            log_dir = os.path.dirname(path)
-            if not os.path.exists(log_dir):
-                os.mkdir(log_dir)
-            with open(os.path.join(log_dir, os.path.basename(path)), "wb") as f:
-                f.write(file_bytes)
+                for path, file_bytes in tensorboard_files.items():
+                    log_dir = os.path.dirname(path)
+                    if not os.path.exists(log_dir):
+                        os.mkdir(log_dir)
+                    with open(os.path.join(log_dir, os.path.basename(path)), "wb") as f:
+                        f.write(file_bytes)
+            else:
+                raise Exception("There are no Tensorboard files in the array!")
