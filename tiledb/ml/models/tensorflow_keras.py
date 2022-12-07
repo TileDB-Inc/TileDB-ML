@@ -238,41 +238,18 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
         Load a Tensorflow model from a TileDB array. TileDB-ML>0.8.0
         """
 
+        model_weights = self.get_weights(timestamp=timestamp)
+        optimizer_weights = self.get_optimizer_weights(timestamp=timestamp)
+
         with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
             model_config = json.loads(model_array.meta["model_config"])
             model_class = model_config["class_name"]
 
             cls = tf.keras.Sequential if model_class == "Sequential" else tf.keras.Model
             model = cls.from_config(model_config["config"])
-            model_meta = dict(model_array.meta.items())
-
-            try:
-                model_weights_size = model_meta["model_weights_size"]
-            except KeyError:
-                raise Exception(
-                    f"model_weights_size metadata entry not present in {self.uri}"
-                    f" (existing keys: {set(model_meta)})"
-                )
-
-            md_weights_contents: np.ndarray = model_array[0:model_weights_size][
-                "model_weights"
-            ]
-            model_weights = pickle.loads(md_weights_contents.tobytes())
             model.set_weights(model_weights)
 
             if compile_model:
-                try:
-                    optimizer_weights_size = model_meta["optimizer_weights_size"]
-                except KeyError:
-                    raise Exception(
-                        f"optimizer_weights_size metadata entry not present in {self.uri}"
-                        f" (existing keys: {set(model_meta)})"
-                    )
-
-                opt_weights_contents: np.ndarray = model_array[
-                    0:optimizer_weights_size
-                ]["optimizer_weights"]
-                optimizer_weights = pickle.loads(opt_weights_contents.tobytes())
                 training_config = json.loads(model_array.meta["training_config"])
 
                 # Compile model.
@@ -305,8 +282,8 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
                             "optimizer."
                         )
 
-            if callback:
-                self._write_tensorboard_files(array=model_array)
+        if callback:
+            self.get_tensorboard(timestamp=timestamp)
 
         return model
 
@@ -318,6 +295,52 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
             model_summary = str_rep.getvalue()
             return model_summary
         return ""
+
+    def get_weights(self, timestamp: Optional[Timestamp] = None) -> List[np.ndarray]:
+        """
+        Returns the weights of a Tensorflow Keras model.
+        """
+        with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
+            model_meta = dict(model_array.meta.items())
+
+            try:
+                model_weights_size = model_meta["model_weights_size"]
+            except KeyError:
+                raise Exception(
+                    f"model_weights_size metadata entry not present in {self.uri}"
+                    f" (existing keys: {set(model_meta)})"
+                )
+
+            md_weights_contents: np.ndarray = model_array[0:model_weights_size][
+                "model_weights"
+            ]
+            model_weights = pickle.loads(md_weights_contents.tobytes())
+
+        return model_weights  # type: ignore
+
+    def get_optimizer_weights(
+        self, timestamp: Optional[Timestamp] = None
+    ) -> List[np.ndarray]:
+        """
+        Returns the weights of the optimizer of a Tensorflow Keras model.
+        """
+        with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
+            model_meta = dict(model_array.meta.items())
+
+            try:
+                optimizer_weights_size = model_meta["optimizer_weights_size"]
+            except KeyError:
+                raise Exception(
+                    f"optimizer_weights_size metadata entry not present in {self.uri}"
+                    f" (existing keys: {set(model_meta)})"
+                )
+
+            if optimizer_weights_size:
+                opt_weights_contents: np.ndarray = model_array[
+                    0:optimizer_weights_size
+                ]["optimizer_weights"]
+                return pickle.loads(opt_weights_contents.tobytes())  # type: ignore
+        return []
 
     def _write_array(
         self,
