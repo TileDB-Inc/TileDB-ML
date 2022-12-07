@@ -183,6 +183,28 @@ class PyTorchTileDBModel(TileDBArtifact[torch.nn.Module]):
         Load a PyTorch model from a TileDB array.
         """
 
+        model_state_dict = self.get_weights(timestamp=timestamp)
+        opt_state_dict = self.get_optimizer_weights(timestamp=timestamp)
+
+        model.load_state_dict(model_state_dict)
+
+        # Load model's state dictionary
+        if optimizer:
+            optimizer.load_state_dict(opt_state_dict)
+
+        if callback:
+            self.get_tensorboard(timestamp=timestamp)
+
+    def preview(self) -> str:
+        """
+        Create a string representation of the model.
+
+        :return: str. A string representation of the models internal configuration.
+        """
+        return str(self.artifact) if self.artifact else ""
+
+    def get_weights(self, timestamp: Optional[Timestamp] = None) -> Mapping[str, Any]:
+
         with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
             model_meta = dict(model_array.meta.items())
 
@@ -198,35 +220,28 @@ class PyTorchTileDBModel(TileDBArtifact[torch.nn.Module]):
             md_state_dict_contents: np.ndarray = model_array[0:model_state_dict_size][
                 "model_state_dict"
             ]
-            model_state_dict = pickle.loads(md_state_dict_contents.tobytes())
-            model.load_state_dict(model_state_dict)
+            return pickle.loads(md_state_dict_contents.tobytes())  # type: ignore
 
-            # Load model's state dictionary
-            if optimizer:
-                try:
-                    optimizer_state_dict_size = model_meta["optimizer_state_dict_size"]
-                except KeyError:
-                    raise Exception(
-                        f"optimizer_state_dict_size metadata entry not present in {self.uri}"
-                        f" (existing keys: {set(model_meta)})"
-                    )
+    def get_optimizer_weights(
+        self, timestamp: Optional[Timestamp] = None
+    ) -> Mapping[str, Any]:
+        with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
+            model_meta = dict(model_array.meta.items())
 
+            try:
+                optimizer_state_dict_size = model_meta["optimizer_state_dict_size"]
+            except KeyError:
+                raise Exception(
+                    f"optimizer_state_dict_size metadata entry not present in {self.uri}"
+                    f" (existing keys: {set(model_meta)})"
+                )
+
+            if optimizer_state_dict_size:
                 opt_state_dict_contents: np.ndarray = model_array[
                     0:optimizer_state_dict_size
                 ]["optimizer_state_dict"]
-                opt_state_dict = pickle.loads(opt_state_dict_contents.tobytes())
-                optimizer.load_state_dict(opt_state_dict)
-
-            if callback:
-                self._write_tensorboard_files(array=model_array)
-
-    def preview(self) -> str:
-        """
-        Create a string representation of the model.
-
-        :return: str. A string representation of the models internal configuration.
-        """
-        return str(self.artifact) if self.artifact else ""
+                return pickle.loads(opt_state_dict_contents.tobytes())  # type: ignore
+        return {}
 
     def _write_array(
         self,
@@ -242,7 +257,6 @@ class PyTorchTileDBModel(TileDBArtifact[torch.nn.Module]):
         with tiledb.open(
             self.uri, "w", timestamp=current_milli_time(), ctx=self.ctx
         ) as pt_model_tiledb:
-
             one_d_buffer_md = np.frombuffer(serialized_model_dict, dtype=np.uint8)
             pt_model_tiledb.meta["model_state_dict_size"] = len(one_d_buffer_md)
 
