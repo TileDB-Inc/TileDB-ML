@@ -24,13 +24,6 @@ def current_milli_time() -> int:
     return round(time.time() * 1000)
 
 
-def group_create(uri: str, ctx: tiledb.Ctx) -> None:
-    tiledb.group_create(f"{uri}-group", ctx)
-    grp = tiledb.Group(f"{uri}-group", mode="w", ctx=ctx)
-    grp.add(uri)
-    grp.add(f"{uri}-tensorboard")
-
-
 class TileDBArtifact(ABC, Generic[Artifact]):
     """
     This is the base class for all TileDB model storage functionalities, i.e,
