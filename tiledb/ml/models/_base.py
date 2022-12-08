@@ -29,7 +29,7 @@ Artifact = TypeVar("Artifact")
 Meta = Mapping[str, Any]
 Timestamp = Tuple[int, int]
 
-Weights = Union[List[np.ndarray], Mapping[str, Any]]
+Weights = Union[List[np.ndarray], Mapping[str, Any], list]
 
 
 def current_milli_time() -> int:
@@ -98,11 +98,13 @@ class TileDBArtifact(ABC, Generic[Artifact]):
         """
         Returns the weights of a machine learning model
         """
+        return []
 
     def get_optimizer_weights(self) -> Weights:
         """
         Return the weights of the optimizer of a machine learning model.
         """
+        return []
 
     def _get_file_properties(self) -> Mapping[str, str]:
         return {
