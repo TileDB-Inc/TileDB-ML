@@ -12,6 +12,12 @@ import torch
 from ._tensor_schema import TensorSchema
 from .types import TensorKind
 
+try:
+    nested_tensor = torch.nested.nested_tensor
+except AttributeError:
+    nested_tensor = getattr(torch, "nested_tensor", None)
+
+
 T = TypeVar("T")
 
 
@@ -101,7 +107,7 @@ class NumpyArrayCollator(Collator[np.ndarray]):
 
     def collate(self, batch: Sequence[np.ndarray]) -> torch.Tensor:
         if self.to_nested:
-            return torch.nested_tensor(tuple(map(torch.from_numpy, batch)))
+            return nested_tensor(list(map(torch.from_numpy, batch)))
         else:
             return torch.from_numpy(np.stack(batch))
 

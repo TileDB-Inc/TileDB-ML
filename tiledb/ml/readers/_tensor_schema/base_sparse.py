@@ -4,7 +4,7 @@ from typing import Any, Counter
 import numpy as np
 
 from .base import Tensor, TensorSchema
-from .ranges import InclusiveRange
+from .ranges import WeightedRange
 
 
 class BaseSparseTensorSchema(TensorSchema[Tensor]):
@@ -18,8 +18,8 @@ class BaseSparseTensorSchema(TensorSchema[Tensor]):
             )
 
     @property
-    def key_range(self) -> InclusiveRange[Any, int]:
-        self._key_range: InclusiveRange[Any, int]
+    def key_range(self) -> WeightedRange[Any, int]:
+        self._key_range: WeightedRange[Any, int]
         try:
             return self._key_range
         except AttributeError:
@@ -30,7 +30,7 @@ class BaseSparseTensorSchema(TensorSchema[Tensor]):
             assert isinstance(key_dim_slice, slice)
             for result in query[key_dim_slice]:
                 key_counter.update(result[key_dim])
-            self._key_range = InclusiveRange.factory(key_counter)
+            self._key_range = WeightedRange.from_mapping(key_counter)
             return self._key_range
 
     @property

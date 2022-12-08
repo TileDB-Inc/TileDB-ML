@@ -2,14 +2,18 @@ from __future__ import annotations
 
 import itertools as it
 from abc import ABC, abstractmethod
-from collections import Counter, abc
+from bisect import bisect
 from dataclasses import dataclass
-from functools import singledispatch
-from typing import Any, Generic, Iterable, Mapping, NoReturn, TypeVar, Union, cast
+from typing import Any, Generic, Iterable, Mapping, TypeVar, cast
 
 import numpy as np
 
-__all__ = ["InclusiveRange"]
+__all__ = [
+    "InclusiveRange",
+    "IntRange",
+    "ConstrainedPartitionsIntRange",
+    "WeightedRange",
+]
 
 V = TypeVar("V")
 W = TypeVar("W")
@@ -69,9 +73,14 @@ class InclusiveRange(ABC, Generic[V, W]):
         Two ranges are equal if they consist of the same values with the same weights.
         """
 
-    @abstractmethod
     def equal_values(self, other: InclusiveRange[V, W]) -> bool:
         """Check if two ranges consist of the same values."""
+        return (
+            len(self) == len(other)
+            and self.min == other.min
+            and self.max == other.max
+            and np.all(self.values == other.values)
+        )
 
     @abstractmethod
     def partition_by_count(self, k: int) -> Iterable[InclusiveRange[V, W]]:
@@ -84,71 +93,12 @@ class InclusiveRange(ABC, Generic[V, W]):
         weight is at most `max_weight`.
         """
 
-    @singledispatch
-    @staticmethod
-    def factory(values: Any) -> InclusiveRange[Any, Any]:
-        """Create an inclusive range of comparable values.
-
-        :param values: Can be:
-        - an integer `range`. The weight of each value is 1.
-        - an iterable of (potentially non-unique) values. The weight of each unique value
-          is its cardinality.
-        - a mapping from (unique) values to weights.
-        """
-
-    @staticmethod
-    @factory.register(range)
-    def _from_range(values: range) -> Union[IntRange, WeightedRange[np.int_, np.int_]]:
-        if values.step < 0:
-            values = range(values.stop + 1, values.start + 1, -values.step)
-
-        if values.step == 1:
-            return IntRange(values.start, values.stop - 1)
-        else:
-            return WeightedRange(
-                np.arange(values.start, values.stop, values.step),
-                np.ones(len(values), dtype=int),
-            )
-
-    @staticmethod
-    @factory.register(abc.Iterable)
-    def _from_iterable(values: Iterable[V]) -> Union[IntRange, InclusiveRange[V, int]]:
-        return InclusiveRange._from_mapping(Counter(values))
-
-    @staticmethod
-    @factory.register(abc.Mapping)
-    def _from_mapping(mapping: Mapping[V, W]) -> Union[IntRange, InclusiveRange[V, W]]:
-        unique_sorted, weights = zip(*sorted(mapping.items()))
-        return InclusiveRange._from_ndarrays(np.array(unique_sorted), np.array(weights))
-
-    @staticmethod
-    @factory.register(np.ndarray)
-    def _from_ndarray(
-        values: np.ndarray[VDtype, Any],
-    ) -> Union[IntRange, WeightedRange[VDtype, np.int_]]:
-        unique_sorted, counts = np.unique(values, return_counts=True)
-        return InclusiveRange._from_ndarrays(unique_sorted, counts)
-
-    @staticmethod
-    def _from_ndarrays(
-        unique_sorted: np.ndarray[VDtype, Any], weights: np.ndarray[WDtype, Any]
-    ) -> Union[IntRange, WeightedRange[VDtype, WDtype]]:
-        if (
-            np.issubsctype(unique_sorted, np.integer)
-            and unique_sorted[-1] - unique_sorted[0] + 1 == len(unique_sorted)
-            and np.all(weights == 1)
-        ):
-            return IntRange(unique_sorted[0].item(), unique_sorted[-1].item())
-        else:
-            return WeightedRange(unique_sorted, weights)
-
-    @staticmethod
-    @factory.register(object)
-    def _from_object(values: object) -> NoReturn:
-        raise TypeError(f"Cannot create inclusive range from {values!r}")
-
     def __getstate__(self) -> Mapping[str, Any]:
-        return {slot: getattr(self, slot) for slot in self.__slots__}
+        return {
+            slot: getattr(self, slot)
+            for cls in self.__class__.mro()
+            for slot in getattr(cls, "__slots__", ())
+        }
 
     def __setstate__(self, state: Mapping[str, Any]) -> None:
         for slot, value in state.items():
@@ -194,8 +144,10 @@ class IntRange(InclusiveRange[int, int]):
             return NotImplemented
         return self.min == other.min and self.max == other.max
 
-    def equal_values(self, other: InclusiveRange[V, W]) -> bool:
-        return self == other
+    def equal_values(self, other: InclusiveRange[int, int]) -> bool:
+        if not isinstance(other, IntRange):
+            return super().equal_values(other)
+        return self.min == other.min and self.max == other.max
 
     def partition_by_count(self, k: int) -> Iterable[IntRange]:
         n = len(self)
@@ -224,6 +176,69 @@ class IntRange(InclusiveRange[int, int]):
 
 
 @dataclass(frozen=True)
+class ConstrainedPartitionsIntRange(IntRange):
+    """An IntRange that can be partitioned at specific start offsets."""
+
+    __slots__ = ("start_offsets",)
+    start_offsets: range
+
+    def partition_by_count(self, k: int) -> Iterable[ConstrainedPartitionsIntRange]:
+        start_offsets = self.start_offsets
+        # find how many start offsets are in the (min, max] range
+        i = bisect(start_offsets, self.min)
+        j = bisect(start_offsets, self.max)
+        num_offsets = len(start_offsets[i:j])
+        if k > num_offsets + 1:  # + 1 to account for self.min as the first offset
+            raise ValueError(f"Cannot partition range into {k} partitions")
+
+        start = self.min
+        for i in range(k, 1, -1):
+            target_length = round((self.max - start + 1) / i)
+            partition = self._next_partition(start, target_length)
+            yield partition
+            start = partition.max + 1
+        yield ConstrainedPartitionsIntRange(start, self.max, start_offsets)
+
+    def partition_by_weight(
+        self, max_weight: int
+    ) -> Iterable[ConstrainedPartitionsIntRange]:
+        start_offsets = self.start_offsets
+        if max_weight < start_offsets.step:
+            raise ValueError(
+                f"Cannot partition range with max weight={max_weight}: "
+                f"start_offsets.step={start_offsets.step}"
+            )
+
+        start = self.min
+        max_start = self.max - max_weight
+        while start <= max_start:
+            partition = self._next_partition(start, max_weight, is_max_length=True)
+            yield partition
+            start = partition.max + 1
+        yield ConstrainedPartitionsIntRange(start, self.max, start_offsets)
+
+    def _next_partition(
+        self, start: int, target_length: int, is_max_length: bool = False
+    ) -> ConstrainedPartitionsIntRange:
+        start_offsets = self.start_offsets
+        next_start = start + target_length
+        i = bisect(start_offsets, next_start)
+        assert i > 0
+        # next start is start_offsets[i - 1] if the target_length is a hard upper bound
+        # otherwise next_start is either start_offsets[i - 1] or start_offsets[i],
+        # depending on which one is closer to the target next start
+        if (
+            is_max_length
+            or i == len(start_offsets)
+            or next_start - start_offsets[i - 1] < start_offsets[i] - next_start
+        ):
+            next_start = start_offsets[i - 1]
+        else:
+            next_start = start_offsets[i]
+        return ConstrainedPartitionsIntRange(start, next_start - 1, start_offsets)
+
+
+@dataclass(frozen=True)
 class WeightedRange(InclusiveRange[VDtype, WDtype]):
     """An inclusive range of weighted comparable values."""
 
@@ -234,6 +249,12 @@ class WeightedRange(InclusiveRange[VDtype, WDtype]):
     def __post_init__(self) -> None:
         assert self.values.ndim == self.weights.ndim == 1
         assert len(self.values) == len(self.weights)
+
+    @classmethod
+    def from_mapping(cls, mapping: Mapping[V, W]) -> WeightedRange[VDtype, WDtype]:
+        """Create a WeightedRange from a mapping of (unique) values to weights."""
+        unique_sorted, weights = zip(*sorted(mapping.items()))
+        return cls(np.array(unique_sorted), np.array(weights))
 
     @property
     def min(self) -> VDtype:
@@ -253,14 +274,16 @@ class WeightedRange(InclusiveRange[VDtype, WDtype]):
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, WeightedRange):
             return NotImplemented
-        return bool(
+        return (
             len(self) == len(other)
             and np.all(self.values == other.values)
             and np.all(self.weights == other.weights)
         )
 
-    def equal_values(self, other: InclusiveRange[V, W]) -> bool:
-        return bool(len(self) == len(other) and np.all(self.values == other.values))
+    def equal_values(self, other: InclusiveRange[VDtype, WDtype]) -> bool:
+        if not isinstance(other, WeightedRange):
+            return super().equal_values(other)
+        return len(self) == len(other) and np.all(self.values == other.values)
 
     def indices(self, values: np.ndarray[VDtype, Any]) -> np.ndarray[np.int_, Any]:
         members = self.values

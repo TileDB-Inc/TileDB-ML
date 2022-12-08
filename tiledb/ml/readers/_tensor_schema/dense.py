@@ -5,7 +5,7 @@ from typing import Any, Iterable, Sequence, Union
 import numpy as np
 
 from .base import TensorSchema
-from .ranges import InclusiveRange
+from .ranges import ConstrainedPartitionsIntRange, InclusiveRange
 
 
 class DenseTensorSchema(TensorSchema[np.ndarray]):
@@ -21,19 +21,26 @@ class DenseTensorSchema(TensorSchema[np.ndarray]):
             )
 
     @property
-    def key_range(self) -> InclusiveRange[int, int]:
+    def key_range(self) -> ConstrainedPartitionsIntRange:
+        self._key_range: ConstrainedPartitionsIntRange
         try:
-            key_dim_slice = self._dim_selectors[0]
-        except KeyError:
+            return self._key_range
+        except AttributeError:
             key_dim_min, key_dim_max = self._ned[0]
-        else:
-            assert isinstance(key_dim_slice, slice)
-            key_dim_min = key_dim_slice.start
-            key_dim_max = key_dim_slice.stop
-            raise NotImplementedError(
-                "Key dimension slicing is not yet implemented for dense arrays"
+            key_dim_slice = self._dim_selectors.get(0)
+            if key_dim_slice is not None:
+                assert isinstance(key_dim_slice, slice)
+                min_key = key_dim_slice.start
+                max_key = key_dim_slice.stop
+            else:
+                min_key = key_dim_min
+                max_key = key_dim_max
+            key_dim_tile = self._array.dim(self.key_dim).tile
+            start_offsets = range(key_dim_min, key_dim_max + 1, key_dim_tile)
+            self._key_range = ConstrainedPartitionsIntRange(
+                min_key, max_key, start_offsets
             )
-        return InclusiveRange.factory(range(key_dim_min, key_dim_max + 1))
+            return self._key_range
 
     def iter_tensors(
         self, key_ranges: Iterable[InclusiveRange[int, int]]
