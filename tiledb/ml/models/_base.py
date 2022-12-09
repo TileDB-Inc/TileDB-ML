@@ -88,23 +88,23 @@ class TileDBArtifact(ABC, Generic[Artifact]):
             in the specified time range.
         """
 
+    @abstractmethod
     def preview(self) -> str:
         """
         Creates a string representation of a machine learning model.
         """
-        return ""
 
+    @abstractmethod
     def get_weights(self) -> Weights:
         """
         Returns the weights of a machine learning model
         """
-        return []
 
+    @abstractmethod
     def get_optimizer_weights(self) -> Weights:
         """
         Return the weights of the optimizer of a machine learning model.
         """
-        return []
 
     def _get_file_properties(self) -> Mapping[str, str]:
         return {
