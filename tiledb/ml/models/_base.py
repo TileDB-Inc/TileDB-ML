@@ -94,14 +94,12 @@ class TileDBArtifact(ABC, Generic[Artifact]):
         Creates a string representation of a machine learning model.
         """
 
-    @abstractmethod
-    def get_weights(self) -> Weights:
+    def get_weights(self) -> Weights:  # type: ignore
         """
         Returns the weights of a machine learning model
         """
 
-    @abstractmethod
-    def get_optimizer_weights(self) -> Weights:
+    def get_optimizer_weights(self) -> Weights:  # type: ignore
         """
         Return the weights of the optimizer of a machine learning model.
         """
