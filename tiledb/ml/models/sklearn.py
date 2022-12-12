@@ -10,7 +10,7 @@ from sklearn.base import BaseEstimator
 
 import tiledb
 
-from ._base import Meta, TileDBArtifact, Timestamp, current_milli_time
+from ._base import Meta, TileDBArtifact, Timestamp
 
 
 class SklearnTileDBModel(TileDBArtifact[BaseEstimator]):
@@ -49,7 +49,10 @@ class SklearnTileDBModel(TileDBArtifact[BaseEstimator]):
         if not update:
             self._create_array(fields=["model"])
 
-        self._write_array(serialized_model=serialized_model, meta=meta)
+        self._write_array(model_params={"model": serialized_model})
+
+        if meta:
+            self._write_model_metadata(meta=meta)
 
     def load(self, *, timestamp: Optional[Timestamp] = None) -> BaseEstimator:
         """
@@ -116,25 +119,6 @@ class SklearnTileDBModel(TileDBArtifact[BaseEstimator]):
                 return str(self.artifact)
         else:
             return ""
-
-    def _write_array(self, serialized_model: bytes, meta: Optional[Meta]) -> None:
-        """
-        Write a Sklearn model to a TileDB array.
-
-        :param serialized_model: A pickled sklearn model.
-        :param meta: Extra metadata to save in a TileDB array.
-        """
-        # TODO: Change timestamp when issue in core is resolved
-
-        with tiledb.open(
-            self.uri, "w", timestamp=current_milli_time(), ctx=self.ctx
-        ) as skt_model_tiledb:
-
-            one_d_buffer = np.frombuffer(serialized_model, dtype=np.uint8)
-            skt_model_tiledb[: len(one_d_buffer)] = {"model": one_d_buffer}
-            skt_model_tiledb.meta["model_size"] = len(one_d_buffer)
-
-            self.update_model_metadata(array=skt_model_tiledb, meta=meta)
 
     def _serialize_model(self) -> bytes:
         """

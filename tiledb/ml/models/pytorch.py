@@ -10,7 +10,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 import tiledb
 
-from ._base import Meta, TileDBArtifact, Timestamp, current_milli_time
+from ._base import Meta, TileDBArtifact, Timestamp
 
 
 class PyTorchTileDBModel(TileDBArtifact[torch.nn.Module]):
@@ -73,15 +73,19 @@ class PyTorchTileDBModel(TileDBArtifact[torch.nn.Module]):
 
         # Create TileDB model array
         if not update:
-            fields = ["model_state_dict", "optimizer_state_dict", "tensorboard"]
+            fields = ["model", "optimizer", "tensorboard"]
             super()._create_array(fields=fields)
 
         self._write_array(
-            serialized_model_dict=serialized_model_dict,
-            serialized_optimizer_dict=serialized_optimizer_dict,
-            serialized_tb_files=tensorboard,
-            meta=meta,
+            model_params={
+                "model": serialized_model_dict,
+                "optimizer": serialized_optimizer_dict,
+                "tensorboard": tensorboard,
+            }
         )
+
+        if meta:
+            self._write_model_metadata(meta=meta)
 
     def load(
         self,
@@ -209,7 +213,7 @@ class PyTorchTileDBModel(TileDBArtifact[torch.nn.Module]):
             model_meta = dict(model_array.meta.items())
 
             try:
-                model_state_dict_size = model_meta["model_state_dict_size"]
+                model_state_dict_size = model_meta["model_size"]
             except KeyError:
                 raise Exception(
                     f"model_state_dict_size metadata entry not present in {self.uri}"
@@ -218,7 +222,7 @@ class PyTorchTileDBModel(TileDBArtifact[torch.nn.Module]):
 
             # Load model's state dictionary
             md_state_dict_contents: np.ndarray = model_array[0:model_state_dict_size][
-                "model_state_dict"
+                "model"
             ]
             return pickle.loads(md_state_dict_contents.tobytes())  # type: ignore
 
@@ -229,7 +233,7 @@ class PyTorchTileDBModel(TileDBArtifact[torch.nn.Module]):
             model_meta = dict(model_array.meta.items())
 
             try:
-                optimizer_state_dict_size = model_meta["optimizer_state_dict_size"]
+                optimizer_state_dict_size = model_meta["optimizer_size"]
             except KeyError:
                 raise Exception(
                     f"optimizer_state_dict_size metadata entry not present in {self.uri}"
@@ -239,48 +243,6 @@ class PyTorchTileDBModel(TileDBArtifact[torch.nn.Module]):
             if optimizer_state_dict_size:
                 opt_state_dict_contents: np.ndarray = model_array[
                     0:optimizer_state_dict_size
-                ]["optimizer_state_dict"]
+                ]["optimizer"]
                 return pickle.loads(opt_state_dict_contents.tobytes())  # type: ignore
         return {}
-
-    def _write_array(
-        self,
-        serialized_model_dict: bytes,
-        serialized_optimizer_dict: bytes,
-        serialized_tb_files: bytes,
-        meta: Optional[Meta],
-    ) -> None:
-        """
-        Write a PyTorch model to a TileDB array.
-        """
-        # TODO: Change timestamp when issue in core is resolved
-        with tiledb.open(
-            self.uri, "w", timestamp=current_milli_time(), ctx=self.ctx
-        ) as pt_model_tiledb:
-            one_d_buffer_md = np.frombuffer(serialized_model_dict, dtype=np.uint8)
-            pt_model_tiledb.meta["model_state_dict_size"] = len(one_d_buffer_md)
-
-            one_d_buffer_opt = np.frombuffer(serialized_optimizer_dict, dtype=np.uint8)
-            pt_model_tiledb.meta["optimizer_state_dict_size"] = len(one_d_buffer_opt)
-
-            one_d_buffer_tb = np.frombuffer(serialized_tb_files, dtype=np.uint8)
-            pt_model_tiledb.meta["tensorboard_size"] = len(one_d_buffer_tb)
-
-            max_len = max(
-                len(one_d_buffer_md), len(one_d_buffer_opt), len(one_d_buffer_tb)
-            )
-
-            pt_model_tiledb[0:max_len] = {
-                "model_state_dict": np.pad(
-                    one_d_buffer_md, (0, max_len - len(one_d_buffer_md)), "constant"
-                ),
-                "optimizer_state_dict": np.pad(
-                    one_d_buffer_opt, (0, max_len - len(one_d_buffer_opt)), "constant"
-                ),
-                "tensorboard": np.pad(
-                    one_d_buffer_tb, (0, max_len - len(one_d_buffer_tb)), "constant"
-                ),
-            }
-
-            # Insert all model metadata
-            self.update_model_metadata(array=pt_model_tiledb, meta=meta)
