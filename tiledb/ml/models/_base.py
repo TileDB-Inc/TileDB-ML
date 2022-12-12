@@ -185,7 +185,7 @@ class TileDBArtifact(ABC, Generic[Artifact]):
         Update the metadata in a TileDB model array. File properties also go in the metadata section.
         :param meta: A mapping with the <key, value> pairs to be inserted in array's metadata.
         """
-        with tiledb.open(self.uri, ctx=self.ctx) as model_array:
+        with tiledb.open(self.uri, "w", ctx=self.ctx) as model_array:
             # Raise ValueError in case users provide metadata with the same keys as file properties.
             if not meta.keys().isdisjoint(self._file_properties.keys()):
                 raise ValueError(
