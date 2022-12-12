@@ -13,7 +13,7 @@ import tensorflow as tf
 
 import tiledb
 
-from ._base import Meta, TileDBArtifact, Timestamp, current_milli_time
+from ._base import Meta, TileDBArtifact, Timestamp
 
 SharedObjectLoadingScope = keras.utils.generic_utils.SharedObjectLoadingScope
 FunctionalOrSequential = (keras.models.Functional, keras.models.Sequential)
@@ -86,16 +86,30 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
 
         # Create TileDB model array
         if not update:
-            super()._create_array(
-                fields=["model_weights", "optimizer_weights", "tensorboard"]
-            )
+            super()._create_array(fields=["model", "optimizer", "tensorboard"])
 
         self._write_array(
-            serialized_model_weights=model_weights,
-            serialized_optimizer_weights=optimizer_weights,
-            serialized_tb_files=tensorboard,
-            meta=meta,
+            model_params={
+                "model": model_weights,
+                "optimizer": optimizer_weights,
+                "tensorboard": tensorboard,
+            }
         )
+
+        if meta:
+            self._write_model_metadata(meta=meta)
+
+        # Write extra metadata. Only for Tensoflow models.
+        model_metadata = saving_utils.model_metadata(
+            model=self.artifact,
+            include_optimizer=any([optimizer_weights]),
+        )
+
+        with tiledb.open(self.uri, "w", ctx=self.ctx) as model_array:
+            for key, value in model_metadata.items():
+                model_array.meta[key] = json.dumps(value, default=get_json_type).encode(
+                    "utf8"
+                )
 
     def load(
         self,
@@ -304,16 +318,14 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
             model_meta = dict(model_array.meta.items())
 
             try:
-                model_weights_size = model_meta["model_weights_size"]
+                model_weights_size = model_meta["model_size"]
             except KeyError:
                 raise Exception(
                     f"model_weights_size metadata entry not present in {self.uri}"
                     f" (existing keys: {set(model_meta)})"
                 )
 
-            md_weights_contents: np.ndarray = model_array[0:model_weights_size][
-                "model_weights"
-            ]
+            md_weights_contents: np.ndarray = model_array[0:model_weights_size]["model"]
             model_weights = pickle.loads(md_weights_contents.tobytes())
 
         return model_weights  # type: ignore
@@ -328,7 +340,7 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
             model_meta = dict(model_array.meta.items())
 
             try:
-                optimizer_weights_size = model_meta["optimizer_weights_size"]
+                optimizer_weights_size = model_meta["optimizer_size"]
             except KeyError:
                 raise Exception(
                     f"optimizer_weights_size metadata entry not present in {self.uri}"
@@ -338,61 +350,9 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
             if optimizer_weights_size:
                 opt_weights_contents: np.ndarray = model_array[
                     0:optimizer_weights_size
-                ]["optimizer_weights"]
+                ]["optimizer"]
                 return pickle.loads(opt_weights_contents.tobytes())  # type: ignore
         return []
-
-    def _write_array(
-        self,
-        serialized_model_weights: bytes,
-        serialized_optimizer_weights: Optional[bytes],
-        serialized_tb_files: Optional[bytes],
-        meta: Optional[Meta],
-    ) -> None:
-        """Write Tensorflow model to a TileDB array."""
-
-        with tiledb.open(
-            self.uri, "w", timestamp=current_milli_time(), ctx=self.ctx
-        ) as tf_model_tiledb:
-
-            one_d_buffer_md = np.frombuffer(serialized_model_weights, dtype=np.uint8)
-            tf_model_tiledb.meta["model_weights_size"] = len(one_d_buffer_md)
-
-            one_d_buffer_opt = np.frombuffer(
-                serialized_optimizer_weights, dtype=np.uint8
-            )
-            tf_model_tiledb.meta["optimizer_weights_size"] = len(one_d_buffer_opt)
-
-            one_d_buffer_tb = np.frombuffer(serialized_tb_files, dtype=np.uint8)
-            tf_model_tiledb.meta["tensorboard_size"] = len(one_d_buffer_tb)
-
-            max_len = max(
-                len(one_d_buffer_md), len(one_d_buffer_opt), len(one_d_buffer_tb)
-            )
-
-            tf_model_tiledb[0:max_len] = {
-                "model_weights": np.pad(
-                    one_d_buffer_md, (0, max_len - len(one_d_buffer_md)), "constant"
-                ),
-                "optimizer_weights": np.pad(
-                    one_d_buffer_opt, (0, max_len - len(one_d_buffer_opt)), "constant"
-                ),
-                "tensorboard": np.pad(
-                    one_d_buffer_tb, (0, max_len - len(one_d_buffer_tb)), "constant"
-                ),
-            }
-
-            # Insert all model metadata
-            model_metadata = saving_utils.model_metadata(
-                model=self.artifact,
-                include_optimizer=any([serialized_optimizer_weights]),
-            )
-            for key, value in model_metadata.items():
-                tf_model_tiledb.meta[key] = json.dumps(
-                    value, default=get_json_type
-                ).encode("utf8")
-
-            self.update_model_metadata(array=tf_model_tiledb, meta=meta)
 
     def _serialize_optimizer_weights(
         self,

@@ -153,25 +153,50 @@ class TileDBArtifact(ABC, Generic[Artifact]):
         if self.namespace:
             update_file_properties(self.uri, self._file_properties)
 
-    def update_model_metadata(
-        self, array: tiledb.Array, meta: Optional[Meta] = None
-    ) -> None:
+    def _write_array(self, model_params: Mapping) -> None:
+        """
+        Writes machine learning model related data, i.e., model weights, optimizer weights and Tensorboard files, to
+        a dense TileDB array.
+        """
+
+        with tiledb.open(
+            self.uri, "w", timestamp=current_milli_time(), ctx=self.ctx
+        ) as tf_model_tiledb:
+
+            one_d_buffers = {}
+            max_len = 0
+
+            for key, value in model_params.items():
+                one_d_buffer = np.frombuffer(value, dtype=np.uint8)
+                one_d_buffer_len = len(one_d_buffer)
+                one_d_buffers[key] = one_d_buffer
+                tf_model_tiledb.meta[key + "_size"] = one_d_buffer_len
+
+                if one_d_buffer_len > max_len:
+                    max_len = one_d_buffer_len
+
+            tf_model_tiledb[0:max_len] = {
+                key: np.pad(value, (0, max_len - len(value)), "constant")
+                for key, value in one_d_buffers.items()
+            }
+
+    def _write_model_metadata(self, meta: Meta) -> None:
         """
         Update the metadata in a TileDB model array. File properties also go in the metadata section.
-
-        :param array: A TileDB model array.
         :param meta: A mapping with the <key, value> pairs to be inserted in array's metadata.
         """
-        # Raise ValueError in case users provide metadata with the same keys as file properties.
-        if meta:
+        with tiledb.open(self.uri, ctx=self.ctx) as model_array:
+            # Raise ValueError in case users provide metadata with the same keys as file properties.
             if not meta.keys().isdisjoint(self._file_properties.keys()):
                 raise ValueError(
                     "Please avoid using file property key names as metadata keys!"
                 )
+
             for key, value in meta.items():
-                array.meta[key] = value
-        for key, value in self._file_properties.items():
-            array.meta[key] = value
+                model_array.meta[key] = value
+
+            for key, value in self._file_properties.items():
+                model_array.meta[key] = value
 
     @staticmethod
     def _serialize_tensorboard_files(log_dir: str = "") -> bytes:
