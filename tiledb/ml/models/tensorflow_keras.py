@@ -136,7 +136,7 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
         :return: Tensorflow model.
         """
 
-        if self._use_legacy_schema():
+        if self._use_legacy_schema(timestamp=timestamp):
             return self.__load_legacy(
                 timestamp=timestamp,
                 compile_model=compile_model,

@@ -64,7 +64,11 @@ class SklearnTileDBModel(TileDBArtifact[BaseEstimator]):
         """
         # TODO: Change timestamp when issue in core is resolved
 
-        load = self.__load_legacy if self._use_legacy_schema() else self.__load
+        load = (
+            self.__load_legacy
+            if self._use_legacy_schema(timestamp=timestamp)
+            else self.__load
+        )
         return load(timestamp=timestamp)
 
     def __load_legacy(self, *, timestamp: Optional[Timestamp]) -> BaseEstimator:

@@ -254,6 +254,7 @@ class TileDBArtifact(ABC, Generic[Artifact]):
                 with open(os.path.join(log_dir, os.path.basename(path)), "wb") as f:
                     f.write(file_bytes)
 
-    @staticmethod
-    def _use_legacy_schema() -> bool:
-        return __version__ < "0.9"  # type: ignore
+    def _use_legacy_schema(self, timestamp: Optional[Timestamp]) -> bool:
+        # TODO: Decide based on tiledb-ml version and not on schema characteristics, like "offset".
+        with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
+            return model_array.schema.domain.dim(0).name != "offset"  # type: ignore

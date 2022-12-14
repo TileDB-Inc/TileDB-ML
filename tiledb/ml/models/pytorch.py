@@ -103,7 +103,11 @@ class PyTorchTileDBModel(TileDBArtifact[torch.nn.Module]):
         :return: A dictionary with attributes other than model or optimizer state_dict.
         """
 
-        load = self.__load_legacy if self._use_legacy_schema() else self.__load
+        load = (
+            self.__load_legacy
+            if self._use_legacy_schema(timestamp=timestamp)
+            else self.__load
+        )
         return load(
             model=model, optimizer=optimizer, timestamp=timestamp, callback=callback
         )
