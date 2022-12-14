@@ -21,6 +21,7 @@ import numpy as np
 
 import tiledb
 
+from .. import __version__
 from ._cloud_utils import get_cloud_uri, update_file_properties
 from ._file_properties import ModelFileProperties
 
@@ -96,6 +97,7 @@ class TileDBArtifact(ABC, Generic[Artifact]):
             ModelFileProperties.TILEDB_ML_MODEL_STAGE.value: "STAGING",
             ModelFileProperties.TILEDB_ML_MODEL_PYTHON_VERSION.value: platform.python_version(),
             ModelFileProperties.TILEDB_ML_MODEL_PREVIEW.value: self.preview(),
+            ModelFileProperties.TILEDB_ML_MODEL_VERSION.value: __version__,
         }
 
     def _create_array(
@@ -253,7 +255,7 @@ class TileDBArtifact(ABC, Generic[Artifact]):
                     f.write(file_bytes)
 
     @staticmethod
-    def is_v1(array: tiledb.Array) -> bool:
-        if array.schema.domain.size < np.iinfo(np.uint64).max - 1025:
-            return True
-        return False
+    def is_v1() -> bool:
+        if ModelFileProperties.TILEDB_ML_MODEL_VERSION:
+            return False
+        return True

@@ -487,6 +487,7 @@ class TestTensorflowKerasModelCloud:
             "TILEDB_ML_MODEL_STAGE": "STAGING",
             "TILEDB_ML_MODEL_PYTHON_VERSION": platform.python_version(),
             "TILEDB_ML_MODEL_PREVIEW": model_summary,
+            "TILEDB_ML_MODEL_VERSION": "",
         }
 
         mock_update_file_properties.assert_called_once_with(uri, file_properties_dict)

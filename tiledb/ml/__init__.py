@@ -7,5 +7,4 @@ from pkg_resources import DistributionNotFound, get_distribution  # type: ignore
 try:
     __version__ = get_distribution("tiledb-ml").version
 except DistributionNotFound:
-    # package is not installed
-    pass
+    __version__ = ""

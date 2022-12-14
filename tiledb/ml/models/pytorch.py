@@ -103,18 +103,17 @@ class PyTorchTileDBModel(TileDBArtifact[torch.nn.Module]):
         :return: A dictionary with attributes other than model or optimizer state_dict.
         """
 
-        with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
-            load = self.__load if self.is_v1(model_array) else self.__load_v2
-            return load(
-                model=model, optimizer=optimizer, timestamp=timestamp, callback=callback
-            )
+        load = self.__load if self.is_v1() else self.__load_v2
+        return load(
+            model=model, optimizer=optimizer, timestamp=timestamp, callback=callback
+        )
 
     def __load(
         self,
-        model: torch.nn.Module = None,
-        optimizer: Optimizer = None,
-        timestamp: Optional[Timestamp] = None,
-        callback: bool = False,
+        model: torch.nn.Module,
+        optimizer: Optimizer,
+        timestamp: Optional[Timestamp],
+        callback: bool,
     ) -> Optional[Mapping[str, Any]]:
         """
         Load a PyTorch model from a TileDB array.
@@ -166,10 +165,10 @@ class PyTorchTileDBModel(TileDBArtifact[torch.nn.Module]):
 
     def __load_v2(
         self,
-        model: torch.nn.Module = None,
-        optimizer: Optimizer = None,
-        timestamp: Optional[Timestamp] = None,
-        callback: bool = False,
+        model: torch.nn.Module,
+        optimizer: Optimizer,
+        timestamp: Optional[Timestamp],
+        callback: bool,
     ) -> None:
         """
         Load a PyTorch model from a TileDB array.

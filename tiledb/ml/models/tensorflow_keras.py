@@ -136,27 +136,25 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
         :return: Tensorflow model.
         """
 
-        with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
-            # Check if we try to load models with the old 1-cell schema.
-            if self.is_v1(model_array):
-                return self.__load(
-                    timestamp=timestamp,
-                    compile_model=compile_model,
-                    custom_objects=custom_objects,
-                    input_shape=input_shape,
-                    callback=callback,
-                )
-            return self.__load_v2(
-                timestamp=timestamp, compile_model=compile_model, callback=callback
+        if self.is_v1():
+            return self.__load(
+                timestamp=timestamp,
+                compile_model=compile_model,
+                custom_objects=custom_objects,
+                input_shape=input_shape,
+                callback=callback,
             )
+        return self.__load_v2(
+            timestamp=timestamp, compile_model=compile_model, callback=callback
+        )
 
     def __load(
         self,
-        timestamp: Optional[Timestamp] = None,
-        compile_model: bool = False,
-        custom_objects: Optional[Mapping[str, Any]] = None,
-        input_shape: Optional[Tuple[int, ...]] = None,
-        callback: bool = False,
+        timestamp: Optional[Timestamp],
+        compile_model: bool,
+        custom_objects: Optional[Mapping[str, Any]],
+        input_shape: Optional[Tuple[int, ...]],
+        callback: bool,
     ) -> tf.keras.Model:
         """
         Load a Tensorflow model from a TileDB array. TileDB-ML<=0.8.0
@@ -246,9 +244,9 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
 
     def __load_v2(
         self,
-        timestamp: Optional[Timestamp] = None,
-        compile_model: bool = False,
-        callback: bool = False,
+        timestamp: Optional[Timestamp],
+        compile_model: bool,
+        callback: bool,
     ) -> tf.keras.Model:
         """
         Load a Tensorflow model from a TileDB array. TileDB-ML>0.8.0

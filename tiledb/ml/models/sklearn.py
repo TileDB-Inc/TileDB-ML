@@ -3,7 +3,6 @@
 import pickle
 from typing import Optional
 
-import numpy as np
 import sklearn
 from sklearn import config_context
 from sklearn.base import BaseEstimator
@@ -65,13 +64,10 @@ class SklearnTileDBModel(TileDBArtifact[BaseEstimator]):
         """
         # TODO: Change timestamp when issue in core is resolved
 
-        with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
-            # Check if we try to load models with the old 1-cell schema.
-            if model_array.schema.domain.size < np.iinfo(np.uint64).max - 1025:
-                return self.__load(timestamp=timestamp)
-            return self.__load_v2(timestamp=timestamp)
+        load = self.__load if self.is_v1() else self.__load_v2
+        return load(timestamp=timestamp)
 
-    def __load(self, *, timestamp: Optional[Timestamp] = None) -> BaseEstimator:
+    def __load(self, *, timestamp: Optional[Timestamp]) -> BaseEstimator:
         """
         Load a Sklearn model from a TileDB array.
         """
@@ -80,7 +76,7 @@ class SklearnTileDBModel(TileDBArtifact[BaseEstimator]):
         model = pickle.loads(model_array_results["model_params"].item(0))
         return model
 
-    def __load_v2(self, *, timestamp: Optional[Timestamp] = None) -> BaseEstimator:
+    def __load_v2(self, *, timestamp: Optional[Timestamp]) -> BaseEstimator:
         """
         Load a Sklearn model from a TileDB array.
         """
