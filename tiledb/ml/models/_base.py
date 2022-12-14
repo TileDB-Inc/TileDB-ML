@@ -1,14 +1,27 @@
 """Base Class for saving and loading machine learning models."""
 
+import glob
+import os
+import pickle
 import platform
-import time
 from abc import ABC, abstractmethod
-from typing import Any, Generic, Mapping, Optional, Sequence, Tuple, TypeVar
+from typing import (
+    Any,
+    Generic,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+    TypeVar,
+    Union,
+    cast,
+)
 
 import numpy as np
 
 import tiledb
 
+from .. import __version__
 from ._cloud_utils import get_cloud_uri, update_file_properties
 from ._file_properties import ModelFileProperties
 
@@ -16,16 +29,7 @@ Artifact = TypeVar("Artifact")
 Meta = Mapping[str, Any]
 Timestamp = Tuple[int, int]
 
-
-def current_milli_time() -> int:
-    return round(time.time() * 1000)
-
-
-def group_create(uri: str, ctx: tiledb.Ctx) -> None:
-    tiledb.group_create(f"{uri}-group", ctx)
-    grp = tiledb.Group(f"{uri}-group", mode="w", ctx=ctx)
-    grp.add(uri)
-    grp.add(f"{uri}-tensorboard")
+Weights = Union[Sequence[np.ndarray], Mapping[str, Any]]
 
 
 class TileDBArtifact(ABC, Generic[Artifact]):
@@ -55,7 +59,7 @@ class TileDBArtifact(ABC, Generic[Artifact]):
             models on TileDB-Cloud we need the user's namespace on TileDB-Cloud.
             Moreover, array's uri must have an s3 prefix.
         :param ctx: TileDB Context.
-        :param artifact: Machine learning artifact (e.g. model or callback) based on the framework we are using.
+        :param artifact: Machine learning artifact (e.g. machine learning model) based on the framework we are using.
         """
         self.namespace = namespace
         self.ctx = ctx
@@ -80,8 +84,23 @@ class TileDBArtifact(ABC, Generic[Artifact]):
             in the specified time range.
         """
 
+    def get_weights(self, timestamp: Optional[Timestamp] = None) -> Weights:
+        """
+        Returns model's weights. Works for Tensorflow Keras and PyTorch
+        """
+        return cast(Weights, self._get_model_param("model", timestamp))
+
+    def get_optimizer_weights(self, timestamp: Optional[Timestamp] = None) -> Weights:
+        """
+        Returns optimizer's weights. Works for Tensorflow Keras and PyTorch
+        """
+        return cast(Weights, self._get_model_param("optimizer", timestamp))
+
+    @abstractmethod
     def preview(self) -> str:
-        return ""
+        """
+        Creates a string representation of a machine learning model.
+        """
 
     def _get_file_properties(self) -> Mapping[str, str]:
         return {
@@ -90,61 +109,144 @@ class TileDBArtifact(ABC, Generic[Artifact]):
             ModelFileProperties.TILEDB_ML_MODEL_STAGE.value: "STAGING",
             ModelFileProperties.TILEDB_ML_MODEL_PYTHON_VERSION.value: platform.python_version(),
             ModelFileProperties.TILEDB_ML_MODEL_PREVIEW.value: self.preview(),
+            ModelFileProperties.TILEDB_ML_MODEL_VERSION.value: __version__,
         }
 
     def _create_array(
         self,
-        domain_info: Tuple[str, Tuple[int, int]],
         fields: Sequence[str],
     ) -> None:
         """Internal method that creates a TileDB array based on the model's spec."""
+
+        # The array will be be 1 dimensional with domain of 0 to max uint64. We use a tile extent of 1024 bytes
         dom = tiledb.Domain(
             tiledb.Dim(
-                name=domain_info[0],
-                domain=domain_info[1],
-                tile=1,
-                dtype=np.int32,
+                name="offset",
+                domain=(0, np.iinfo(np.uint64).max - 1025),
+                tile=1024,
+                dtype=np.uint64,
                 ctx=self.ctx,
             ),
         )
+
         attrs = [
             tiledb.Attr(
                 name=field,
-                dtype=str if field == "layer_name" else bytes,
-                var=True,
+                dtype=np.uint8,
                 filters=tiledb.FilterList([tiledb.ZstdFilter()]),
                 ctx=self.ctx,
             )
             for field in fields
         ]
+
         schema = tiledb.ArraySchema(
             domain=dom,
             sparse=False,
             attrs=attrs,
             ctx=self.ctx,
         )
+
         tiledb.Array.create(self.uri, schema, ctx=self.ctx)
 
         # In case we are on TileDB-Cloud we have to update model array's file properties
         if self.namespace:
             update_file_properties(self.uri, self._file_properties)
 
-    def update_model_metadata(
-        self, array: tiledb.Array, meta: Optional[Meta] = None
-    ) -> None:
+    def _write_array(self, model_params: Mapping[str, bytes]) -> None:
+        """
+        Writes machine learning model related data, i.e., model weights, optimizer weights and Tensorboard files, to
+        a dense TileDB array.
+        """
+
+        with tiledb.open(self.uri, "w", ctx=self.ctx) as model_array:
+            one_d_buffers = {}
+            max_len = 0
+
+            for key, value in model_params.items():
+                one_d_buffer = np.frombuffer(value, dtype=np.uint8)
+                one_d_buffer_len = len(one_d_buffer)
+                one_d_buffers[key] = one_d_buffer
+
+                # Write size only in case is greater than 0.
+                if one_d_buffer_len:
+                    model_array.meta[key + "_size"] = one_d_buffer_len
+
+                if one_d_buffer_len > max_len:
+                    max_len = one_d_buffer_len
+
+            model_array[0:max_len] = {
+                key: np.pad(value, (0, max_len - len(value)))
+                for key, value in one_d_buffers.items()
+            }
+
+    def _write_model_metadata(self, meta: Meta) -> None:
         """
         Update the metadata in a TileDB model array. File properties also go in the metadata section.
-
-        :param array: A TileDB model array.
         :param meta: A mapping with the <key, value> pairs to be inserted in array's metadata.
         """
-        # Raise ValueError in case users provide metadata with the same keys as file properties.
-        if meta:
+        with tiledb.open(self.uri, "w", ctx=self.ctx) as model_array:
+            # Raise ValueError in case users provide metadata with the same keys as file properties.
             if not meta.keys().isdisjoint(self._file_properties.keys()):
                 raise ValueError(
                     "Please avoid using file property key names as metadata keys!"
                 )
+
             for key, value in meta.items():
-                array.meta[key] = value
-        for key, value in self._file_properties.items():
-            array.meta[key] = value
+                model_array.meta[key] = value
+
+            for key, value in self._file_properties.items():
+                model_array.meta[key] = value
+
+    @staticmethod
+    def _serialize_tensorboard_files(log_dir: str) -> bytes:
+        """Serialize all Tensorboard files."""
+
+        if not os.path.exists(log_dir):
+            raise ValueError(f"{log_dir} does not exist")
+
+        event_files = {}
+        for path in glob.glob(f"{log_dir}/*tfevents*"):
+            with open(path, "rb") as f:
+                event_files[path] = f.read()
+
+        return pickle.dumps(event_files, protocol=4)
+
+    def _get_model_param(self, key: str, timestamp: Optional[Timestamp]) -> Any:
+        with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
+            size_key = key + "_size"
+            try:
+                size = model_array.meta[size_key]
+            except KeyError:
+                raise Exception(
+                    f"{size_key} metadata entry not present in {self.uri}"
+                    f" (existing keys: {set(model_array.meta.keys())})"
+                )
+            return pickle.loads(model_array[0:size][key].tobytes())
+
+    def _load_tensorboard(self, timestamp: Optional[Timestamp] = None) -> None:
+        """
+        Writes Tensorboard files to directory. Works for Tensorflow-Keras and PyTorch.
+        """
+        with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
+            try:
+                tensorboard_size = model_array.meta["tensorboard_size"]
+            except KeyError:
+                raise Exception(
+                    f"tensorboard_size metadata entry not present in"
+                    f" (existing keys: {set(model_array.meta.keys())})"
+                )
+
+            tb_contents = model_array[0:tensorboard_size]["tensorboard"]
+            tensorboard_files = pickle.loads(tb_contents.tobytes())
+
+            for path, file_bytes in tensorboard_files.items():
+                log_dir = os.path.dirname(path)
+                if not os.path.exists(log_dir):
+                    os.mkdir(log_dir)
+                with open(os.path.join(log_dir, os.path.basename(path)), "wb") as f:
+                    f.write(file_bytes)
+
+    def _use_legacy_schema(self, timestamp: Optional[Timestamp]) -> bool:
+        # TODO: Decide based on tiledb-ml version and not on schema characteristics, like "offset".
+        with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
+            return str(model_array.schema.domain.dim(0).name) != "offset"

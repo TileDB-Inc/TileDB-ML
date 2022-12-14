@@ -15,6 +15,7 @@ import torch.optim as optimizers
 from torch.utils.tensorboard import SummaryWriter
 
 import tiledb
+from tiledb.ml import __version__ as tiledb_ml_version
 from tiledb.ml.models.pytorch import PyTorchTileDBModel
 
 
@@ -102,8 +103,6 @@ class TestPyTorchModel:
         ],
     )
     def test_save(self, tmpdir, net, optimizer):
-        EPOCH = 5
-        LOSS = 0.4
         model = net()
         saved_optimizer = optimizer(model.parameters(), lr=0.001)
         tiledb_array = os.path.join(tmpdir, "model_array")
@@ -111,18 +110,10 @@ class TestPyTorchModel:
             uri=tiledb_array, model=model, optimizer=saved_optimizer
         )
 
-        tiledb_obj.save(
-            model_info={
-                "epoch": EPOCH,
-                "loss": LOSS,
-            }
-        )
+        tiledb_obj.save()
         loaded_net = net()
         loaded_optimizer = optimizer(loaded_net.parameters(), lr=0.001)
-        model_out_dict = tiledb_obj.load(model=loaded_net, optimizer=loaded_optimizer)
-
-        assert model_out_dict["epoch"] == EPOCH
-        assert model_out_dict["loss"] == LOSS
+        _ = tiledb_obj.load(model=loaded_net, optimizer=loaded_optimizer)
 
         # Check model parameters
         for key_item_1, key_item_2 in zip(
@@ -163,6 +154,9 @@ class TestPyTorchModel:
             == torch.__version__
         )
         assert tiledb_obj._file_properties["TILEDB_ML_MODEL_PREVIEW"] == str(model)
+        assert (
+            tiledb_obj._file_properties["TILEDB_ML_MODEL_VERSION"] == tiledb_ml_version
+        )
 
     @net
     @pytest.mark.parametrize(
@@ -188,8 +182,9 @@ class TestPyTorchModel:
         assert log_files
 
         tiledb_obj.save(update=False, summary_writer=writer)
-        with tiledb.open(f"{tiledb_array}-tensorboard") as A:
-            assert pickle.loads(A[:]["tensorboard_data"][0]) == log_files
+        with tiledb.open(tiledb_array) as A:
+            tb_size = A.meta["tensorboard_size"]
+            assert pickle.loads(A[0:tb_size]["tensorboard"]) == log_files
         shutil.rmtree(log_dir)
 
         loaded_net = net()
@@ -257,6 +252,7 @@ class TestPyTorchModelCloud:
             "TILEDB_ML_MODEL_STAGE": "STAGING",
             "TILEDB_ML_MODEL_PYTHON_VERSION": platform.python_version(),
             "TILEDB_ML_MODEL_PREVIEW": str(model),
+            "TILEDB_ML_MODEL_VERSION": tiledb_ml_version,
         }
 
         mock_update_file_properties.assert_called_once_with(uri, file_properties_dict)

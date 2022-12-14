@@ -3,14 +3,13 @@
 import pickle
 from typing import Optional
 
-import numpy as np
 import sklearn
 from sklearn import config_context
 from sklearn.base import BaseEstimator
 
 import tiledb
 
-from ._base import Meta, TileDBArtifact, Timestamp, current_milli_time
+from ._base import Meta, TileDBArtifact, Timestamp
 
 
 class SklearnTileDBModel(TileDBArtifact[BaseEstimator]):
@@ -39,29 +38,66 @@ class SklearnTileDBModel(TileDBArtifact[BaseEstimator]):
             target location.
         :param meta: Extra metadata to save in a TileDB array.
         """
+        if self.artifact is None:
+            raise RuntimeError("Model is not initialized")
+
         # Serialize model
         serialized_model = self._serialize_model()
 
         # Create TileDB model array
         if not update:
-            self.__create_array()
+            self._create_array(fields=["model"])
 
-        self._write_array(serialized_model=serialized_model, meta=meta)
+        self._write_array(model_params={"model": serialized_model})
+
+        if meta:
+            self._write_model_metadata(meta=meta)
 
     def load(self, *, timestamp: Optional[Timestamp] = None) -> BaseEstimator:
         """
-        Load a Sklearn model from a TileDB array.
+        Load switch, i.e, decide between __load (TileDB-ML<=0.8.0) or __load_v2 (TileDB-ML>0.8.0).
 
+        Load a Sklearn model from a TileDB array.
         :param timestamp: Range of timestamps to load fragments of the array which live
             in the specified time range.
         :return: A Sklearn model object.
         """
         # TODO: Change timestamp when issue in core is resolved
 
+        load = (
+            self.__load_legacy
+            if self._use_legacy_schema(timestamp=timestamp)
+            else self.__load
+        )
+        return load(timestamp=timestamp)
+
+    def __load_legacy(self, *, timestamp: Optional[Timestamp]) -> BaseEstimator:
+        """
+        Load a Sklearn model from a TileDB array.
+        """
         model_array = tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp)
         model_array_results = model_array[:]
         model = pickle.loads(model_array_results["model_params"].item(0))
         return model
+
+    def __load(self, *, timestamp: Optional[Timestamp]) -> BaseEstimator:
+        """
+        Load a Sklearn model from a TileDB array.
+        """
+
+        with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
+            try:
+                model_size = model_array.meta["model_size"]
+            except KeyError:
+                raise Exception(
+                    f"model_size metadata entry not present in {self.uri}"
+                    f" (existing keys: {set(model_array.meta.keys())})"
+                )
+
+            model_contents = model_array[0:model_size]["model"]
+            model_bytes = model_contents.tobytes()
+
+            return pickle.loads(model_bytes)
 
     def preview(self, *, display: str = "text") -> str:
         """
@@ -77,30 +113,6 @@ class SklearnTileDBModel(TileDBArtifact[BaseEstimator]):
                 return str(self.artifact)
         else:
             return ""
-
-    def __create_array(self) -> None:
-        """Create a TileDB array for a Sklearn model."""
-
-        assert self.artifact
-        domain_info = ("model", (1, 1))
-        fields = ["model_params"]
-        super()._create_array(domain_info, fields)
-
-    def _write_array(self, serialized_model: bytes, meta: Optional[Meta]) -> None:
-        """
-        Write a Sklearn model to a TileDB array.
-
-        :param serialized_model: A pickled sklearn model.
-        :param meta: Extra metadata to save in a TileDB array.
-        """
-        # TODO: Change timestamp when issue in core is resolved
-
-        with tiledb.open(
-            self.uri, "w", timestamp=current_milli_time(), ctx=self.ctx
-        ) as tf_model_tiledb:
-            # Insertion in TileDB array
-            tf_model_tiledb[:] = {"model_params": np.array([serialized_model])}
-            self.update_model_metadata(array=tf_model_tiledb, meta=meta)
 
     def _serialize_model(self) -> bytes:
         """

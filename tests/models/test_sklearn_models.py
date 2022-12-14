@@ -8,6 +8,7 @@ import pytest
 import sklearn
 import sklearn.base
 
+from tiledb.ml import __version__ as tiledb_ml_version
 from tiledb.ml.models.sklearn import SklearnTileDBModel
 
 
@@ -61,6 +62,9 @@ class TestSklearnModel:
             == sklearn.__version__
         )
         assert tiledb_obj._file_properties["TILEDB_ML_MODEL_PREVIEW"] == str(model)
+        assert (
+            tiledb_obj._file_properties["TILEDB_ML_MODEL_VERSION"] == tiledb_ml_version
+        )
 
 
 class TestSklearnModelCloud:
@@ -111,6 +115,7 @@ class TestSklearnModelCloud:
             "TILEDB_ML_MODEL_STAGE": "STAGING",
             "TILEDB_ML_MODEL_PYTHON_VERSION": platform.python_version(),
             "TILEDB_ML_MODEL_PREVIEW": str(model),
+            "TILEDB_ML_MODEL_VERSION": tiledb_ml_version,
         }
 
         mock_update_file_properties.assert_called_once_with(uri, file_properties_dict)
