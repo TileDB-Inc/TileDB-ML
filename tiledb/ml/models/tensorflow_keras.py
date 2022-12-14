@@ -136,19 +136,19 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
         :return: Tensorflow model.
         """
 
-        if self.is_v1():
-            return self.__load(
+        if self._use_legacy_schema():
+            return self.__load_legacy(
                 timestamp=timestamp,
                 compile_model=compile_model,
                 custom_objects=custom_objects,
                 input_shape=input_shape,
                 callback=callback,
             )
-        return self.__load_v2(
+        return self.__load(
             timestamp=timestamp, compile_model=compile_model, callback=callback
         )
 
-    def __load(
+    def __load_legacy(
         self,
         timestamp: Optional[Timestamp],
         compile_model: bool,
@@ -242,7 +242,7 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
                 print(f"Array {self.uri}-tensorboard does not exist")
         return model
 
-    def __load_v2(
+    def __load(
         self,
         timestamp: Optional[Timestamp],
         compile_model: bool,

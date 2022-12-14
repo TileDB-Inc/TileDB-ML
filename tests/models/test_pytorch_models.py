@@ -101,7 +101,12 @@ class TestPyTorchModel:
             if inspect.isclass(obj) and name != "Optimizer"
         ],
     )
-    def test_save(self, tmpdir, net, optimizer):
+    def test_save(self, mocker, tmpdir, net, optimizer):
+        mocker.patch(
+            "tiledb.ml.models.pytorch.PyTorchTileDBModel._use_legacy_schema",
+            return_value=False,
+        )
+
         model = net()
         saved_optimizer = optimizer(model.parameters(), lr=0.001)
         tiledb_array = os.path.join(tmpdir, "model_array")
@@ -163,7 +168,12 @@ class TestPyTorchModel:
             if inspect.isclass(obj) and name != "Optimizer"
         ],
     )
-    def test_tensorboard_callback(self, tmpdir, net, optimizer):
+    def test_tensorboard_callback(self, mocker, tmpdir, net, optimizer):
+        mocker.patch(
+            "tiledb.ml.models.pytorch.PyTorchTileDBModel._use_legacy_schema",
+            return_value=False,
+        )
+
         model = net()
         saved_optimizer = optimizer(model.parameters(), lr=0.001)
         tiledb_array = os.path.join(tmpdir, "model_array")

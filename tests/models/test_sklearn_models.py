@@ -22,7 +22,12 @@ def iter_models(*modules):
     list(iter_models("svm", "linear_model", "naive_bayes", "tree")),
 )
 class TestSklearnModel:
-    def test_save_load(self, tmpdir, net):
+    def test_save_load(self, mocker, tmpdir, net):
+        mocker.patch(
+            "tiledb.ml.models.sklearn.SklearnTileDBModel._use_legacy_schema",
+            return_value=False,
+        )
+
         tiledb_array = os.path.join(tmpdir, "test_array")
         model = net()
         tiledb_sklearn_obj = SklearnTileDBModel(uri=tiledb_array, model=model)

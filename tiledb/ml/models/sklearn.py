@@ -64,10 +64,10 @@ class SklearnTileDBModel(TileDBArtifact[BaseEstimator]):
         """
         # TODO: Change timestamp when issue in core is resolved
 
-        load = self.__load if self.is_v1() else self.__load_v2
+        load = self.__load_legacy if self._use_legacy_schema() else self.__load
         return load(timestamp=timestamp)
 
-    def __load(self, *, timestamp: Optional[Timestamp]) -> BaseEstimator:
+    def __load_legacy(self, *, timestamp: Optional[Timestamp]) -> BaseEstimator:
         """
         Load a Sklearn model from a TileDB array.
         """
@@ -76,7 +76,7 @@ class SklearnTileDBModel(TileDBArtifact[BaseEstimator]):
         model = pickle.loads(model_array_results["model_params"].item(0))
         return model
 
-    def __load_v2(self, *, timestamp: Optional[Timestamp]) -> BaseEstimator:
+    def __load(self, *, timestamp: Optional[Timestamp]) -> BaseEstimator:
         """
         Load a Sklearn model from a TileDB array.
         """

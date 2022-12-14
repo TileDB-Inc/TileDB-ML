@@ -113,8 +113,13 @@ class TestTensorflowKerasModel:
     @api
     @loss_optimizer_metrics
     def test_save_model_to_tiledb_array_predictions(
-        self, tmpdir, api, loss, optimizer, metrics
+        self, mocker, tmpdir, api, loss, optimizer, metrics
     ):
+        mocker.patch(
+            "tiledb.ml.models.tensorflow_keras.TensorflowKerasTileDBModel._use_legacy_schema",
+            return_value=False,
+        )
+
         model = api(num_hidden=1, num_classes=2, input_dim=3)
         tiledb_uri = os.path.join(tmpdir, "model_array")
 
@@ -139,8 +144,13 @@ class TestTensorflowKerasModel:
     @api
     @loss_optimizer_metrics
     def test_save_model_to_tiledb_array_weights(
-        self, tmpdir, api, loss, optimizer, metrics
+        self, mocker, tmpdir, api, loss, optimizer, metrics
     ):
+        mocker.patch(
+            "tiledb.ml.models.tensorflow_keras.TensorflowKerasTileDBModel._use_legacy_schema",
+            return_value=False,
+        )
+
         model = api(num_hidden=1, num_classes=2, input_dim=3)
         tiledb_uri = os.path.join(tmpdir, "model_array")
 
@@ -174,7 +184,14 @@ class TestTensorflowKerasModel:
             )
 
     @loss_optimizer_metrics
-    def test_save_load_with_dense_features(self, tmpdir, loss, optimizer, metrics):
+    def test_save_load_with_dense_features(
+        self, mocker, tmpdir, loss, optimizer, metrics
+    ):
+        mocker.patch(
+            "tiledb.ml.models.tensorflow_keras.TensorflowKerasTileDBModel._use_legacy_schema",
+            return_value=False,
+        )
+
         if optimizer is None:
             pytest.skip()
         cols = [
@@ -221,7 +238,14 @@ class TestTensorflowKerasModel:
         )
 
     @loss_optimizer_metrics
-    def test_save_load_with_sequence_features(self, tmpdir, loss, optimizer, metrics):
+    def test_save_load_with_sequence_features(
+        self, mocker, tmpdir, loss, optimizer, metrics
+    ):
+        mocker.patch(
+            "tiledb.ml.models.tensorflow_keras.TensorflowKerasTileDBModel._use_legacy_schema",
+            return_value=False,
+        )
+
         if optimizer is None:
             pytest.skip()
 
@@ -281,7 +305,14 @@ class TestTensorflowKerasModel:
             model.predict({"a": inputs_a, "b": inputs_b}, steps=1),
         )
 
-    def test_functional_model_save_load_with_custom_loss_and_metric(self, tmpdir):
+    def test_functional_model_save_load_with_custom_loss_and_metric(
+        self, mocker, tmpdir
+    ):
+        mocker.patch(
+            "tiledb.ml.models.tensorflow_keras.TensorflowKerasTileDBModel._use_legacy_schema",
+            return_value=False,
+        )
+
         inputs = tf.keras.layers.Input(shape=(4,))
         x = tf.keras.layers.Dense(8, activation="relu")(inputs)
         outputs = tf.keras.layers.Dense(3, activation="softmax")(x)
@@ -321,7 +352,12 @@ class TestTensorflowKerasModel:
             loaded_model.predict(data_x), model.predict(data_x)
         )
 
-    def test_save_load_for_rnn_layers(self, tmpdir):
+    def test_save_load_for_rnn_layers(self, mocker, tmpdir):
+        mocker.patch(
+            "tiledb.ml.models.tensorflow_keras.TensorflowKerasTileDBModel._use_legacy_schema",
+            return_value=False,
+        )
+
         inputs = tf.keras.layers.Input([10, 10], name="train_input")
         rnn_layers = [
             tf.keras.layers.LSTMCell(size, recurrent_dropout=0, name="rnn_cell%d" % i)
@@ -344,7 +380,12 @@ class TestTensorflowKerasModel:
         # Assert model predictions are equal
         np.testing.assert_array_equal(loaded_model.predict(data), model.predict(data))
 
-    def test_sequential_model_save_load_without_input_shape(self, tmpdir):
+    def test_sequential_model_save_load_without_input_shape(self, mocker, tmpdir):
+        mocker.patch(
+            "tiledb.ml.models.tensorflow_keras.TensorflowKerasTileDBModel._use_legacy_schema",
+            return_value=False,
+        )
+
         model = tf.keras.Sequential()
         model.add(tf.keras.layers.Dense(2))
         model.add(tf.keras.layers.RepeatVector(3))
@@ -506,7 +547,12 @@ class TestTensorflowKerasModelCloud:
             ex.value
         )
 
-    def test_tensorboard_callback(self, tmpdir):
+    def test_tensorboard_callback(self, mocker, tmpdir):
+        mocker.patch(
+            "tiledb.ml.models.tensorflow_keras.TensorflowKerasTileDBModel._use_legacy_schema",
+            return_value=False,
+        )
+
         model = tf.keras.Sequential()
         model.add(tf.keras.layers.Flatten(input_shape=(10, 10)))
         tiledb_array = os.path.join(tmpdir, "model_array")

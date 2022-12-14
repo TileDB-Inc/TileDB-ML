@@ -255,5 +255,5 @@ class TileDBArtifact(ABC, Generic[Artifact]):
                     f.write(file_bytes)
 
     @staticmethod
-    def is_v1() -> bool:
-        return False if ModelFileProperties.TILEDB_ML_MODEL_VERSION else True
+    def _use_legacy_schema() -> bool:
+        return __version__ < "0.9"  # type: ignore
