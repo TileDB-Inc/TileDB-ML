@@ -256,6 +256,4 @@ class TileDBArtifact(ABC, Generic[Artifact]):
 
     @staticmethod
     def is_v1() -> bool:
-        if ModelFileProperties.TILEDB_ML_MODEL_VERSION:
-            return False
-        return True
+        return False if ModelFileProperties.TILEDB_ML_MODEL_VERSION else True
