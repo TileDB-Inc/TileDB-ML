@@ -12,6 +12,7 @@ import pytest
 import tensorflow as tf
 
 import tiledb
+from tiledb.ml import __version__ as tiledb_ml_version
 from tiledb.ml.models.tensorflow_keras import TensorflowKerasTileDBModel
 
 try:
@@ -468,6 +469,9 @@ class TestTensorflowKerasModelCloud:
             == tf.__version__
         )
         assert tiledb_obj._file_properties["TILEDB_ML_MODEL_PREVIEW"] == model_summary
+        assert (
+            tiledb_obj._file_properties["TILEDB_ML_MODEL_VERSION"] == tiledb_ml_version
+        )
 
     def test_get_cloud_uri_call_for_models_on_tiledb_cloud(self, tmpdir, mocker):
         model = tf.keras.Sequential()
@@ -528,7 +532,7 @@ class TestTensorflowKerasModelCloud:
             "TILEDB_ML_MODEL_STAGE": "STAGING",
             "TILEDB_ML_MODEL_PYTHON_VERSION": platform.python_version(),
             "TILEDB_ML_MODEL_PREVIEW": model_summary,
-            "TILEDB_ML_MODEL_VERSION": "",
+            "TILEDB_ML_MODEL_VERSION": tiledb_ml_version,
         }
 
         mock_update_file_properties.assert_called_once_with(uri, file_properties_dict)

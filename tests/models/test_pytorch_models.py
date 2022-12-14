@@ -15,6 +15,7 @@ import torch.optim as optimizers
 from torch.utils.tensorboard import SummaryWriter
 
 import tiledb
+from tiledb.ml import __version__ as tiledb_ml_version
 from tiledb.ml.models.pytorch import PyTorchTileDBModel
 
 
@@ -158,6 +159,9 @@ class TestPyTorchModel:
             == torch.__version__
         )
         assert tiledb_obj._file_properties["TILEDB_ML_MODEL_PREVIEW"] == str(model)
+        assert (
+            tiledb_obj._file_properties["TILEDB_ML_MODEL_VERSION"] == tiledb_ml_version
+        )
 
     @net
     @pytest.mark.parametrize(
@@ -258,7 +262,7 @@ class TestPyTorchModelCloud:
             "TILEDB_ML_MODEL_STAGE": "STAGING",
             "TILEDB_ML_MODEL_PYTHON_VERSION": platform.python_version(),
             "TILEDB_ML_MODEL_PREVIEW": str(model),
-            "TILEDB_ML_MODEL_VERSION": "",
+            "TILEDB_ML_MODEL_VERSION": tiledb_ml_version,
         }
 
         mock_update_file_properties.assert_called_once_with(uri, file_properties_dict)
