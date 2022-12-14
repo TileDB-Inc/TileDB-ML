@@ -8,13 +8,13 @@ from abc import ABC, abstractmethod
 from typing import (
     Any,
     Generic,
-    List,
     Mapping,
     Optional,
     Sequence,
     Tuple,
     TypeVar,
     Union,
+    cast,
 )
 
 import numpy as np
@@ -29,7 +29,7 @@ Artifact = TypeVar("Artifact")
 Meta = Mapping[str, Any]
 Timestamp = Tuple[int, int]
 
-Weights = Union[List[np.ndarray], Mapping[str, Any]]
+Weights = Union[Sequence[np.ndarray], Mapping[str, Any]]
 
 
 class TileDBArtifact(ABC, Generic[Artifact]):
@@ -83,6 +83,18 @@ class TileDBArtifact(ABC, Generic[Artifact]):
         :param timestamp: Range of timestamps to load fragments of the array which live
             in the specified time range.
         """
+
+    def get_weights(self, timestamp: Optional[Timestamp] = None) -> Weights:
+        """
+        Returns model's weights. Works for Tensorflow Keras and PyTorch
+        """
+        return cast(Weights, self._get_model_param("model", timestamp))
+
+    def get_optimizer_weights(self, timestamp: Optional[Timestamp] = None) -> Weights:
+        """
+        Returns optimizer's weights. Works for Tensorflow Keras and PyTorch
+        """
+        return cast(Weights, self._get_model_param("optimizer", timestamp))
 
     @abstractmethod
     def preview(self) -> str:
@@ -199,37 +211,17 @@ class TileDBArtifact(ABC, Generic[Artifact]):
 
         return pickle.dumps(event_files, protocol=4)
 
-    def get_weights(self, timestamp: Optional[Timestamp] = None) -> Weights:
-        """
-        Returns model's weights. Works for Tensorflow Keras and PyTorch
-        """
+    def _get_model_param(self, key: str, timestamp: Optional[Timestamp]) -> Any:
         with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
+            size_key = key + "_size"
             try:
-                model_size = model_array.meta["model_size"]
+                size = model_array.meta[size_key]
             except KeyError:
                 raise Exception(
-                    f"model_size metadata entry not present in {self.uri}"
+                    f"{size_key} metadata entry not present in {self.uri}"
                     f" (existing keys: {set(model_array.meta.keys())})"
                 )
-
-            md_contents = model_array[0:model_size]["model"]
-            return pickle.loads(md_contents.tobytes())  # type: ignore
-
-    def get_optimizer_weights(self, timestamp: Optional[Timestamp] = None) -> Weights:
-        """
-        Returns optimizer's weights. Works for Tensorflow Keras and PyTorch
-        """
-        with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
-            try:
-                optimizer_size = model_array.meta["optimizer_size"]
-            except KeyError:
-                raise Exception(
-                    f"optimizer_size metadata entry not present in {self.uri}"
-                    f" (existing keys: {set(model_array.meta.keys())})"
-                )
-
-            opt_contents = model_array[0:optimizer_size]["optimizer"]
-            return pickle.loads(opt_contents.tobytes())  # type: ignore
+            return pickle.loads(model_array[0:size][key].tobytes())
 
     def _load_tensorboard(self, timestamp: Optional[Timestamp] = None) -> None:
         """
@@ -257,4 +249,4 @@ class TileDBArtifact(ABC, Generic[Artifact]):
     def _use_legacy_schema(self, timestamp: Optional[Timestamp]) -> bool:
         # TODO: Decide based on tiledb-ml version and not on schema characteristics, like "offset".
         with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
-            return model_array.schema.domain.dim(0).name != "offset"  # type: ignore
+            return str(model_array.schema.domain.dim(0).name) != "offset"
