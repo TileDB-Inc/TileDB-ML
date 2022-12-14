@@ -44,9 +44,9 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
     def save(
         self,
         *,
-        update: Optional[bool] = False,
+        update: bool = False,
         meta: Optional[Meta] = None,
-        include_optimizer: Optional[bool] = False,
+        include_optimizer: bool = False,
         callbacks: Optional[tf.keras.callbacks.CallbackList] = None,
     ) -> None:
         """
@@ -81,12 +81,14 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
                     tensorboard = self._serialize_tensorboard_files(
                         log_dir=os.path.join(cb.log_dir, "train")
                     )
+                else:
+                    raise NotImplementedError(cb)
         else:
             tensorboard = b""
 
         # Create TileDB model array
         if not update:
-            super()._create_array(fields=["model", "optimizer", "tensorboard"])
+            self._create_array(fields=["model", "optimizer", "tensorboard"])
 
         self._write_array(
             model_params={
@@ -102,7 +104,7 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
         # Write extra metadata. Only for Tensoflow models.
         model_metadata = saving_utils.model_metadata(
             model=self.artifact,
-            include_optimizer=any([optimizer_weights]),
+            include_optimizer=bool(optimizer_weights),
         )
 
         with tiledb.open(self.uri, "w", ctx=self.ctx) as model_array:
@@ -136,7 +138,7 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
 
         with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
             # Check if we try to load models with the old 1-cell schema.
-            if model_array.schema.domain.size < np.iinfo(np.uint64).max - 1025:
+            if self.is_v1(model_array):
                 return self.__load(
                     timestamp=timestamp,
                     compile_model=compile_model,
@@ -253,7 +255,6 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
         """
 
         model_weights = self.get_weights(timestamp=timestamp)
-        optimizer_weights = self.get_optimizer_weights(timestamp=timestamp)
 
         with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
             model_config = json.loads(model_array.meta["model_config"])
@@ -274,6 +275,8 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
                 )
 
                 saving_utils.try_build_compiled_arguments(model)
+
+                optimizer_weights = self.get_optimizer_weights(timestamp=timestamp)
 
                 # Set optimizer weights.
                 if optimizer_weights:
@@ -297,7 +300,7 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
                         )
 
         if callback:
-            self.get_tensorboard(timestamp=timestamp)
+            self._load_tensorboard(timestamp=timestamp)
 
         return model
 
@@ -309,50 +312,6 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
             model_summary = str_rep.getvalue()
             return model_summary
         return ""
-
-    def get_weights(self, timestamp: Optional[Timestamp] = None) -> List[np.ndarray]:
-        """
-        Returns the weights of a Tensorflow Keras model.
-        """
-        with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
-            model_meta = dict(model_array.meta.items())
-
-            try:
-                model_weights_size = model_meta["model_size"]
-            except KeyError:
-                raise Exception(
-                    f"model_weights_size metadata entry not present in {self.uri}"
-                    f" (existing keys: {set(model_meta)})"
-                )
-
-            md_weights_contents: np.ndarray = model_array[0:model_weights_size]["model"]
-            model_weights = pickle.loads(md_weights_contents.tobytes())
-
-        return model_weights  # type: ignore
-
-    def get_optimizer_weights(
-        self, timestamp: Optional[Timestamp] = None
-    ) -> List[np.ndarray]:
-        """
-        Returns the weights of the optimizer of a Tensorflow Keras model.
-        """
-        with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
-            model_meta = dict(model_array.meta.items())
-
-            try:
-                optimizer_weights_size = model_meta["optimizer_size"]
-            except KeyError:
-                raise Exception(
-                    f"optimizer_weights_size metadata entry not present in {self.uri}"
-                    f" (existing keys: {set(model_meta)})"
-                )
-
-            if optimizer_weights_size:
-                opt_weights_contents: np.ndarray = model_array[
-                    0:optimizer_weights_size
-                ]["optimizer"]
-                return pickle.loads(opt_weights_contents.tobytes())  # type: ignore
-        return []
 
     def _serialize_optimizer_weights(
         self,

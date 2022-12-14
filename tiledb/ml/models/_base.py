@@ -4,7 +4,6 @@ import glob
 import os
 import pickle
 import platform
-import time
 from abc import ABC, abstractmethod
 from typing import (
     Any,
@@ -29,11 +28,7 @@ Artifact = TypeVar("Artifact")
 Meta = Mapping[str, Any]
 Timestamp = Tuple[int, int]
 
-Weights = Union[List[np.ndarray], Mapping[str, Any], list]
-
-
-def current_milli_time() -> int:
-    return round(time.time() * 1000)
+Weights = Union[List[np.ndarray], Mapping[str, Any]]
 
 
 class TileDBArtifact(ABC, Generic[Artifact]):
@@ -94,16 +89,6 @@ class TileDBArtifact(ABC, Generic[Artifact]):
         Creates a string representation of a machine learning model.
         """
 
-    def get_weights(self) -> Weights:  # type: ignore
-        """
-        Returns the weights of a machine learning model
-        """
-
-    def get_optimizer_weights(self) -> Weights:  # type: ignore
-        """
-        Return the weights of the optimizer of a machine learning model.
-        """
-
     def _get_file_properties(self) -> Mapping[str, str]:
         return {
             ModelFileProperties.TILEDB_ML_MODEL_ML_FRAMEWORK.value: self.Name,
@@ -122,7 +107,7 @@ class TileDBArtifact(ABC, Generic[Artifact]):
         # The array will be be 1 dimensional with domain of 0 to max uint64. We use a tile extent of 1024 bytes
         dom = tiledb.Domain(
             tiledb.Dim(
-                name="position",
+                name="offset",
                 domain=(0, np.iinfo(np.uint64).max - 1025),
                 tile=1024,
                 dtype=np.uint64,
@@ -153,16 +138,13 @@ class TileDBArtifact(ABC, Generic[Artifact]):
         if self.namespace:
             update_file_properties(self.uri, self._file_properties)
 
-    def _write_array(self, model_params: Mapping) -> None:
+    def _write_array(self, model_params: Mapping[str, bytes]) -> None:
         """
         Writes machine learning model related data, i.e., model weights, optimizer weights and Tensorboard files, to
         a dense TileDB array.
         """
 
-        with tiledb.open(
-            self.uri, "w", timestamp=current_milli_time(), ctx=self.ctx
-        ) as tf_model_tiledb:
-
+        with tiledb.open(self.uri, "w", ctx=self.ctx) as model_array:
             one_d_buffers = {}
             max_len = 0
 
@@ -170,13 +152,16 @@ class TileDBArtifact(ABC, Generic[Artifact]):
                 one_d_buffer = np.frombuffer(value, dtype=np.uint8)
                 one_d_buffer_len = len(one_d_buffer)
                 one_d_buffers[key] = one_d_buffer
-                tf_model_tiledb.meta[key + "_size"] = one_d_buffer_len
+
+                # Write size only in case is greater than 0.
+                if one_d_buffer_len:
+                    model_array.meta[key + "_size"] = one_d_buffer_len
 
                 if one_d_buffer_len > max_len:
                     max_len = one_d_buffer_len
 
-            tf_model_tiledb[0:max_len] = {
-                key: np.pad(value, (0, max_len - len(value)), "constant")
+            model_array[0:max_len] = {
+                key: np.pad(value, (0, max_len - len(value)))
                 for key, value in one_d_buffers.items()
             }
 
@@ -199,7 +184,7 @@ class TileDBArtifact(ABC, Generic[Artifact]):
                 model_array.meta[key] = value
 
     @staticmethod
-    def _serialize_tensorboard_files(log_dir: str = "") -> bytes:
+    def _serialize_tensorboard_files(log_dir: str) -> bytes:
         """Serialize all Tensorboard files."""
 
         if not os.path.exists(log_dir):
@@ -212,32 +197,63 @@ class TileDBArtifact(ABC, Generic[Artifact]):
 
         return pickle.dumps(event_files, protocol=4)
 
-    def get_tensorboard(self, timestamp: Optional[Timestamp] = None) -> None:
+    def get_weights(self, timestamp: Optional[Timestamp] = None) -> Weights:
         """
-        Writes Tensorboard files to directory.
+        Returns model's weights. Works for Tensorflow Keras and PyTorch
         """
         with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
-            meta = dict(model_array.meta.items())
-
             try:
-                tensorboard_size = meta["tensorboard_size"]
+                model_size = model_array.meta["model_size"]
+            except KeyError:
+                raise Exception(
+                    f"model_size metadata entry not present in {self.uri}"
+                    f" (existing keys: {set(model_array.meta.keys())})"
+                )
+
+            md_contents = model_array[0:model_size]["model"]
+            return pickle.loads(md_contents.tobytes())  # type: ignore
+
+    def get_optimizer_weights(self, timestamp: Optional[Timestamp] = None) -> Weights:
+        """
+        Returns optimizer's weights. Works for Tensorflow Keras and PyTorch
+        """
+        with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
+            try:
+                optimizer_size = model_array.meta["optimizer_size"]
+            except KeyError:
+                raise Exception(
+                    f"optimizer_size metadata entry not present in {self.uri}"
+                    f" (existing keys: {set(model_array.meta.keys())})"
+                )
+
+            opt_contents = model_array[0:optimizer_size]["optimizer"]
+            return pickle.loads(opt_contents.tobytes())  # type: ignore
+
+    def _load_tensorboard(self, timestamp: Optional[Timestamp] = None) -> None:
+        """
+        Writes Tensorboard files to directory. Works for Tensorflow-Keras and PyTorch.
+        """
+        with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
+            try:
+                tensorboard_size = model_array.meta["tensorboard_size"]
             except KeyError:
                 raise Exception(
                     f"tensorboard_size metadata entry not present in"
-                    f" (existing keys: {set(meta)})"
+                    f" (existing keys: {set(model_array.meta.keys())})"
                 )
 
-            if tensorboard_size:
-                tensorboard_contents: np.ndarray = model_array[0:tensorboard_size][
-                    "tensorboard"
-                ]
-                tensorboard_files = pickle.loads(tensorboard_contents.tobytes())
+            tb_contents = model_array[0:tensorboard_size]["tensorboard"]
+            tensorboard_files = pickle.loads(tb_contents.tobytes())
 
-                for path, file_bytes in tensorboard_files.items():
-                    log_dir = os.path.dirname(path)
-                    if not os.path.exists(log_dir):
-                        os.mkdir(log_dir)
-                    with open(os.path.join(log_dir, os.path.basename(path)), "wb") as f:
-                        f.write(file_bytes)
-            else:
-                raise Exception("There are no Tensorboard files in the array!")
+            for path, file_bytes in tensorboard_files.items():
+                log_dir = os.path.dirname(path)
+                if not os.path.exists(log_dir):
+                    os.mkdir(log_dir)
+                with open(os.path.join(log_dir, os.path.basename(path)), "wb") as f:
+                    f.write(file_bytes)
+
+    @staticmethod
+    def is_v1(array: tiledb.Array) -> bool:
+        if array.schema.domain.size < np.iinfo(np.uint64).max - 1025:
+            return True
+        return False

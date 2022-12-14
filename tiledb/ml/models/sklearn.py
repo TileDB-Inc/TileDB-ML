@@ -68,12 +68,8 @@ class SklearnTileDBModel(TileDBArtifact[BaseEstimator]):
         with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
             # Check if we try to load models with the old 1-cell schema.
             if model_array.schema.domain.size < np.iinfo(np.uint64).max - 1025:
-                return self.__load(
-                    timestamp=timestamp,
-                )
-            return self.__load_v2(
-                timestamp=timestamp,
-            )
+                return self.__load(timestamp=timestamp)
+            return self.__load_v2(timestamp=timestamp)
 
     def __load(self, *, timestamp: Optional[Timestamp] = None) -> BaseEstimator:
         """
@@ -90,17 +86,15 @@ class SklearnTileDBModel(TileDBArtifact[BaseEstimator]):
         """
 
         with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
-            model_meta = dict(model_array.meta.items())
-
             try:
-                model_size = model_meta["model_size"]
+                model_size = model_array.meta["model_size"]
             except KeyError:
                 raise Exception(
                     f"model_size metadata entry not present in {self.uri}"
-                    f" (existing keys: {set(model_meta)})"
+                    f" (existing keys: {set(model_array.meta.keys())})"
                 )
 
-            model_contents: np.ndarray = model_array[0:model_size]["model"]
+            model_contents = model_array[0:model_size]["model"]
             model_bytes = model_contents.tobytes()
 
             return pickle.loads(model_bytes)
