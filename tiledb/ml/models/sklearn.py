@@ -48,7 +48,7 @@ class SklearnTileDBModel(TileDBArtifact[BaseEstimator]):
         if not update:
             self._create_array(fields=["model"])
 
-        self._write_array(model_params={"model": serialized_model}, meta=meta or {})
+        self._write_array(model_params={"model": serialized_model}, meta=meta)
 
     def load(self, *, timestamp: Optional[Timestamp] = None) -> BaseEstimator:
         """

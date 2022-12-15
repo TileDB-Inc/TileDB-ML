@@ -62,14 +62,6 @@ class PyTorchTileDBModel(TileDBArtifact[torch.nn.Module]):
         else:
             serialized_optimizer_dict = b""
 
-        # Serialize Tensorboard files
-        if summary_writer:
-            tensorboard = self._serialize_tensorboard_files(
-                log_dir=summary_writer.log_dir
-            )
-        else:
-            tensorboard = b""
-
         # Create TileDB model array
         if not update:
             self._create_array(fields=["model", "optimizer", "tensorboard"])
@@ -78,9 +70,9 @@ class PyTorchTileDBModel(TileDBArtifact[torch.nn.Module]):
             model_params={
                 "model": serialized_model_dict,
                 "optimizer": serialized_optimizer_dict,
-                "tensorboard": tensorboard,
             },
-            meta=meta or {},
+            tensorboard_log_dir=summary_writer.log_dir if summary_writer else None,
+            meta=meta,
         )
 
     def load(

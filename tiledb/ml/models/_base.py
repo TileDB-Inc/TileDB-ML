@@ -146,7 +146,20 @@ class TileDBArtifact(ABC, Generic[Artifact]):
         if self.namespace:
             update_file_properties(self.uri, self._file_properties)
 
-    def _write_array(self, model_params: Mapping[str, bytes], meta: Meta) -> None:
+    def _write_array(
+        self,
+        model_params: Mapping[str, bytes],
+        tensorboard_log_dir: Optional[str] = None,
+        meta: Optional[Meta] = None,
+    ) -> None:
+        if tensorboard_log_dir:
+            tensorboard = self._serialize_tensorboard(tensorboard_log_dir)
+        else:
+            tensorboard = b""
+        model_params = dict(tensorboard=tensorboard, **model_params)
+
+        if meta is None:
+            meta = {}
         if not meta.keys().isdisjoint(self._file_properties.keys()):
             raise ValueError(
                 "Please avoid using file property key names as metadata keys!"
@@ -173,20 +186,6 @@ class TileDBArtifact(ABC, Generic[Artifact]):
                 for key, value in mapping.items():
                     model_array.meta[key] = value
 
-    @staticmethod
-    def _serialize_tensorboard_files(log_dir: str) -> bytes:
-        """Serialize all Tensorboard files."""
-
-        if not os.path.exists(log_dir):
-            raise ValueError(f"{log_dir} does not exist")
-
-        event_files = {}
-        for path in glob.glob(f"{log_dir}/*tfevents*"):
-            with open(path, "rb") as f:
-                event_files[path] = f.read()
-
-        return pickle.dumps(event_files, protocol=4)
-
     def _get_model_param(self, key: str, timestamp: Optional[Timestamp]) -> Any:
         with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
             size_key = key + "_size"
@@ -198,6 +197,17 @@ class TileDBArtifact(ABC, Generic[Artifact]):
                     f" (existing keys: {set(model_array.meta.keys())})"
                 )
             return pickle.loads(model_array[0:size][key].tobytes())
+
+    @staticmethod
+    def _serialize_tensorboard(log_dir: str) -> bytes:
+        """Serialize all Tensorboard files."""
+        if not os.path.exists(log_dir):
+            raise ValueError(f"{log_dir} does not exist")
+        tensorboard_files = {}
+        for path in glob.glob(f"{log_dir}/*tfevents*"):
+            with open(path, "rb") as f:
+                tensorboard_files[path] = f.read()
+        return pickle.dumps(tensorboard_files, protocol=4)
 
     def _load_tensorboard(self, timestamp: Optional[Timestamp] = None) -> None:
         """

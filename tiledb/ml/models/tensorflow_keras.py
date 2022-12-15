@@ -76,16 +76,13 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
             optimizer_weights = b""
 
         # Serialize Tensorboard files
+        tensorboard_log_dir = None
         if callbacks:
             for cb in callbacks:
                 if isinstance(cb, tf.keras.callbacks.TensorBoard):
-                    tensorboard = self._serialize_tensorboard_files(
-                        log_dir=os.path.join(cb.log_dir, "train")
-                    )
+                    tensorboard_log_dir = os.path.join(cb.log_dir, "train")
                 else:
                     raise NotImplementedError(cb)
-        else:
-            tensorboard = b""
 
         # Create TileDB model array
         if not update:
@@ -103,8 +100,8 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
             model_params={
                 "model": model_weights,
                 "optimizer": optimizer_weights,
-                "tensorboard": tensorboard,
             },
+            tensorboard_log_dir=tensorboard_log_dir,
             meta=ChainMap(model_meta, dict(meta or ())),
         )
 
