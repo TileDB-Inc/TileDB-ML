@@ -196,7 +196,7 @@ class TileDBArtifact(ABC, Generic[Artifact]):
                     f"{size_key} metadata entry not present in {self.uri}"
                     f" (existing keys: {set(model_array.meta.keys())})"
                 )
-            return pickle.loads(model_array[0:size][key].tobytes())
+            return pickle.loads(model_array.query(attrs=(key,))[0:size][key].tobytes())
 
     @staticmethod
     def _serialize_tensorboard(log_dir: str) -> bytes:
