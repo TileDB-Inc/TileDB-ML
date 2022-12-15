@@ -95,13 +95,15 @@ class TileDBArtifact(ABC, Generic[Artifact]):
         """
         Returns model's weights. Works for Tensorflow Keras and PyTorch
         """
-        return cast(Weights, self._get_model_param("model", timestamp))
+        with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
+            return cast(Weights, self._get_model_param(model_array, "model"))
 
     def get_optimizer_weights(self, timestamp: Optional[Timestamp] = None) -> Weights:
         """
         Returns optimizer's weights. Works for Tensorflow Keras and PyTorch
         """
-        return cast(Weights, self._get_model_param("optimizer", timestamp))
+        with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
+            return cast(Weights, self._get_model_param(model_array, "optimizer"))
 
     @abstractmethod
     def preview(self) -> str:
@@ -186,17 +188,16 @@ class TileDBArtifact(ABC, Generic[Artifact]):
                 for key, value in mapping.items():
                     model_array.meta[key] = value
 
-    def _get_model_param(self, key: str, timestamp: Optional[Timestamp]) -> Any:
-        with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
-            size_key = key + "_size"
-            try:
-                size = model_array.meta[size_key]
-            except KeyError:
-                raise Exception(
-                    f"{size_key} metadata entry not present in {self.uri}"
-                    f" (existing keys: {set(model_array.meta.keys())})"
-                )
-            return pickle.loads(model_array.query(attrs=(key,))[0:size][key].tobytes())
+    def _get_model_param(self, model_array: tiledb.Array, key: str) -> Any:
+        size_key = key + "_size"
+        try:
+            size = model_array.meta[size_key]
+        except KeyError:
+            raise Exception(
+                f"{size_key} metadata entry not present in {self.uri}"
+                f" (existing keys: {set(model_array.meta.keys())})"
+            )
+        return pickle.loads(model_array.query(attrs=(key,))[0:size][key].tobytes())
 
     @staticmethod
     def _serialize_tensorboard(log_dir: str) -> bytes:
@@ -209,17 +210,16 @@ class TileDBArtifact(ABC, Generic[Artifact]):
                 tensorboard_files[path] = f.read()
         return pickle.dumps(tensorboard_files, protocol=4)
 
-    def _load_tensorboard(self, timestamp: Optional[Timestamp] = None) -> None:
+    def _load_tensorboard(self, model_array: tiledb.Array) -> None:
         """
         Write Tensorboard files to directory. Works for Tensorflow-Keras and PyTorch.
         """
-        tensorboard_files = self._get_model_param("tensorboard", timestamp)
+        tensorboard_files = self._get_model_param(model_array, "tensorboard")
         for path, file_bytes in tensorboard_files.items():
             os.makedirs(os.path.dirname(path), exist_ok=True)
             with open(path, "wb") as f:
                 f.write(file_bytes)
 
-    def _use_legacy_schema(self, timestamp: Optional[Timestamp]) -> bool:
+    def _use_legacy_schema(self, model_array: tiledb.Array) -> bool:
         # TODO: Decide based on tiledb-ml version and not on schema characteristics, like "offset".
-        with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
-            return str(model_array.schema.domain.dim(0).name) != "offset"
+        return str(model_array.schema.domain.dim(0).name) != "offset"

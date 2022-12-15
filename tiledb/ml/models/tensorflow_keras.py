@@ -127,96 +127,79 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
         :param input_shape: The shape that the custom model expects as input
         :return: Tensorflow model.
         """
-
-        if self._use_legacy_schema(timestamp=timestamp):
-            return self.__load_legacy(
-                timestamp=timestamp,
-                compile_model=compile_model,
-                custom_objects=custom_objects,
-                input_shape=input_shape,
-                callback=callback,
-            )
-        return self.__load(
-            timestamp=timestamp, compile_model=compile_model, callback=callback
-        )
+        with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
+            if self._use_legacy_schema(model_array):
+                return self.__load_legacy(
+                    model_array, compile_model, callback, custom_objects, input_shape
+                )
+            else:
+                return self.__load(model_array, compile_model, callback)
 
     def __load_legacy(
         self,
-        timestamp: Optional[Timestamp],
+        model_array: tiledb.Array,
         compile_model: bool,
+        callback: bool,
         custom_objects: Optional[Mapping[str, Any]],
         input_shape: Optional[Tuple[int, ...]],
-        callback: bool,
     ) -> tf.keras.Model:
-        """
-        Load a Tensorflow model from a TileDB array. TileDB-ML<=0.8.0
-        """
-        # TODO: Change timestamp when issue in core is resolved
+        model_array_results = model_array[:]
+        model_config = json.loads(model_array.meta["model_config"])
+        model_class = model_config["class_name"]
 
-        with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
-            model_array_results = model_array[:]
-            model_config = json.loads(model_array.meta["model_config"])
-            model_class = model_config["class_name"]
-
-            if model_class not in ("Functional", "Sequential"):
-                with SharedObjectLoadingScope():
-                    with tf.keras.utils.CustomObjectScope(custom_objects or {}):
-                        if hasattr(model_config, "decode"):
-                            model_config = model_config.decode("utf-8")
-                        model = tf.keras.models.model_from_config(
-                            model_config, custom_objects=custom_objects
-                        )
-                        if not model.built:
-                            model.build(input_shape)
-
-                        # Load weights for layers
-                        self._load_custom_subclassed_model(model, model_array)
-            else:
-                cls = (
-                    tf.keras.Sequential
-                    if model_class == "Sequential"
-                    else tf.keras.Model
-                )
-                model = cls.from_config(model_config["config"])
-                model_weights = pickle.loads(
-                    model_array_results["model_weights"].item(0)
-                )
-                model.set_weights(model_weights)
-
-            if compile_model:
-                optimizer_weights = pickle.loads(
-                    model_array_results["optimizer_weights"].item(0)
-                )
-                training_config = json.loads(model_array.meta["training_config"])
-
-                # Compile model.
-                model.compile(
-                    **saving_utils.compile_args_from_training_config(
-                        training_config, custom_objects
+        if model_class not in ("Functional", "Sequential"):
+            with SharedObjectLoadingScope():
+                with tf.keras.utils.CustomObjectScope(custom_objects or {}):
+                    if hasattr(model_config, "decode"):
+                        model_config = model_config.decode("utf-8")
+                    model = tf.keras.models.model_from_config(
+                        model_config, custom_objects=custom_objects
                     )
+                    if not model.built:
+                        model.build(input_shape)
+
+                    # Load weights for layers
+                    self._load_custom_subclassed_model(model, model_array)
+        else:
+            cls = tf.keras.Sequential if model_class == "Sequential" else tf.keras.Model
+            model = cls.from_config(model_config["config"])
+            model_weights = pickle.loads(model_array_results["model_weights"].item(0))
+            model.set_weights(model_weights)
+
+        if compile_model:
+            optimizer_weights = pickle.loads(
+                model_array_results["optimizer_weights"].item(0)
+            )
+            training_config = json.loads(model_array.meta["training_config"])
+
+            # Compile model.
+            model.compile(
+                **saving_utils.compile_args_from_training_config(
+                    training_config, custom_objects
                 )
-                saving_utils.try_build_compiled_arguments(model)
+            )
+            saving_utils.try_build_compiled_arguments(model)
 
-                # Set optimizer weights.
-                if optimizer_weights:
-                    try:
-                        model.optimizer._create_all_weights(model.trainable_variables)
-                    except (NotImplementedError, AttributeError):
-                        logging.warning(
-                            "Error when creating the weights of optimizer {}, making it "
-                            "impossible to restore the saved optimizer state. As a result, "
-                            "your model is starting with a freshly initialized optimizer."
-                        )
+            # Set optimizer weights.
+            if optimizer_weights:
+                try:
+                    model.optimizer._create_all_weights(model.trainable_variables)
+                except (NotImplementedError, AttributeError):
+                    logging.warning(
+                        "Error when creating the weights of optimizer {}, making it "
+                        "impossible to restore the saved optimizer state. As a result, "
+                        "your model is starting with a freshly initialized optimizer."
+                    )
 
-                    try:
-                        model.optimizer.set_weights(optimizer_weights)
-                    except ValueError:
-                        logging.warning(
-                            "Error in loading the saved optimizer "
-                            "state. As a result, your model is "
-                            "starting with a freshly initialized "
-                            "optimizer."
-                        )
+                try:
+                    model.optimizer.set_weights(optimizer_weights)
+                except ValueError:
+                    logging.warning(
+                        "Error in loading the saved optimizer "
+                        "state. As a result, your model is "
+                        "starting with a freshly initialized "
+                        "optimizer."
+                    )
         if callback:
             try:
                 with tiledb.open(f"{self.uri}-tensorboard") as tb_array:
@@ -235,62 +218,52 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
         return model
 
     def __load(
-        self,
-        timestamp: Optional[Timestamp],
-        compile_model: bool,
-        callback: bool,
+        self, model_array: tiledb.Array, compile_model: bool, callback: bool
     ) -> tf.keras.Model:
-        """
-        Load a Tensorflow model from a TileDB array. TileDB-ML>0.8.0
-        """
+        model_config = json.loads(model_array.meta["model_config"])
+        model_class = model_config["class_name"]
 
-        model_weights = self.get_weights(timestamp=timestamp)
+        cls = tf.keras.Sequential if model_class == "Sequential" else tf.keras.Model
+        model = cls.from_config(model_config["config"])
+        model_weights = self._get_model_param(model_array, "model")
+        model.set_weights(model_weights)
 
-        with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
-            model_config = json.loads(model_array.meta["model_config"])
-            model_class = model_config["class_name"]
+        if compile_model:
+            training_config = json.loads(model_array.meta["training_config"])
 
-            cls = tf.keras.Sequential if model_class == "Sequential" else tf.keras.Model
-            model = cls.from_config(model_config["config"])
-            model.set_weights(model_weights)
-
-            if compile_model:
-                training_config = json.loads(model_array.meta["training_config"])
-
-                # Compile model.
-                model.compile(
-                    **saving_utils.compile_args_from_training_config(
-                        training_config,
-                    )
+            # Compile model.
+            model.compile(
+                **saving_utils.compile_args_from_training_config(
+                    training_config,
                 )
+            )
 
-                saving_utils.try_build_compiled_arguments(model)
+            saving_utils.try_build_compiled_arguments(model)
 
-                optimizer_weights = self.get_optimizer_weights(timestamp=timestamp)
+            optimizer_weights = self._get_model_param(model_array, "optimizer")
+            # Set optimizer weights.
+            if optimizer_weights:
+                try:
+                    model.optimizer._create_all_weights(model.trainable_variables)
+                except (NotImplementedError, AttributeError):
+                    logging.warning(
+                        "Error when creating the weights of optimizer {}, making it "
+                        "impossible to restore the saved optimizer state. As a result, "
+                        "your model is starting with a freshly initialized optimizer."
+                    )
 
-                # Set optimizer weights.
-                if optimizer_weights:
-                    try:
-                        model.optimizer._create_all_weights(model.trainable_variables)
-                    except (NotImplementedError, AttributeError):
-                        logging.warning(
-                            "Error when creating the weights of optimizer {}, making it "
-                            "impossible to restore the saved optimizer state. As a result, "
-                            "your model is starting with a freshly initialized optimizer."
-                        )
-
-                    try:
-                        model.optimizer.set_weights(optimizer_weights)
-                    except ValueError:
-                        logging.warning(
-                            "Error in loading the saved optimizer "
-                            "state. As a result, your model is "
-                            "starting with a freshly initialized "
-                            "optimizer."
-                        )
+                try:
+                    model.optimizer.set_weights(optimizer_weights)
+                except ValueError:
+                    logging.warning(
+                        "Error in loading the saved optimizer "
+                        "state. As a result, your model is "
+                        "starting with a freshly initialized "
+                        "optimizer."
+                    )
 
         if callback:
-            self._load_tensorboard(timestamp=timestamp)
+            self._load_tensorboard(model_array)
 
         return model
 

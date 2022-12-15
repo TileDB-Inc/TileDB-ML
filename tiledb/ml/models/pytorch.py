@@ -92,29 +92,19 @@ class PyTorchTileDBModel(TileDBArtifact[torch.nn.Module]):
         :param callback: Boolean variable if True will store Callback data into saved directory
         :return: A dictionary with attributes other than model or optimizer state_dict.
         """
-
-        load = (
-            self.__load_legacy
-            if self._use_legacy_schema(timestamp=timestamp)
-            else self.__load
-        )
-        return load(
-            model=model, optimizer=optimizer, timestamp=timestamp, callback=callback
-        )
+        with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
+            if self._use_legacy_schema(model_array):
+                return self.__load_legacy(model_array, model, optimizer, callback)
+            else:
+                return self.__load(model_array, model, optimizer, callback)
 
     def __load_legacy(
         self,
+        model_array: tiledb.Array,
         model: torch.nn.Module,
         optimizer: Optimizer,
-        timestamp: Optional[Timestamp],
         callback: bool,
     ) -> Optional[Mapping[str, Any]]:
-        """
-        Load a PyTorch model from a TileDB array.
-        """
-
-        # TODO: Change timestamp when issue in core is resolved
-        model_array = tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp)
         model_array_results = model_array[:]
         schema = model_array.schema
 
@@ -159,25 +149,16 @@ class PyTorchTileDBModel(TileDBArtifact[torch.nn.Module]):
 
     def __load(
         self,
+        model_array: tiledb.Array,
         model: torch.nn.Module,
         optimizer: Optimizer,
-        timestamp: Optional[Timestamp],
         callback: bool,
     ) -> None:
-        """
-        Load a PyTorch model from a TileDB array.
-        """
-
-        model_state_dict = self.get_weights(timestamp=timestamp)
-        model.load_state_dict(model_state_dict)
-
-        # Load model's state dictionary
+        model.load_state_dict(self._get_model_param(model_array, "model"))
         if optimizer:
-            opt_state_dict = self.get_optimizer_weights(timestamp=timestamp)
-            optimizer.load_state_dict(opt_state_dict)
-
+            optimizer.load_state_dict(self._get_model_param(model_array, "optimizer"))
         if callback:
-            self._load_tensorboard(timestamp=timestamp)
+            self._load_tensorboard(model_array)
 
     def preview(self) -> str:
         """
