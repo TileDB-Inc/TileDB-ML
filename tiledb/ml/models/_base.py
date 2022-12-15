@@ -211,26 +211,13 @@ class TileDBArtifact(ABC, Generic[Artifact]):
 
     def _load_tensorboard(self, timestamp: Optional[Timestamp] = None) -> None:
         """
-        Writes Tensorboard files to directory. Works for Tensorflow-Keras and PyTorch.
+        Write Tensorboard files to directory. Works for Tensorflow-Keras and PyTorch.
         """
-        with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
-            try:
-                tensorboard_size = model_array.meta["tensorboard_size"]
-            except KeyError:
-                raise Exception(
-                    f"tensorboard_size metadata entry not present in"
-                    f" (existing keys: {set(model_array.meta.keys())})"
-                )
-
-            tb_contents = model_array[0:tensorboard_size]["tensorboard"]
-            tensorboard_files = pickle.loads(tb_contents.tobytes())
-
-            for path, file_bytes in tensorboard_files.items():
-                log_dir = os.path.dirname(path)
-                if not os.path.exists(log_dir):
-                    os.mkdir(log_dir)
-                with open(os.path.join(log_dir, os.path.basename(path)), "wb") as f:
-                    f.write(file_bytes)
+        tensorboard_files = self._get_model_param("tensorboard", timestamp)
+        for path, file_bytes in tensorboard_files.items():
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "wb") as f:
+                f.write(file_bytes)
 
     def _use_legacy_schema(self, timestamp: Optional[Timestamp]) -> bool:
         # TODO: Decide based on tiledb-ml version and not on schema characteristics, like "offset".
