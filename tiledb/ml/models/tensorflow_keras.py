@@ -95,11 +95,9 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
                 "model": model_weights,
                 "optimizer": optimizer_weights,
                 "tensorboard": tensorboard,
-            }
+            },
+            meta=meta or {},
         )
-
-        if meta:
-            self._write_model_metadata(meta=meta)
 
         # Write extra metadata. Only for Tensoflow models.
         model_metadata = saving_utils.model_metadata(

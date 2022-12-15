@@ -79,11 +79,9 @@ class PyTorchTileDBModel(TileDBArtifact[torch.nn.Module]):
                 "model": serialized_model_dict,
                 "optimizer": serialized_optimizer_dict,
                 "tensorboard": tensorboard,
-            }
+            },
+            meta=meta or {},
         )
-
-        if meta:
-            self._write_model_metadata(meta=meta)
 
     def load(
         self,
