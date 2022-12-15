@@ -65,7 +65,14 @@ class TileDBArtifact(ABC, Generic[Artifact]):
         self.ctx = ctx
         self.artifact = artifact
         self.uri = get_cloud_uri(uri, namespace) if namespace else uri
-        self._file_properties = self._get_file_properties()
+        self._file_properties = {
+            ModelFileProperties.TILEDB_ML_MODEL_ML_FRAMEWORK.value: self.Name,
+            ModelFileProperties.TILEDB_ML_MODEL_ML_FRAMEWORK_VERSION.value: self.Version,
+            ModelFileProperties.TILEDB_ML_MODEL_STAGE.value: "STAGING",
+            ModelFileProperties.TILEDB_ML_MODEL_PYTHON_VERSION.value: platform.python_version(),
+            ModelFileProperties.TILEDB_ML_MODEL_PREVIEW.value: self.preview(),
+            ModelFileProperties.TILEDB_ML_MODEL_VERSION.value: __version__,
+        }
 
     @abstractmethod
     def save(self, *, update: bool = False, meta: Optional[Meta] = None) -> None:
@@ -102,20 +109,7 @@ class TileDBArtifact(ABC, Generic[Artifact]):
         Creates a string representation of a machine learning model.
         """
 
-    def _get_file_properties(self) -> Mapping[str, str]:
-        return {
-            ModelFileProperties.TILEDB_ML_MODEL_ML_FRAMEWORK.value: self.Name,
-            ModelFileProperties.TILEDB_ML_MODEL_ML_FRAMEWORK_VERSION.value: self.Version,
-            ModelFileProperties.TILEDB_ML_MODEL_STAGE.value: "STAGING",
-            ModelFileProperties.TILEDB_ML_MODEL_PYTHON_VERSION.value: platform.python_version(),
-            ModelFileProperties.TILEDB_ML_MODEL_PREVIEW.value: self.preview(),
-            ModelFileProperties.TILEDB_ML_MODEL_VERSION.value: __version__,
-        }
-
-    def _create_array(
-        self,
-        fields: Sequence[str],
-    ) -> None:
+    def _create_array(self, fields: Sequence[str]) -> None:
         """Internal method that creates a TileDB array based on the model's spec."""
 
         # The array will be be 1 dimensional with domain of 0 to max uint64. We use a tile extent of 1024 bytes
