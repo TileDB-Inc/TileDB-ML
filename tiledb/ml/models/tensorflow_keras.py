@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import pickle
+from collections import ChainMap
 from typing import Any, List, Mapping, Optional, Tuple
 
 import keras
@@ -90,26 +91,22 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
         if not update:
             self._create_array(fields=["model", "optimizer", "tensorboard"])
 
+        # Write extra metadata. Only for Tensoflow models.
+        model_meta = saving_utils.model_metadata(
+            model=self.artifact,
+            include_optimizer=bool(optimizer_weights),
+        )
+        for key, value in model_meta.items():
+            model_meta[key] = json.dumps(value, default=get_json_type).encode("utf8")
+
         self._write_array(
             model_params={
                 "model": model_weights,
                 "optimizer": optimizer_weights,
                 "tensorboard": tensorboard,
             },
-            meta=meta or {},
+            meta=ChainMap(model_meta, dict(meta or ())),
         )
-
-        # Write extra metadata. Only for Tensoflow models.
-        model_metadata = saving_utils.model_metadata(
-            model=self.artifact,
-            include_optimizer=bool(optimizer_weights),
-        )
-
-        with tiledb.open(self.uri, "w", ctx=self.ctx) as model_array:
-            for key, value in model_metadata.items():
-                model_array.meta[key] = json.dumps(value, default=get_json_type).encode(
-                    "utf8"
-                )
 
     def load(
         self,
