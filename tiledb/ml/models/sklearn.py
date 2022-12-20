@@ -48,10 +48,7 @@ class SklearnTileDBModel(TileDBArtifact[BaseEstimator]):
         if not update:
             self._create_array(fields=["model"])
 
-        self._write_array(model_params={"model": serialized_model})
-
-        if meta:
-            self._write_model_metadata(meta=meta)
+        self._write_array(model_params={"model": serialized_model}, meta=meta)
 
     def load(self, *, timestamp: Optional[Timestamp] = None) -> BaseEstimator:
         """
@@ -62,42 +59,17 @@ class SklearnTileDBModel(TileDBArtifact[BaseEstimator]):
             in the specified time range.
         :return: A Sklearn model object.
         """
-        # TODO: Change timestamp when issue in core is resolved
-
-        load = (
-            self.__load_legacy
-            if self._use_legacy_schema(timestamp=timestamp)
-            else self.__load
-        )
-        return load(timestamp=timestamp)
-
-    def __load_legacy(self, *, timestamp: Optional[Timestamp]) -> BaseEstimator:
-        """
-        Load a Sklearn model from a TileDB array.
-        """
-        model_array = tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp)
-        model_array_results = model_array[:]
-        model = pickle.loads(model_array_results["model_params"].item(0))
-        return model
-
-    def __load(self, *, timestamp: Optional[Timestamp]) -> BaseEstimator:
-        """
-        Load a Sklearn model from a TileDB array.
-        """
-
         with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
-            try:
-                model_size = model_array.meta["model_size"]
-            except KeyError:
-                raise Exception(
-                    f"model_size metadata entry not present in {self.uri}"
-                    f" (existing keys: {set(model_array.meta.keys())})"
-                )
+            if self._use_legacy_schema(model_array):
+                return self.__load_legacy(model_array)
+            else:
+                return self.__load(model_array)
 
-            model_contents = model_array[0:model_size]["model"]
-            model_bytes = model_contents.tobytes()
+    def __load_legacy(self, model_array: tiledb.Array) -> BaseEstimator:
+        return pickle.loads(model_array[:]["model_params"].item(0))
 
-            return pickle.loads(model_bytes)
+    def __load(self, model_array: tiledb.Array) -> BaseEstimator:
+        return self._get_model_param(model_array, "model")
 
     def preview(self, *, display: str = "text") -> str:
         """
