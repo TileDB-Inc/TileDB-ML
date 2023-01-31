@@ -45,7 +45,6 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
     def save(
         self,
         *,
-        update: bool = False,
         meta: Optional[Meta] = None,
         include_optimizer: bool = False,
         callbacks: Optional[tf.keras.callbacks.CallbackList] = None,
@@ -53,7 +52,6 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
         """
         Save a Tensorflow model as a TileDB array.
 
-        :param update: Whether we should update any existing TileDB array model at the target location.
         :param meta: Extra metadata to save in a TileDB array.
         :param include_optimizer: Whether to save the optimizer or not.
         :param callbacks: Callbacks list to store. At the moment only Tensorboard callback is supported.
@@ -85,7 +83,7 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
                     raise NotImplementedError(cb)
 
         # Create TileDB model array
-        if not update:
+        if not tiledb.array_exists(uri=self.uri):
             self._create_array(fields=["model", "optimizer", "tensorboard"])
 
         # Write extra metadata. Only for Tensoflow models.
