@@ -181,7 +181,7 @@ class TestPyTorchModel:
         log_files = read_files(log_dir)
         assert log_files
 
-        tiledb_obj.save(update=False, summary_writer=writer)
+        tiledb_obj.save(summary_writer=writer)
         with tiledb.open(tiledb_array) as A:
             tb_size = A.meta["tensorboard_size"]
             assert pickle.loads(A[0:tb_size]["tensorboard"]) == log_files
