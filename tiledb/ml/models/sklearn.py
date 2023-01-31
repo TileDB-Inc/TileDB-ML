@@ -30,12 +30,10 @@ class SklearnTileDBModel(TileDBArtifact[BaseEstimator]):
     ):
         super().__init__(uri, namespace, ctx, model)
 
-    def save(self, *, update: bool = False, meta: Optional[Meta] = None) -> None:
+    def save(self, *, meta: Optional[Meta] = None) -> None:
         """
         Save a Sklearn model as a TileDB array.
 
-        :param update: Whether we should update any existing TileDB array model at the
-            target location.
         :param meta: Extra metadata to save in a TileDB array.
         """
         if self.artifact is None:
@@ -45,7 +43,7 @@ class SklearnTileDBModel(TileDBArtifact[BaseEstimator]):
         serialized_model = self._serialize_model()
 
         # Create TileDB model array
-        if not update:
+        if not tiledb.array_exists(uri=self.uri):
             self._create_array(fields=["model"])
 
         self._write_array(model_params={"model": serialized_model}, meta=meta)

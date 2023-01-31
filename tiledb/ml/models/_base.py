@@ -75,11 +75,8 @@ class TileDBArtifact(ABC, Generic[Artifact]):
         }
 
     @abstractmethod
-    def save(self, *, update: bool = False, meta: Optional[Meta] = None) -> None:
+    def save(self, *, meta: Optional[Meta] = None) -> None:
         """Abstract method that saves a machine learning model as a TileDB array.
-
-        :param update: Whether we should update any existing TileDB array model at the
-            target location.
         :param meta: Extra metadata to save in a TileDB array.
         """
 

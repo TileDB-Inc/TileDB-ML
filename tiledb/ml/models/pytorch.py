@@ -35,7 +35,6 @@ class PyTorchTileDBModel(TileDBArtifact[torch.nn.Module]):
     def save(
         self,
         *,
-        update: bool = False,
         meta: Optional[Meta] = None,
         summary_writer: Optional[SummaryWriter] = None,
     ) -> None:
@@ -43,8 +42,6 @@ class PyTorchTileDBModel(TileDBArtifact[torch.nn.Module]):
         Save a PyTorch model as a TileDB array.
 
         :param summary_writer:
-        :param update: Whether we should update any existing TileDB array model at the
-            target location.
         :param meta: Extra metadata to save in a TileDB array.
         :param summary_writer: Contains summary writer object for storing Tensorboard data.
         """
@@ -63,7 +60,7 @@ class PyTorchTileDBModel(TileDBArtifact[torch.nn.Module]):
             serialized_optimizer_dict = b""
 
         # Create TileDB model array
-        if not update:
+        if not tiledb.array_exists(uri=self.uri):
             self._create_array(fields=["model", "optimizer", "tensorboard"])
 
         self._write_array(
