@@ -102,7 +102,7 @@ class TestPyTorchModel:
             if inspect.isclass(obj) and name != "Optimizer"
         ],
     )
-    def test_save(self, tmpdir, net, optimizer):
+    def test_save(self, tmpdir, net, optimizer, mocker):
         model = net()
         saved_optimizer = optimizer(model.parameters(), lr=0.001)
         tiledb_array = os.path.join(tmpdir, "model_array")
@@ -126,6 +126,12 @@ class TestPyTorchModel:
             saved_optimizer.state_dict().items(), loaded_optimizer.state_dict().items()
         ):
             assert all([a == b for a, b in zip(key_item_1[1], key_item_2[1])])
+
+        with pytest.raises(RuntimeError) as ex:
+            tiledb_obj = PyTorchTileDBModel(uri="")
+            tiledb_obj.save()
+
+        assert "Model is not initialized" in str(ex.value)
 
     @net
     def test_preview(self, tmpdir, net):
