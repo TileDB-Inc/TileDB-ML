@@ -1,3 +1,5 @@
+import pytest
+
 from tiledb.ml.models._cloud_utils import (
     get_cloud_uri,
     get_s3_prefix,
@@ -7,6 +9,8 @@ from tiledb.ml.models._cloud_utils import (
 
 class TestCloudUtils:
     def test_get_s3_prefix(self, mocker):
+
+        assert get_s3_prefix(None) is None
 
         profile = mocker.patch(
             "tiledb.cloud.client.user_profile",
@@ -45,6 +49,15 @@ class TestCloudUtils:
 
         assert "tiledb://test_namespace/s3://tiledb_array" == get_cloud_uri(
             uri="tiledb_array", namespace="test_namespace"
+        )
+
+        mocker.patch("tiledb.ml.models._cloud_utils.get_s3_prefix", return_value=None)
+        with pytest.raises(ValueError) as ex:
+            assert get_cloud_uri(uri="tiledb_array", namespace="test_namespace")
+
+        assert (
+            "You must set the default s3 prefix path for ML models in test_namespace profile settings on "
+            "TileDB-Cloud" in str(ex.value)
         )
 
     def test_update_file_properties(self, mocker):
