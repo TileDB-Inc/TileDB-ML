@@ -217,6 +217,7 @@ class TileDBArtifact(ABC, Generic[Artifact]):
             with open(path, "wb") as f:
                 f.write(file_bytes)
 
-    def _use_legacy_schema(self, model_array: tiledb.Array) -> bool:
+    @staticmethod
+    def _use_legacy_schema(model_array: tiledb.Array) -> bool:
         # TODO: Decide based on tiledb-ml version and not on schema characteristics, like "offset".
         return str(model_array.schema.domain.dim(0).name) != "offset"
