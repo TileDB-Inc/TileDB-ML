@@ -36,6 +36,12 @@ class TestSklearnModel:
             ]
         )
 
+        with pytest.raises(RuntimeError) as ex:
+            tiledb_obj = SklearnTileDBModel(uri="")
+            tiledb_obj.save()
+
+        assert "Model is not initialized" in str(ex.value)
+
     def test_preview(self, tmpdir, net):
         # With model as argument
         tiledb_array = os.path.join(tmpdir, "test_array")
