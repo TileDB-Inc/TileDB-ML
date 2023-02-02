@@ -111,6 +111,12 @@ class TestTensorflowKerasModel:
         tiledb_model_obj.save(include_optimizer=True if optimizer else False)
         assert tiledb.array_exists(tiledb_uri)
 
+        with pytest.raises(RuntimeError) as ex:
+            tiledb_obj = TensorflowKerasTileDBModel(uri="")
+            tiledb_obj.save()
+
+        assert "Model is not initialized" in str(ex.value)
+
     @api
     @loss_optimizer_metrics
     def test_save_model_to_tiledb_array_predictions(
