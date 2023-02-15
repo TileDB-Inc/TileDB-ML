@@ -102,7 +102,7 @@ class TestPyTorchModel:
             if inspect.isclass(obj) and name != "Optimizer"
         ],
     )
-    def test_save(self, tmpdir, net, optimizer, mocker):
+    def test_save(self, tmpdir, net, optimizer):
         model = net()
         saved_optimizer = optimizer(model.parameters(), lr=0.001)
         tiledb_array = os.path.join(tmpdir, "model_array")

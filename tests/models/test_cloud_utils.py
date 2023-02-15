@@ -53,12 +53,9 @@ class TestCloudUtils:
 
         mocker.patch("tiledb.ml.models._cloud_utils.get_s3_prefix", return_value=None)
         with pytest.raises(ValueError) as ex:
-            assert get_cloud_uri(uri="tiledb_array", namespace="test_namespace")
+            get_cloud_uri(uri="tiledb_array", namespace="test_namespace")
 
-        assert (
-            "You must set the default s3 prefix path for ML models in test_namespace profile settings on "
-            "TileDB-Cloud" in str(ex.value)
-        )
+        assert "You must set the default s3 prefix path for ML models" in str(ex.value)
 
     def test_update_file_properties(self, mocker):
         mock_tiledb_cloud_update_file_properties = mocker.patch(
