@@ -4,6 +4,7 @@ import glob
 import os
 import pickle
 import platform
+import time
 from abc import ABC, abstractmethod
 from typing import (
     Any,
@@ -164,7 +165,13 @@ class TileDBArtifact(ABC, Generic[Artifact]):
                 "Please avoid using file property key names as metadata keys!"
             )
 
-        with tiledb.open(self.uri, "w", ctx=self.ctx) as model_array:
+        # Fix the open timestamp so that fragments and metadata are written
+        # at the sate time. This is needed to preview the model on TileDB Cloud
+        # because it is stored in metadata and cloud gets the versions from fragments
+        # Metadata here are written after fragments so if we open at the fragment time
+        # we won't have the correct metadata but that of the previous fragment.
+        timestamp = round(time.time() * 1000)
+        with tiledb.open(self.uri, "w", ctx=self.ctx, timestamp=timestamp) as model_array:
             one_d_buffers = {}
             max_len = 0
             for key, value in model_params.items():
