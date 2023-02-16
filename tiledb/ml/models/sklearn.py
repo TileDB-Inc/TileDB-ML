@@ -63,7 +63,8 @@ class SklearnTileDBModel(TileDBArtifact[BaseEstimator]):
             else:
                 return self.__load(model_array)
 
-    def __load_legacy(self, model_array: tiledb.Array) -> BaseEstimator:
+    @staticmethod
+    def __load_legacy(model_array: tiledb.Array) -> BaseEstimator:
         return pickle.loads(model_array[:]["model_params"].item(0))
 
     def __load(self, model_array: tiledb.Array) -> BaseEstimator:

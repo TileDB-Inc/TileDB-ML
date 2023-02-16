@@ -127,6 +127,12 @@ class TestPyTorchModel:
         ):
             assert all([a == b for a, b in zip(key_item_1[1], key_item_2[1])])
 
+        with pytest.raises(RuntimeError) as ex:
+            tiledb_obj = PyTorchTileDBModel(uri="")
+            tiledb_obj.save()
+
+        assert "Model is not initialized" in str(ex.value)
+
     @net
     def test_preview(self, tmpdir, net):
         # With model given as argument
