@@ -4,6 +4,7 @@ import glob
 import os
 import pickle
 import platform
+import time
 from abc import ABC, abstractmethod
 from typing import (
     Any,
@@ -164,7 +165,10 @@ class TileDBArtifact(ABC, Generic[Artifact]):
                 "Please avoid using file property key names as metadata keys!"
             )
 
-        with tiledb.open(self.uri, "w", ctx=self.ctx) as model_array:
+        timestamp = round(time.time() * 1000)
+        with tiledb.open(
+            self.uri, "w", timestamp=timestamp, ctx=self.ctx
+        ) as model_array:
             one_d_buffers = {}
             max_len = 0
             for key, value in model_params.items():
