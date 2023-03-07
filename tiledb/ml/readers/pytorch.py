@@ -124,8 +124,8 @@ def _identity(x: Any) -> Any:
 
 
 def _get_unbatched_datapipe(
-    schemas: Sequence[TensorSchema[TensorLike]],
     key_range: InclusiveRange[Any, int],
+    schemas: Sequence[TensorSchema[TensorLike]],
     map_fns: Sequence[Union[Callable, None]],
 ) -> IterDataPipe[Union[TensorLikeOrTuple, Tuple[TensorLikeOrTuple, ...]]]:
     """Return a datapipe over unbatched rows for the given schemas and key range.
