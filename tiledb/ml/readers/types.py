@@ -1,6 +1,6 @@
 import enum
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Mapping, Optional, Sequence, Union
+from typing import TYPE_CHECKING, Any, Callable, Mapping, Optional, Sequence, Union
 
 import numpy as np
 
@@ -35,6 +35,7 @@ class ArrayParams:
       dimension to select.
     - tensor_kind: kind of tensor desired. If not specified, it is determined based on the
       array schema.
+    - fn: Function being applied over each item.
     """
 
     array: tiledb.Array
@@ -42,6 +43,7 @@ class ArrayParams:
     fields: Sequence[str] = ()
     dim_selectors: Mapping[str, Selector] = field(default_factory=dict)
     tensor_kind: Optional[TensorKind] = None
+    fn: Optional[Callable] = None
     _tensor_schema_kwargs: Mapping[str, Any] = field(init=False, repr=False)
 
     def __post_init__(self) -> None:

@@ -49,6 +49,7 @@ def PyTorchTileDBDataLoader(
     is_batched = kwargs.get("batch_size", 1) is not None
 
     schemas = []
+    map_fns = []
     for array_params in all_array_params:
         schema = array_params.tensor_schema
         # unbatched 3D arrays generate 2D tensors so they can be converted to CSR
@@ -58,12 +59,15 @@ def PyTorchTileDBDataLoader(
             if ndim > 3 or ndim == 3 and is_batched:
                 raise ValueError(f"Cannot generate CSR tensors for {ndim}D array")
         schemas.append(schema)
+        map_fns.append(array_params.fn)
 
     key_range = schemas[0].key_range
     if not all(key_range.equal_values(schema.key_range) for schema in schemas[1:]):
         raise ValueError(f"All arrays must have the same key range: {key_range}")
 
-    datapipe_for_key_range = partial(_get_unbatched_datapipe, schemas)
+    datapipe_for_key_range = partial(
+        _get_unbatched_datapipe, schemas=schemas, map_fns=map_fns
+    )
     num_workers = kwargs.get("num_workers", 0)
     if num_workers:
         if torchdata.__version__ < "0.4":
@@ -81,7 +85,7 @@ def PyTorchTileDBDataLoader(
         datapipe = datapipe.flatmap(datapipe_for_key_range)
     else:
         # create a datapipe that reads and unbatches the tensors for the whole key range
-        datapipe = datapipe_for_key_range(key_range)
+        datapipe = datapipe_for_key_range(key_range=key_range)
 
     # shuffle the unbatched rows if shuffle_buffer_size > 0
     if shuffle_buffer_size:
@@ -120,8 +124,9 @@ def _identity(x: Any) -> Any:
 
 
 def _get_unbatched_datapipe(
-    schemas: Sequence[TensorSchema[TensorLike]],
     key_range: InclusiveRange[Any, int],
+    schemas: Sequence[TensorSchema[TensorLike]],
+    map_fns: Sequence[Union[Callable, None]],
 ) -> IterDataPipe[Union[TensorLikeOrTuple, Tuple[TensorLikeOrTuple, ...]]]:
     """Return a datapipe over unbatched rows for the given schemas and key range.
 
@@ -131,8 +136,12 @@ def _get_unbatched_datapipe(
     sequence of `TensorLike`s, depending on `schema.num_fields`), one for each schema.
     """
     schema_dps = [
-        DeferredIterableIterDataPipe(_unbatch_tensors, schema, key_range)
-        for schema in schemas
+        DeferredIterableIterDataPipe(_unbatch_tensors, schema, key_range).map(
+            map_fns[idx]
+        )
+        if map_fns[idx]
+        else DeferredIterableIterDataPipe(_unbatch_tensors, schema, key_range)
+        for idx, schema in enumerate(schemas)
     ]
     dp = schema_dps.pop(0)
     if schema_dps:
