@@ -31,8 +31,7 @@ class SklearnTileDBModel(TileDBArtifact[BaseEstimator]):
         super().__init__(uri, namespace, ctx, model)
 
     def save(self, *, meta: Optional[Meta] = None) -> None:
-        """
-        Save a Sklearn model as a TileDB array.
+        """Save a Sklearn model as a TileDB array.
 
         :param meta: Extra metadata to save in a TileDB array.
         """
@@ -49,10 +48,9 @@ class SklearnTileDBModel(TileDBArtifact[BaseEstimator]):
         self._write_array(model_params={"model": serialized_model}, meta=meta)
 
     def load(self, *, timestamp: Optional[Timestamp] = None) -> BaseEstimator:
-        """
-        Load switch, i.e, decide between __load (TileDB-ML<=0.8.0) or __load_v2 (TileDB-ML>0.8.0).
-
+        """Load switch, i.e, decide between __load (TileDB-ML<=0.8.0) or __load_v2 (TileDB-ML>0.8.0).
         Load a Sklearn model from a TileDB array.
+
         :param timestamp: Range of timestamps to load fragments of the array which live
             in the specified time range.
         :return: A Sklearn model object.
@@ -71,13 +69,12 @@ class SklearnTileDBModel(TileDBArtifact[BaseEstimator]):
         return self._get_model_param(model_array, "model")
 
     def preview(self, *, display: str = "text") -> str:
-        """
-        Create a text representation of the model.
+        """Create a text representation of the model.
 
-        :param display. If ‘diagram’, estimators will be displayed as a diagram in an
+        :param display: If ‘diagram’, estimators will be displayed as a diagram in an
             HTML format when shown in a jupyter notebook. If ‘text’, estimators will be
             displayed as text.
-        :return. A string representation of the models internal configuration.
+        :return: A string representation of the models internal configuration.
         """
         if self.artifact:
             with config_context(display=display):
@@ -86,8 +83,7 @@ class SklearnTileDBModel(TileDBArtifact[BaseEstimator]):
             return ""
 
     def _serialize_model(self) -> bytes:
-        """
-        Serialize a Sklearn model with pickle.
+        """Serialize a Sklearn model with pickle.
 
         :return: Pickled Sklearn model.
         """

@@ -83,7 +83,7 @@ class TileDBArtifact(ABC, Generic[Artifact]):
 
     @abstractmethod
     def load(self, *, timestamp: Optional[Timestamp] = None) -> Artifact:
-        """Abstract method that loads a machine learning model from a TileDB array.
+        """Abstract method that loads a machine learning model from a `TileDB` array.
 
         :param timestamp: Range of timestamps to load fragments of the array which live
             in the specified time range.
@@ -91,14 +91,14 @@ class TileDBArtifact(ABC, Generic[Artifact]):
 
     def get_weights(self, timestamp: Optional[Timestamp] = None) -> Weights:
         """
-        Returns model's weights. Works for Tensorflow Keras and PyTorch
+        Returns model's weights. Works for `Tensorflow Keras` and `PyTorch`
         """
         with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
             return cast(Weights, self._get_model_param(model_array, "model"))
 
     def get_optimizer_weights(self, timestamp: Optional[Timestamp] = None) -> Weights:
         """
-        Returns optimizer's weights. Works for Tensorflow Keras and PyTorch
+        Returns optimizer's weights. Works for `Tensorflow Keras` and `PyTorch`
         """
         with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
             return cast(Weights, self._get_model_param(model_array, "optimizer"))
