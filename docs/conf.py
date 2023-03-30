@@ -69,7 +69,7 @@ html_theme_options = {
 
 
 # Output file base name for HTML help builder.
-htmlhelp_basename = "TileDB-BioImaging"
+htmlhelp_basename = "TileDB-ML"
 
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
