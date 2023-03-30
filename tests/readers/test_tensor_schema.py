@@ -167,8 +167,10 @@ def _test_max_partition_weight(array, fields, key_dim, dim_selectors):
         # query succeeds without incomplete retries
         schema.query[key_range.min : key_range.max]
 
-        if i < len(key_ranges) - 1:
-            # querying a larger slice should fail
-            with pytest.raises(tiledb.TileDBError) as ex:
-                schema.query[key_range.min : key_ranges[i + 1].min]
-            assert "py.max_incomplete_retries" in str(ex.value)
+        # Check incomplete retries error only in the Sparse Case.
+        if type(array) is tiledb.SparseArray:
+            if i < len(key_ranges) - 1:
+                # querying a larger slice should fail
+                with pytest.raises(tiledb.TileDBError) as ex:
+                    schema.query[key_range.min : key_ranges[i + 1].min]
+                assert "py.max_incomplete_retries" in str(ex.value)
