@@ -13,7 +13,7 @@ Selector = Union[slice, Sequence[int]]
 
 
 class TensorKind(enum.Enum):
-    """Kind of tensor."""
+    """Kind of tensor"""
 
     DENSE = enum.auto()
     SPARSE_COO = enum.auto()
@@ -26,16 +26,13 @@ class ArrayParams:
     """
     Data class specifying the parameters for loading tensors from a TileDB array.
 
-    Public attributes:
-    - array: TileDB array to be accessed
-    - key_dim: Name (or index) of the array key dimension. Defaults to the first dimension.
-    - fields: Fields (dimensions and attributes) to be retrieved from array. Defaults to
-      all attributes of the array.
-    - dim_selectors: Mapping from dimension name to a slice or sequence of indices of this
-      dimension to select.
-    - tensor_kind: kind of tensor desired. If not specified, it is determined based on the
-      array schema.
-    - fn: Function being applied over each item.
+    Attributes:
+        - **array:** TileDB array to be accessed
+        - **key_dim:** Name (or index) of the array key dimension. Defaults to the first dimension.
+        - **fields:** Fields (dimensions and attributes) to be retrieved from array. Defaults to all attributes of the array.
+        - **dim_selectors:** Mapping from dimension name to a slice or sequence of indices of this dimension to select.
+        - **tensor_kind:** kind of tensor desired. If not specified, it is determined based on the array schema.
+        - **fn:** Function being applied over each item.
     """
 
     array: tiledb.Array

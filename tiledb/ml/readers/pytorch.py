@@ -28,20 +28,14 @@ def PyTorchTileDBDataLoader(
 
     :param all_array_params: One or more `ArrayParams` instances, one per TileDB array.
     :param shuffle_buffer_size: Number of elements from which this dataset will sample.
-    **kwargs: Should contain all parameters for PyTorch Dataloader. At the moment TileDB-ML can support ONLY the
-    following PyTorch Dataloader arguments:
-        batch_size: How many samples per batch to load (default: ``1``).
-        prefetch_factor: Number of batches loaded in advance by each worker. Not applicable (and should not be
-        given) when `num_workers` is 0.
-        num_workers: How many subprocesses to use for data loading. 0 means that the data will be loaded in the main
-        process. Note: when `num_workers` > 1 yielded batches may be shuffled even if `shuffle_buffer_size` is zero.
-        persistent_workers: If ``True``, the data loader will not shutdown the worker processes after a dataset has
-        been consumed once. This allows to maintain the workers `Dataset` instances alive. (default: ``False``)
-        timeout: if positive, the timeout value for collecting a batch from workers. Should always be non-negative.
-        (default: ``0``)
-        drop_last: Set to ``True`` to drop the last incomplete batch, if the dataset size is not divisible by the
-        batch size. If ``False`` and the size of dataset is not divisible by the batch size, then the last batch
-        will be smaller. (default: ``False``)
+
+    Keyword Args:  Contains all parameters for PyTorch Dataloader.
+        - batch_size: How many samples per batch to load (default: ``1``).
+        - prefetch_factor: Number of batches loaded in advance by each worker. Not applicable (and should not be given) when `num_workers` is 0.
+        - num_workers: How many subprocesses to use for data loading. 0 means that the data will be loaded in the main process. Note: when `num_workers` > 1 yielded batches may be shuffled even if `shuffle_buffer_size` is zero.
+        - persistent_workers: If ``True``, the data loader will not shutdown the worker processes after a dataset has been consumed once. This allows to maintain the workers `Dataset` instances alive. (default: ``False``)
+        - timeout: if positive, the timeout value for collecting a batch from workers. Should always be non-negative. (default: ``0``)
+        - drop_last: Set to ``True`` to drop the last incomplete batch, if the dataset size is not divisible by the batch size. If ``False`` and the size of dataset is not divisible by the batch size, then the last batch will be smaller. (default: ``False``)
 
     Users should NOT pass (TileDB-ML either doesn't support or implements internally the corresponding functionality)
     the following arguments: 'shuffle', 'sampler', 'batch_sampler', 'worker_init_fn' and 'collate_fn'.
@@ -129,7 +123,6 @@ def _get_unbatched_datapipe(
     map_fns: Sequence[Union[Callable, None]],
 ) -> IterDataPipe[Union[TensorLikeOrTuple, Tuple[TensorLikeOrTuple, ...]]]:
     """Return a datapipe over unbatched rows for the given schemas and key range.
-
     If `len(schemas) == 1`, each item of the datapipe is either a single `TensorLike`
     or a sequence of `TensorLike`s, depending on `schemas[0].num_fields`.
     If `len(schemas) > 1`, each item of the datapipe is a tuple of (`TensorLike` or
@@ -155,7 +148,6 @@ def _unbatch_tensors(
     """
     Generate batches of `TensorLike`s for the given schema and key range and then unbatch
     them into single "rows".
-
     If `schema.num_fields == 1`, each "row" is a single `TensorLike`
     If `schema.num_fields > 1`, each "row" is a sequence of `TensorLike`s
     """

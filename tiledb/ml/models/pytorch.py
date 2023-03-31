@@ -13,9 +13,8 @@ from ._base import Meta, TileDBArtifact, Timestamp
 
 
 class PyTorchTileDBModel(TileDBArtifact[torch.nn.Module]):
-    """
-    Class that implements all functionality needed to save PyTorch models as
-    TileDB arrays and load PyTorch models from TileDB arrays.
+    """Class that implements all functionality needed to save `PyTorch` models as
+    `TileDB` arrays and load `PyTorch` models from `TileDB` arrays.
     """
 
     Name = "PYTORCH"
@@ -38,12 +37,11 @@ class PyTorchTileDBModel(TileDBArtifact[torch.nn.Module]):
         meta: Optional[Meta] = None,
         summary_writer: Optional[SummaryWriter] = None,
     ) -> None:
-        """
-        Save a PyTorch model as a TileDB array.
+        """Save a `PyTorch` model as a `TileDB` array.
 
         :param summary_writer:
-        :param meta: Extra metadata to save in a TileDB array.
-        :param summary_writer: Contains summary writer object for storing Tensorboard data.
+        :param meta: Extra metadata to save in a `TileDB` array.
+        :param summary_writer: Contains summary writer object for storing `Tensorboard` data.
         """
         if self.artifact is None:
             raise RuntimeError("Model is not initialized")
@@ -80,14 +78,13 @@ class PyTorchTileDBModel(TileDBArtifact[torch.nn.Module]):
         timestamp: Optional[Timestamp] = None,
         callback: bool = False,
     ) -> Any:
-        """
-        Load switch, i.e, decide between __load (TileDB-ML<=0.8.0) or __load_v2 (TileDB-ML>0.8.0).
+        """*Load switch, i.e, decide between __load (TileDB-ML<=0.8.0) or __load_v2 (TileDB-ML>0.8.0).*
 
-        :param model: A defined PyTorch model.
-        :param optimizer: A defined PyTorch optimizer.
+        :param model: A defined `PyTorch` model.
+        :param optimizer: A defined `PyTorch` optimizer.
         :param timestamp: Range of timestamps to load fragments of the array which live in the specified time range.
-        :param callback: Boolean variable if True will store Callback data into saved directory
-        :return: A dictionary with attributes other than model or optimizer state_dict.
+        :param callback: Boolean variable if `True` will store `Callback` data into saved directory
+        :return: A dictionary with attributes other than model or optimizer `state_dict`.
         """
         with tiledb.open(self.uri, ctx=self.ctx, timestamp=timestamp) as model_array:
             if self._use_legacy_schema(model_array):
@@ -158,8 +155,7 @@ class PyTorchTileDBModel(TileDBArtifact[torch.nn.Module]):
             self._load_tensorboard(model_array)
 
     def preview(self) -> str:
-        """
-        Create a string representation of the model.
+        """Create a string representation of the model.
 
         :return: str. A string representation of the models internal configuration.
         """
