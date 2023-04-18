@@ -83,17 +83,8 @@ def PyTorchTileDBDataLoader(
 
     # shuffle the unbatched rows if shuffle_buffer_size > 0
     if shuffle_buffer_size:
-        # load the rows to be shuffled
-        # don't batch them (batch_size=None) or collate them (collate_fn=_identity)
-        row_loader = DataLoader(
-            datapipe, num_workers=num_workers, batch_size=None, collate_fn=_identity
-        )
-        # create a new datapipe for these rows
-        datapipe = DeferredIterableIterDataPipe(iter, row_loader)
         # shuffle the datapipe items
         datapipe = datapipe.shuffle(buffer_size=shuffle_buffer_size)
-        # run the shuffling on this process, not on workers
-        kwargs["num_workers"] = 0
 
     # construct an appropriate collate function
     collator = Collator.from_schemas(*schemas)
