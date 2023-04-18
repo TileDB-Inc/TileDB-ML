@@ -32,21 +32,16 @@ class TestPyTorchTileDBDataLoader:
     ):
         def test(*all_array_params):
             try:
-                if num_workers > 0:
-                    dataloader = PyTorchTileDBDataLoader(
-                        *all_array_params,
-                        shuffle_buffer_size=shuffle_buffer_size,
-                        batch_size=batch_size,
-                        num_workers=num_workers,
-                        persistent_workers=True,
-                    )
-                else:
-                    dataloader = PyTorchTileDBDataLoader(
-                        *all_array_params,
-                        shuffle_buffer_size=shuffle_buffer_size,
-                        batch_size=batch_size,
-                        num_workers=num_workers,
-                    )
+                persistent_workers = num_workers > 0
+
+                dataloader = PyTorchTileDBDataLoader(
+                    *all_array_params,
+                    shuffle_buffer_size=shuffle_buffer_size,
+                    batch_size=batch_size,
+                    num_workers=num_workers,
+                    persistent_workers=persistent_workers,
+                )
+
             except NotImplementedError:
                 assert num_workers and (
                     torchdata.__version__ < "0.4"
