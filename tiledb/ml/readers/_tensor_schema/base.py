@@ -104,7 +104,7 @@ class TensorSchema(ABC, Generic[Tensor]):
 
         What constitutes weight of a partition depends on the array type:
         - For dense arrays, it is the number of unique keys (= number of "rows").
-          It depends on the `sm.memory_budget` config parameter.
+          It depends on the `sm.mem.total_budget` config parameter.
         - For sparse arrays, it is the number of non-empty cells.
           It depends on the `py.init_buffer_bytes` config parameter.
         """

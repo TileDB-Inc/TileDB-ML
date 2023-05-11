@@ -117,7 +117,7 @@ def parametrize_fields(*fields, num=3):
 def test_max_partition_weight_dense(
     dense_uri, fields, key_dim, memory_budget, dim_selectors
 ):
-    config = {"py.max_incomplete_retries": 0, "sm.memory_budget": memory_budget}
+    config = {"py.max_incomplete_retries": 0, "sm.mem.total_budget": memory_budget}
     with tiledb.open(dense_uri, config=config) as array:
         _test_max_partition_weight(array, fields, key_dim, dim_selectors)
 
