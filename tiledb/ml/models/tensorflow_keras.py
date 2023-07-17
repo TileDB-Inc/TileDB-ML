@@ -16,10 +16,23 @@ import tiledb
 from ._base import Meta, TileDBArtifact, Timestamp
 
 FunctionalOrSequential = (keras.models.Functional, keras.models.Sequential)
-TFOptimizer = keras.optimizers.TFOptimizer
-get_json_type = keras.saving.saved_model.json_utils.get_json_type
-preprocess_weights_for_loading = keras.saving.hdf5_format.preprocess_weights_for_loading
-saving_utils = keras.saving.saving_utils
+keras_major, keras_minor, keras_patch = keras.__version__.split(".")
+# Handle keras <=v2.10
+if int(keras_major) <= 2 and int(keras_minor) <= 10:
+    TFOptimizer = keras.optimizers.TFOptimizer
+    get_json_type = keras.saving.saved_model.json_utils.get_json_type
+    preprocess_weights_for_loading = (
+        keras.saving.hdf5_format.preprocess_weights_for_loading
+    )
+    saving_utils = keras.saving.saving_utils
+# Handle keras >=v2.11
+else:
+    TFOptimizer = tf.keras.optimizers.legacy.Optimizer
+    get_json_type = keras.saving.legacy.saved_model.json_utils.get_json_type
+    preprocess_weights_for_loading = (
+        keras.saving.legacy.hdf5_format.preprocess_weights_for_loading
+    )
+    saving_utils = keras.saving.legacy.saving_utils
 
 
 class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
