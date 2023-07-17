@@ -15,7 +15,6 @@ import tiledb
 
 from ._base import Meta, TileDBArtifact, Timestamp
 
-SharedObjectLoadingScope = keras.utils.generic_utils.SharedObjectLoadingScope
 FunctionalOrSequential = (keras.models.Functional, keras.models.Sequential)
 TFOptimizer = keras.optimizers.TFOptimizer
 get_json_type = keras.saving.saved_model.json_utils.get_json_type
