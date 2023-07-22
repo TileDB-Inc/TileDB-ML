@@ -279,6 +279,9 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
         assert self.artifact
         optimizer = self.artifact.optimizer
         if optimizer and not isinstance(optimizer, TFOptimizer):
-            optimizer_weights = tf.keras.backend.batch_get_value(optimizer.weights)
+            if hasattr(optimizer, "weights"):
+                optimizer_weights = tf.keras.backend.batch_get_value(optimizer.weights)
+            else:
+                optimizer_weights = [var.numpy() for var in optimizer.variables()]
             return pickle.dumps(optimizer_weights, protocol=4)
         return b""
