@@ -21,7 +21,16 @@ try:
         get_small_sequential_mlp,
     )
 except ImportError:
-    from keras.testing_utils import get_small_functional_mlp, get_small_sequential_mlp
+    try:
+        from keras.testing_utils import (
+            get_small_functional_mlp,
+            get_small_sequential_mlp,
+        )
+    except ImportError:
+        from keras.src.testing_infra.test_utils import (
+            get_small_functional_mlp,
+            get_small_sequential_mlp,
+        )
 
 # Suppress all Tensorflow messages
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
@@ -346,7 +355,7 @@ class TestTensorflowKerasModel:
         tiledb_uri = os.path.join(tmpdir, "model_array")
         tiledb_model_obj = TensorflowKerasTileDBModel(uri=tiledb_uri, model=model)
         tiledb_model_obj.save(include_optimizer=True)
-        loaded_model = tiledb_model_obj.load(compile_model=True)
+        loaded_model = tiledb_model_obj.load(compile_model=True, safe_mode=False)
 
         # Assert all evaluation results are the same.
         assert all(

@@ -15,10 +15,11 @@ import tiledb
 
 from ._base import Meta, TileDBArtifact, Timestamp
 
-FunctionalOrSequential = (keras.models.Functional, keras.models.Sequential)
 keras_major, keras_minor, keras_patch = keras.__version__.split(".")
+FunctionalOrSequential = keras.models.Sequential
 # Handle keras <=v2.10
 if int(keras_major) <= 2 and int(keras_minor) <= 10:
+    FunctionalOrSequential = (keras.models.Functional, keras.models.Sequential)
     TFOptimizer = keras.optimizers.TFOptimizer
     get_json_type = keras.saving.saved_model.json_utils.get_json_type
     preprocess_weights_for_loading = (
@@ -26,13 +27,27 @@ if int(keras_major) <= 2 and int(keras_minor) <= 10:
     )
     saving_utils = keras.saving.saving_utils
 # Handle keras >=v2.11
-else:
+elif int(keras_major) <= 2 and int(keras_minor) <= 12:
+    FunctionalOrSequential = (keras.models.Functional, keras.models.Sequential)
     TFOptimizer = tf.keras.optimizers.legacy.Optimizer
     get_json_type = keras.saving.legacy.saved_model.json_utils.get_json_type
     preprocess_weights_for_loading = (
         keras.saving.legacy.hdf5_format.preprocess_weights_for_loading
     )
     saving_utils = keras.saving.legacy.saving_utils
+else:
+    from keras.src.saving.serialization_lib import SafeModeScope
+
+    FunctionalOrSequential = (
+        keras.src.engine.functional.Functional,
+        keras.src.engine.sequential.Sequential,
+    )
+    TFOptimizer = tf.keras.optimizers.legacy.Optimizer
+    get_json_type = keras.src.saving.legacy.saved_model.json_utils.get_json_type
+    preprocess_weights_for_loading = (
+        keras.src.saving.legacy.hdf5_format.preprocess_weights_for_loading
+    )
+    saving_utils = keras.src.saving.legacy.saving_utils
 
 
 class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
@@ -72,7 +87,7 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
 
         if not isinstance(self.artifact, FunctionalOrSequential):
             raise RuntimeError(
-                "Subclassed Models (Custom Layers) not supported at the moment."
+                f"Subclassed Models (Custom Layers) for {type(self.artifact)} not supported at the moment."
             )
 
         # Used in this format only when model is Functional or Sequential
@@ -122,6 +137,7 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
         custom_objects: Optional[Mapping[str, Any]] = None,
         input_shape: Optional[Tuple[int, ...]] = None,
         callback: bool = False,
+        safe_mode: Optional[bool] = None,
     ) -> tf.keras.Model:
         """
         Load switch, i.e, decide between __load (TileDB-ML<=0.8.0) or __load_v2 (TileDB-ML>0.8.0).
@@ -142,7 +158,7 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
                     model_array, compile_model, callback, custom_objects
                 )
             else:
-                return self.__load(model_array, compile_model, callback)
+                return self.__load(model_array, compile_model, callback, safe_mode)
 
     def __load_legacy(
         self,
@@ -213,13 +229,25 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
         return model
 
     def __load(
-        self, model_array: tiledb.Array, compile_model: bool, callback: bool
+        self,
+        model_array: tiledb.Array,
+        compile_model: bool,
+        callback: bool,
+        safe_mode: Optional[bool],
     ) -> tf.keras.Model:
         model_config = json.loads(model_array.meta["model_config"])
         model_class = model_config["class_name"]
 
         cls = tf.keras.Sequential if model_class == "Sequential" else tf.keras.Model
-        model = cls.from_config(model_config["config"])
+
+        if int(keras_major) <= 2 and int(keras_minor) >= 13:
+            if safe_mode is not None:
+                with SafeModeScope(safe_mode=safe_mode):
+                    model = cls.from_config(model_config["config"])
+            else:
+                model = cls.from_config(model_config["config"])
+        else:
+            model = cls.from_config(model_config["config"])
         model_weights = self._get_model_param(model_array, "model")
         model.set_weights(model_weights)
 
