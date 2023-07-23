@@ -166,8 +166,20 @@ class TestTensorflowKerasModel:
         data = np.random.rand(100, 3)
 
         if optimizer:
-            model_opt_weights = batch_get_value(model.optimizer.weights)
-            loaded_opt_weights = batch_get_value(loaded_model.optimizer.weights)
+            if hasattr(model.optimizer, "weights"):
+                model_opt_weights = tf.keras.backend.batch_get_value(
+                    model.optimizer.weights
+                )
+            else:
+                model_opt_weights = [var.numpy() for var in model.optimizer.variables()]
+            if hasattr(loaded_model.optimizer, "weights"):
+                loaded_opt_weights = tf.keras.backend.batch_get_value(
+                    loaded_model.optimizer.weights
+                )
+            else:
+                loaded_opt_weights = [
+                    var.numpy() for var in loaded_model.optimizer.variables()
+                ]
 
             # Assert optimizer weights are equal
             for weight_model, weight_loaded_model in zip(
@@ -209,8 +221,20 @@ class TestTensorflowKerasModel:
         tiledb_model_obj.save(include_optimizer=True)
         loaded_model = tiledb_model_obj.load(compile_model=True)
 
-        model_opt_weights = batch_get_value(model.optimizer.weights)
-        loaded_opt_weights = batch_get_value(loaded_model.optimizer.weights)
+        if hasattr(model.optimizer, "weights"):
+            model_opt_weights = tf.keras.backend.batch_get_value(
+                model.optimizer.weights
+            )
+        else:
+            model_opt_weights = [var.numpy() for var in model.optimizer.variables()]
+        if hasattr(loaded_model.optimizer, "weights"):
+            loaded_opt_weights = tf.keras.backend.batch_get_value(
+                loaded_model.optimizer.weights
+            )
+        else:
+            loaded_opt_weights = [
+                var.numpy() for var in loaded_model.optimizer.variables()
+            ]
 
         # Assert optimizer weights are equal
         for weight_model, weight_loaded_model in zip(
@@ -260,8 +284,20 @@ class TestTensorflowKerasModel:
         tiledb_model_obj.save(include_optimizer=True)
         loaded_model = tiledb_model_obj.load(compile_model=True)
 
-        model_opt_weights = batch_get_value(model.optimizer.weights)
-        loaded_opt_weights = batch_get_value(loaded_model.optimizer.weights)
+        if hasattr(model.optimizer, "weights"):
+            model_opt_weights = tf.keras.backend.batch_get_value(
+                model.optimizer.weights
+            )
+        else:
+            model_opt_weights = [var.numpy() for var in model.optimizer.variables()]
+        if hasattr(loaded_model.optimizer, "weights"):
+            loaded_opt_weights = tf.keras.backend.batch_get_value(
+                loaded_model.optimizer.weights
+            )
+        else:
+            loaded_opt_weights = [
+                var.numpy() for var in loaded_model.optimizer.variables()
+            ]
 
         # Assert optimizer weights are equal
         for weight_model, weight_loaded_model in zip(
