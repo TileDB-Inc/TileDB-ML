@@ -9,10 +9,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        python-verison: ["3.7"]
         ml-deps:
           - "torch==1.11.0+cpu torchvision==0.12.0+cpu torchdata==0.3.0 tensorflow-cpu==2.8.1"
           - "torch==1.12.1+cpu torchvision==0.13.1+cpu torchdata==0.4.1 tensorflow-cpu==2.9.1"
           - "torch==1.13.0+cpu torchvision==0.14.0+cpu torchdata==0.5.0 tensorflow-cpu==2.10.0"
+          - "torch==1.13.0+cpu torchvision==0.14.0+cpu torchdata==0.5.0 tensorflow-cpu==2.11.0"
+        include:
+          - ml-deps: "torch==1.13.0+cpu torchvision==0.14.0+cpu torchdata==0.5.0 tensorflow-cpu==2.12.0"
+            python-version: "3.9"
+          - ml-deps: "torch==1.13.0+cpu torchvision==0.14.0+cpu torchdata==0.5.0 tensorflow-cpu==2.13.0"
+            python-version: "3.9"
 
     env:
       run_coverage: ${{ github.ref == 'refs/heads/master' }}
@@ -23,7 +30,7 @@ jobs:
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v4
       with:
-        python-version: "3.7"
+        python-version: ${{ matrix.python-version }}
 
     - name: Cache dependencies
       uses: actions/cache@v3

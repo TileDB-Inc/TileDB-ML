@@ -21,7 +21,16 @@ try:
         get_small_sequential_mlp,
     )
 except ImportError:
-    from keras.testing_utils import get_small_functional_mlp, get_small_sequential_mlp
+    try:
+        from keras.testing_utils import (
+            get_small_functional_mlp,
+            get_small_sequential_mlp,
+        )
+    except ImportError:
+        from keras.src.testing_infra.test_utils import (
+            get_small_functional_mlp,
+            get_small_sequential_mlp,
+        )
 
 # Suppress all Tensorflow messages
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
@@ -166,8 +175,20 @@ class TestTensorflowKerasModel:
         data = np.random.rand(100, 3)
 
         if optimizer:
-            model_opt_weights = batch_get_value(model.optimizer.weights)
-            loaded_opt_weights = batch_get_value(loaded_model.optimizer.weights)
+            if hasattr(model.optimizer, "weights"):
+                model_opt_weights = tf.keras.backend.batch_get_value(
+                    model.optimizer.weights
+                )
+            else:
+                model_opt_weights = [var.numpy() for var in model.optimizer.variables()]
+            if hasattr(loaded_model.optimizer, "weights"):
+                loaded_opt_weights = tf.keras.backend.batch_get_value(
+                    loaded_model.optimizer.weights
+                )
+            else:
+                loaded_opt_weights = [
+                    var.numpy() for var in loaded_model.optimizer.variables()
+                ]
 
             # Assert optimizer weights are equal
             for weight_model, weight_loaded_model in zip(
@@ -209,8 +230,20 @@ class TestTensorflowKerasModel:
         tiledb_model_obj.save(include_optimizer=True)
         loaded_model = tiledb_model_obj.load(compile_model=True)
 
-        model_opt_weights = batch_get_value(model.optimizer.weights)
-        loaded_opt_weights = batch_get_value(loaded_model.optimizer.weights)
+        if hasattr(model.optimizer, "weights"):
+            model_opt_weights = tf.keras.backend.batch_get_value(
+                model.optimizer.weights
+            )
+        else:
+            model_opt_weights = [var.numpy() for var in model.optimizer.variables()]
+        if hasattr(loaded_model.optimizer, "weights"):
+            loaded_opt_weights = tf.keras.backend.batch_get_value(
+                loaded_model.optimizer.weights
+            )
+        else:
+            loaded_opt_weights = [
+                var.numpy() for var in loaded_model.optimizer.variables()
+            ]
 
         # Assert optimizer weights are equal
         for weight_model, weight_loaded_model in zip(
@@ -260,8 +293,20 @@ class TestTensorflowKerasModel:
         tiledb_model_obj.save(include_optimizer=True)
         loaded_model = tiledb_model_obj.load(compile_model=True)
 
-        model_opt_weights = batch_get_value(model.optimizer.weights)
-        loaded_opt_weights = batch_get_value(loaded_model.optimizer.weights)
+        if hasattr(model.optimizer, "weights"):
+            model_opt_weights = tf.keras.backend.batch_get_value(
+                model.optimizer.weights
+            )
+        else:
+            model_opt_weights = [var.numpy() for var in model.optimizer.variables()]
+        if hasattr(loaded_model.optimizer, "weights"):
+            loaded_opt_weights = tf.keras.backend.batch_get_value(
+                loaded_model.optimizer.weights
+            )
+        else:
+            loaded_opt_weights = [
+                var.numpy() for var in loaded_model.optimizer.variables()
+            ]
 
         # Assert optimizer weights are equal
         for weight_model, weight_loaded_model in zip(
@@ -277,7 +322,7 @@ class TestTensorflowKerasModel:
         indices_a[:, 0] = np.arange(10)
         inputs_a = tf.SparseTensor(indices_a, values_a, (batch_size, timesteps, 1))
 
-        values_b = np.zeros(10, dtype=np.str)
+        values_b = np.zeros(10, dtype=str)
         indices_b = np.zeros((10, 3), dtype=np.int64)
         indices_b[:, 0] = np.arange(10)
         inputs_b = tf.SparseTensor(indices_b, values_b, (batch_size, timesteps, 1))
@@ -310,7 +355,7 @@ class TestTensorflowKerasModel:
         tiledb_uri = os.path.join(tmpdir, "model_array")
         tiledb_model_obj = TensorflowKerasTileDBModel(uri=tiledb_uri, model=model)
         tiledb_model_obj.save(include_optimizer=True)
-        loaded_model = tiledb_model_obj.load(compile_model=True)
+        loaded_model = tiledb_model_obj.load(compile_model=True, safe_mode=False)
 
         # Assert all evaluation results are the same.
         assert all(
