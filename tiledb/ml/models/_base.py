@@ -23,6 +23,7 @@ import numpy as np
 import tiledb
 
 from .. import __version__
+from ._array_metadata import ModelArrayMetadata
 from ._cloud_utils import get_cloud_uri, update_file_properties
 from ._file_properties import ModelFileProperties
 
@@ -74,6 +75,11 @@ class TileDBArtifact(ABC, Generic[Artifact]):
             ModelFileProperties.TILEDB_ML_MODEL_PREVIEW.value: self.preview_short(),
             ModelFileProperties.TILEDB_ML_MODEL_VERSION.value: __version__,
         }
+        # Full/long versions of all properties
+        self._array_metadata = self._file_properties
+        self._array_metadata[
+            ModelArrayMetadata.TILEDB_ML_MODEL_PREVIEW.value
+        ] = self.preview()
 
     @abstractmethod
     def save(self, *, meta: Optional[Meta] = None) -> None:
@@ -166,7 +172,7 @@ class TileDBArtifact(ABC, Generic[Artifact]):
 
         if meta is None:
             meta = {}
-        if not meta.keys().isdisjoint(self._file_properties.keys()):
+        if not meta.keys().isdisjoint(self._array_metadata.keys()):
             raise ValueError(
                 "Please avoid using file property key names as metadata keys!"
             )
@@ -191,7 +197,7 @@ class TileDBArtifact(ABC, Generic[Artifact]):
                 key: np.pad(value, (0, max_len - len(value)))
                 for key, value in one_d_buffers.items()
             }
-            for mapping in meta, self._file_properties:
+            for mapping in meta, self._array_metadata:
                 for key, value in mapping.items():
                     model_array.meta[key] = value
 
