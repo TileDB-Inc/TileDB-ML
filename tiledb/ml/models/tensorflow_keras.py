@@ -300,6 +300,10 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
             return model_summary
         return ""
 
+    def preview_short(self) -> str:
+        """Create a string representation of the Tensorflow model that is under 2048 characters."""
+        return self.preview()[0:2048]
+
     def _serialize_optimizer_weights(
         self,
     ) -> bytes:

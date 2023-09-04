@@ -71,7 +71,7 @@ class TileDBArtifact(ABC, Generic[Artifact]):
             ModelFileProperties.TILEDB_ML_MODEL_ML_FRAMEWORK_VERSION.value: self.Version,
             ModelFileProperties.TILEDB_ML_MODEL_STAGE.value: "STAGING",
             ModelFileProperties.TILEDB_ML_MODEL_PYTHON_VERSION.value: platform.python_version(),
-            ModelFileProperties.TILEDB_ML_MODEL_PREVIEW.value: self.preview(),
+            ModelFileProperties.TILEDB_ML_MODEL_PREVIEW.value: self.preview_short(),
             ModelFileProperties.TILEDB_ML_MODEL_VERSION.value: __version__,
         }
 
@@ -107,6 +107,12 @@ class TileDBArtifact(ABC, Generic[Artifact]):
     def preview(self) -> str:
         """
         Creates a string representation of a machine learning model.
+        """
+
+    @abstractmethod
+    def preview_short(self) -> str:
+        """
+        Creates a string representation of a machine learning model that is under 2048 characters.
         """
 
     def _create_array(self, fields: Sequence[str]) -> None:
