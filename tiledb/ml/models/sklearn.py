@@ -82,6 +82,16 @@ class SklearnTileDBModel(TileDBArtifact[BaseEstimator]):
         else:
             return ""
 
+    def preview_short(self, *, display: str = "text") -> str:
+        """Create a text representation of the model that is under 2048 characters.
+
+        :param display: If ‘diagram’, estimators will be displayed as a diagram in an
+            HTML format when shown in a jupyter notebook. If ‘text’, estimators will be
+            displayed as text.
+        :return: A string representation of the models internal configuration.
+        """
+        return self.preview(display=display)[0:2048]
+
     def _serialize_model(self) -> bytes:
         """Serialize a Sklearn model with pickle.
 

@@ -160,3 +160,10 @@ class PyTorchTileDBModel(TileDBArtifact[torch.nn.Module]):
         :return: str. A string representation of the models internal configuration.
         """
         return str(self.artifact) if self.artifact else ""
+
+    def preview_short(self) -> str:
+        """Create a string representation of the model that is under 2048 characters.
+
+        :return: str. A string representation of the models internal configuration.
+        """
+        return self.preview()[0:2048]
