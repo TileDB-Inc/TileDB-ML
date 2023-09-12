@@ -9,6 +9,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 import tiledb
 
+from . import SHORT_PREVIEW_LIMIT
 from ._base import Meta, TileDBArtifact, Timestamp
 
 
@@ -166,4 +167,4 @@ class PyTorchTileDBModel(TileDBArtifact[torch.nn.Module]):
 
         :return: str. A string representation of the models internal configuration.
         """
-        return self.preview()[0:2048]
+        return self.preview()[0:SHORT_PREVIEW_LIMIT]

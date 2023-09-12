@@ -30,7 +30,6 @@ from ._file_properties import ModelFileProperties
 Artifact = TypeVar("Artifact")
 Meta = Mapping[str, Any]
 Timestamp = Tuple[int, int]
-
 Weights = Union[Sequence[np.ndarray], Mapping[str, Any]]
 
 
@@ -76,7 +75,7 @@ class TileDBArtifact(ABC, Generic[Artifact]):
             ModelFileProperties.TILEDB_ML_MODEL_VERSION.value: __version__,
         }
         # Full/long versions of all properties
-        self._array_metadata = self._file_properties
+        self._array_metadata = self._file_properties.copy()
         self._array_metadata[
             ModelArrayMetadata.TILEDB_ML_MODEL_PREVIEW.value
         ] = self.preview()
