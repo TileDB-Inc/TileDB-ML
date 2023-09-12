@@ -13,6 +13,7 @@ import tensorflow as tf
 
 import tiledb
 
+from . import SHORT_PREVIEW_LIMIT
 from ._base import Meta, TileDBArtifact, Timestamp
 
 keras_major, keras_minor, keras_patch = keras.__version__.split(".")
@@ -302,7 +303,7 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
 
     def preview_short(self) -> str:
         """Create a string representation of the Tensorflow model that is under 2048 characters."""
-        return self.preview()[0:2048]
+        return self.preview()[0:SHORT_PREVIEW_LIMIT]
 
     def _serialize_optimizer_weights(
         self,

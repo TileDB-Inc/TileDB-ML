@@ -13,6 +13,7 @@ import tensorflow as tf
 
 import tiledb
 from tiledb.ml import __version__ as tiledb_ml_version
+from tiledb.ml.models import SHORT_PREVIEW_LIMIT
 from tiledb.ml.models.tensorflow_keras import TensorflowKerasTileDBModel
 
 try:
@@ -34,7 +35,6 @@ except ImportError:
 
 # Suppress all Tensorflow messages
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-
 batch_get_value = tf.keras.backend.batch_get_value
 
 
@@ -453,6 +453,30 @@ class TestTensorflowKerasModel:
 
 
 class TestTensorflowKerasModelCloud:
+    def test_truncated_file_property_vs_array_meta(self, tmpdir):
+        model = tf.keras.Sequential()
+        model.add(tf.keras.layers.Flatten(input_shape=(10, 10)))
+
+        # create a deep model with summary 2298 long preview summary
+        layers_num = 15
+        model.add(tf.keras.layers.Dense(layers_num, activation=tf.nn.relu))
+
+        for layer_size in range(layers_num - 1, 2, -1):
+            model.add(tf.keras.layers.Dense(layer_size, activation=tf.nn.softmax))
+
+        # Get model summary in a string
+        s = io.StringIO()
+        model.summary(print_fn=lambda x: s.write(x + "\n"))
+        model_summary = s.getvalue()
+
+        uri = os.path.join(tmpdir, "model_array")
+        tiledb_obj = TensorflowKerasTileDBModel(uri=uri, model=model)
+
+        key = "TILEDB_ML_MODEL_PREVIEW"
+        assert len(tiledb_obj._file_properties[key]) == SHORT_PREVIEW_LIMIT
+        assert len(tiledb_obj._array_metadata[key]) == len(model_summary)
+        assert SHORT_PREVIEW_LIMIT != len(model_summary)
+
     def test_file_properties(self, tmpdir):
         model = tf.keras.Sequential()
         model.add(tf.keras.layers.Flatten(input_shape=(10, 10)))

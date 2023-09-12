@@ -30,7 +30,6 @@ from ._file_properties import ModelFileProperties
 Artifact = TypeVar("Artifact")
 Meta = Mapping[str, Any]
 Timestamp = Tuple[int, int]
-
 Weights = Union[Sequence[np.ndarray], Mapping[str, Any]]
 
 

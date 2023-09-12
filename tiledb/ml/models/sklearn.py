@@ -9,6 +9,7 @@ from sklearn.base import BaseEstimator
 
 import tiledb
 
+from . import SHORT_PREVIEW_LIMIT
 from ._base import Meta, TileDBArtifact, Timestamp
 
 
@@ -90,7 +91,7 @@ class SklearnTileDBModel(TileDBArtifact[BaseEstimator]):
             displayed as text.
         :return: A string representation of the models internal configuration.
         """
-        return self.preview(display=display)[0:2048]
+        return self.preview(display=display)[0:SHORT_PREVIEW_LIMIT]
 
     def _serialize_model(self) -> bytes:
         """Serialize a Sklearn model with pickle.
