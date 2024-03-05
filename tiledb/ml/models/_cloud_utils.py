@@ -6,7 +6,7 @@ try:
 except ImportError:
     pass
 
-CLOUD_MODELS = "ml_models"
+CLOUD_MODELS = "models"
 FILETYPE_ML_MODEL = "ml_model"
 
 
