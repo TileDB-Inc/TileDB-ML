@@ -52,7 +52,7 @@ jobs:
 
     - name: Run notebook examples
       run: |
-        pip install pytest-xdist nbmake matplotlib idx2numpy
+        pip install pytest-xdist nbmake matplotlib idx2numpy "numpy<2"
         pytest --disable-warnings --nbmake examples/{models,readers}
         # Run tiledb-cloud in parallel
         if [[ "${{ secrets.TILEDB_API_TOKEN }}" != "" ]]; then
