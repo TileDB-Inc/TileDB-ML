@@ -23,20 +23,15 @@ if int(keras_major) <= 2 and int(keras_minor) <= 10:
     FunctionalOrSequential = (keras.models.Functional, keras.models.Sequential)
     TFOptimizer = keras.optimizers.TFOptimizer
     get_json_type = keras.saving.saved_model.json_utils.get_json_type
-    preprocess_weights_for_loading = (
-        keras.saving.hdf5_format.preprocess_weights_for_loading
-    )
     saving_utils = keras.saving.saving_utils
 # Handle keras >=v2.11
 elif int(keras_major) <= 2 and int(keras_minor) <= 12:
     FunctionalOrSequential = (keras.models.Functional, keras.models.Sequential)
     TFOptimizer = tf.keras.optimizers.legacy.Optimizer
     get_json_type = keras.saving.legacy.saved_model.json_utils.get_json_type
-    preprocess_weights_for_loading = (
-        keras.saving.legacy.hdf5_format.preprocess_weights_for_loading
-    )
     saving_utils = keras.saving.legacy.saving_utils
-else:
+
+elif int(keras_major) <= 2 and int(keras_minor) <= 14:
     from keras.src.saving.serialization_lib import SafeModeScope
 
     FunctionalOrSequential = (
@@ -45,10 +40,13 @@ else:
     )
     TFOptimizer = tf.keras.optimizers.legacy.Optimizer
     get_json_type = keras.src.saving.legacy.saved_model.json_utils.get_json_type
-    preprocess_weights_for_loading = (
-        keras.src.saving.legacy.hdf5_format.preprocess_weights_for_loading
-    )
     saving_utils = keras.src.saving.legacy.saving_utils
+
+else:
+    FunctionalOrSequential = (keras.src.models.Functional, keras.src.models.Sequential)
+    TFOptimizer = tf.keras.optimizers.legacy.Optimizer
+    get_json_type = keras.src.legacy.saving.json_utils.get_json_type
+    saving_utils = keras.src.legacy.saving.saving_utils
 
 
 class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
@@ -315,6 +313,7 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
             if hasattr(optimizer, "weights"):
                 optimizer_weights = tf.keras.backend.batch_get_value(optimizer.weights)
             else:
-                optimizer_weights = [var.numpy() for var in optimizer.variables()]
+                # print(optimizer)
+                optimizer_weights = [var.numpy() for var in optimizer.variables]
             return pickle.dumps(optimizer_weights, protocol=4)
         return b""
