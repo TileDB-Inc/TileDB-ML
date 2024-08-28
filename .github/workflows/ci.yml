@@ -21,8 +21,10 @@ jobs:
             python-version: "3.9"
           - ml-deps: "torch==1.13.0+cpu torchvision==0.14.0+cpu torchdata==0.5.0 tensorflow-cpu==2.13.0"
             python-version: "3.9"
-          - ml-deps: "torch==2.1.0+cpu torchvision==0.16.0+cpu torchdata==0.7.0 tensorflow-cpu==2.13.0"
+          - ml-deps: "torch==2.1.0+cpu torchvision==0.16.0+cpu torchdata==0.7.0 tensorflow-cpu==2.13.0 numpy==1.24.3"
             python-version: "3.9"
+          - ml-deps: "torch==2.4.0+cpu torchvision==0.19.0+cpu torchdata==0.8.0 tensorflow-cpu==2.13.0 numpy==1.24.3"
+            python-version: "3.12"
 
     env:
       run_coverage: ${{ github.ref == 'refs/heads/master' }}
