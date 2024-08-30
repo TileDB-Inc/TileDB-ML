@@ -11,21 +11,21 @@ jobs:
       matrix:
         python-verison: ["3.7"]
         ml-deps:
-          - "torch==1.11.0+cpu torchvision==0.12.0+cpu torchdata==0.3.0 tensorflow-cpu==2.8.1"
-          - "torch==1.12.1+cpu torchvision==0.13.1+cpu torchdata==0.4.1 tensorflow-cpu==2.9.1"
-          - "torch==1.13.0+cpu torchvision==0.14.0+cpu torchdata==0.5.0 tensorflow-cpu==2.10.0"
-          - "torch==1.13.0+cpu torchvision==0.14.0+cpu torchdata==0.5.0 tensorflow-cpu==2.11.0"
-          - "torch==2.1.0+cpu torchvision==0.16.0+cpu torchdata==0.7.0 tensorflow-cpu==2.11.0"
+          - "torch==1.11.0+cpu torchvision==0.12.0+cpu torchdata==0.3.0 tensorflow-cpu==2.8.1 scikit-learn==1.0.2"
+          - "torch==1.12.1+cpu torchvision==0.13.1+cpu torchdata==0.4.1 tensorflow-cpu==2.9.1 scikit-learn==1.0.2"
+          - "torch==1.13.0+cpu torchvision==0.14.0+cpu torchdata==0.5.0 tensorflow-cpu==2.10.0 scikit-learn==1.0.2"
+          - "torch==1.13.0+cpu torchvision==0.14.0+cpu torchdata==0.5.0 tensorflow-cpu==2.11.0 scikit-learn==1.0.2"
+          - "torch==2.1.0+cpu torchvision==0.16.0+cpu torchdata==0.7.0 tensorflow-cpu==2.11.0 scikit-learn==1.0.2"
         include:
-          - ml-deps: "torch==1.13.0+cpu torchvision==0.14.0+cpu torchdata==0.5.0 tensorflow-cpu==2.12.0"
+          - ml-deps: "torch==1.13.0+cpu torchvision==0.14.0+cpu torchdata==0.5.0 tensorflow-cpu==2.12.0 scikit-learn==1.0.2"
             python-version: "3.9"
-          - ml-deps: "torch==1.13.0+cpu torchvision==0.14.0+cpu torchdata==0.5.0 tensorflow-cpu==2.13.0"
+          - ml-deps: "torch==1.13.0+cpu torchvision==0.14.0+cpu torchdata==0.5.0 tensorflow-cpu==2.13.0 scikit-learn==1.0.2"
             python-version: "3.9"
-          - ml-deps: "torch==2.1.0+cpu torchvision==0.16.0+cpu torchdata==0.7.0 tensorflow-cpu==2.13.0 numpy==1.24.3"
+          - ml-deps: "torch==2.1.0+cpu torchvision==0.16.0+cpu torchdata==0.7.0 tensorflow-cpu==2.13.0 numpy==1.24.3 scikit-learn==1.0.2"
             python-version: "3.9"
-          - ml-deps: "torch==2.3.1+cpu torchvision==0.18.1+cpu torchdata==0.8.0 'tensorflow-cpu<2.16.0' 'numpy<2'"
+          - ml-deps: "torch==2.3.1+cpu torchvision==0.18.1+cpu torchdata==0.8.0 'tensorflow-cpu<2.16.0' 'numpy<2' 'scikit-learn>=1.0'"
             python-version: "3.9"
-          - ml-deps: "torch torchvision torchdata~=0.8.0 'tensorflow-cpu<2.16.0' 'numpy<2'"
+          - ml-deps: "torch torchvision torchdata~=0.8.0 'tensorflow-cpu<2.16.0' 'numpy<2' 'scikit-learn>=1.0'"
             python-version: "3.11"
 
     env:
@@ -49,7 +49,7 @@ jobs:
       run: |
         pip install --upgrade pip
         pip install -f https://download.pytorch.org/whl/torch_stable.html protobuf==3.* ${{ matrix.ml-deps }}
-        pip install pytest-mock pytest-cov scikit-learn==1.0.2
+        pip install pytest-mock pytest-cov
         pip install -e .[cloud]
 
     - name: Run pre-commit hooks
