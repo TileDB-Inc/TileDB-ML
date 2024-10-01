@@ -1,4 +1,4 @@
-from pkg_resources import DistributionNotFound, get_distribution  # type: ignore
+from pkg_resources import DistributionNotFound, get_distribution
 
 # TODO change pkg_resources with importlib.metadata, as described here
 #  https://pypi.org/project/setuptools-scm/#:~:text=Retrieving%20package%20version%20at%20runtime, when we stop
