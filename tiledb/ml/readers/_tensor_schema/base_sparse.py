@@ -36,7 +36,9 @@ class BaseSparseTensorSchema(TensorSchema[Tensor]):
     @property
     def max_partition_weight(self) -> int:
         try:
-            memory_budget = int(self._array._ctx_().config()["py.init_buffer_bytes"])
+            # getattr for compatibility with TileDB-Py <0.33
+            ctx = getattr(self._array, "ctx", self._array._ctx_())
+            memory_budget = int(ctx.config()["py.init_buffer_bytes"])
         except KeyError:
             memory_budget = 10 * 1024**2
 

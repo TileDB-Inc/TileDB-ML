@@ -66,7 +66,9 @@ class DenseTensorSchema(TensorSchema[np.ndarray]):
 
     @property
     def max_partition_weight(self) -> int:
-        memory_budget = int(self._array._ctx_().config()["sm.mem.total_budget"])
+        # getattr for compatibility with TileDB-Py <0.33
+        ctx = getattr(self._array, "ctx", self._array._ctx_())
+        memory_budget = int(ctx.config()["sm.mem.total_budget"])
 
         # The memory budget should be large enough to read the cells of the largest field
         bytes_per_cell = max(dtype.itemsize for dtype in self.field_dtypes)
