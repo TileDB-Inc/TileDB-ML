@@ -67,7 +67,16 @@ class DenseTensorSchema(TensorSchema[np.ndarray]):
     @property
     def max_partition_weight(self) -> int:
         # getattr for compatibility with TileDB-Py <0.33
-        ctx = getattr(self._array, "ctx", self._array._ctx_())
+        if hasattr(self._array, "ctx"):  # Check if 'ctx' exists (TileDB-Py >= 0.33)
+            ctx = self._array.ctx
+        elif hasattr(
+            self._array, "_ctx_"
+        ):  # Check if '_ctx_' exists (TileDB-Py < 0.33)
+            ctx = self._array._ctx_()  # Note the parentheses - it was a method
+        else:
+            raise AttributeError(
+                "TileDB context not found. Incompatible TileDB-Py version?"
+            )
         memory_budget = int(ctx.config()["sm.mem.total_budget"])
 
         # The memory budget should be large enough to read the cells of the largest field

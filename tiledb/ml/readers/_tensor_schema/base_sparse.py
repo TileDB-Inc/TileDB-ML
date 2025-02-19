@@ -37,7 +37,16 @@ class BaseSparseTensorSchema(TensorSchema[Tensor]):
     def max_partition_weight(self) -> int:
         try:
             # getattr for compatibility with TileDB-Py <0.33
-            ctx = getattr(self._array, "ctx", self._array._ctx_())
+            if hasattr(self._array, "ctx"):  # Check if 'ctx' exists (TileDB-Py >= 0.33)
+                ctx = self._array.ctx
+            elif hasattr(
+                self._array, "_ctx_"
+            ):  # Check if '_ctx_' exists (TileDB-Py < 0.33)
+                ctx = self._array._ctx_()  # Note the parentheses - it was a method
+            else:
+                raise AttributeError(
+                    "TileDB context not found. Incompatible TileDB-Py version?"
+                )
             memory_budget = int(ctx.config()["py.init_buffer_bytes"])
         except KeyError:
             memory_budget = 10 * 1024**2
