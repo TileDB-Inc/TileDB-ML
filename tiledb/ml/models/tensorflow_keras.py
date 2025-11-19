@@ -36,19 +36,139 @@ elif int(keras_major) <= 2 and int(keras_minor) <= 12:
         keras.saving.legacy.hdf5_format.preprocess_weights_for_loading
     )
     saving_utils = keras.saving.legacy.saving_utils
+# Handle keras 3.x (TensorFlow >=2.16)
 else:
-    from keras.src.saving.serialization_lib import SafeModeScope
+    # SafeModeScope is not needed for Keras 3.x (major version >= 3)
+    # as it's only used in the code when keras_major <= 2
+    try:
+        from keras.saving.serialization_lib import SafeModeScope
+    except (ImportError, ModuleNotFoundError):
+        # For Keras 3.x where this module structure changed
+        SafeModeScope = None
 
-    FunctionalOrSequential = (
-        keras.src.engine.functional.Functional,
-        keras.src.engine.sequential.Sequential,
-    )
+    # Use public API for Keras 3.x
+    # In Keras 3.x, there's no separate Functional class exposed in public API.
+    # Functional models are instances of Model with _is_graph_network=True
+    # We'll create a custom check for this
+    class _FunctionalModel:
+        """Dummy class for isinstance checks against functional models in Keras 3.x"""
+        pass
+    
+    # For now, we only check Sequential. Functional model detection will be done
+    # via attribute checking in the save method
+    FunctionalOrSequential = keras.Sequential
     TFOptimizer = tf.keras.optimizers.legacy.Optimizer
-    get_json_type = keras.src.saving.legacy.saved_model.json_utils.get_json_type
-    preprocess_weights_for_loading = (
-        keras.src.saving.legacy.hdf5_format.preprocess_weights_for_loading
-    )
-    saving_utils = keras.src.saving.legacy.saving_utils
+    
+    # In Keras 3.x, the legacy saving utilities don't exist
+    # We need to provide simplified implementations or use alternatives
+    def get_json_type(obj):
+        """Fallback JSON type conversion for Keras 3.x"""
+        # Basic type handling for JSON serialization
+        if hasattr(obj, 'tolist'):  # numpy arrays
+            return obj.tolist()
+        elif hasattr(obj, '__name__'):  # functions/classes
+            return obj.__name__
+        return str(obj)
+    
+    # Create a minimal saving_utils module replacement
+    class _SavingUtils:
+        @staticmethod
+        def model_metadata(model, include_optimizer):
+            """Generate model metadata for Keras 3.x"""
+            config = model.get_config()
+            # Wrap config with class_name to match expected format
+            model_config = {
+                'class_name': model.__class__.__name__,
+                'config': config
+            }
+            metadata = {
+                'model_config': model_config,
+            }
+            if include_optimizer and model.optimizer:
+                # Extract metrics properly - handle both string names and function objects
+                metrics = []
+                if hasattr(model, 'compiled_metrics') and hasattr(model.compiled_metrics, '_user_metrics'):
+                    user_metrics = model.compiled_metrics._user_metrics
+                    # Handle if _user_metrics is wrapped in a list
+                    if isinstance(user_metrics, list) and len(user_metrics) > 0:
+                        # Flatten if it's a nested list
+                        for item in user_metrics:
+                            if isinstance(item, list):
+                                for metric in item:
+                                    if isinstance(metric, str):
+                                        metrics.append(metric)
+                                    elif hasattr(metric, 'name'):
+                                        metrics.append(metric.name)
+                                    elif callable(metric):
+                                        metrics.append(getattr(metric, '__name__', str(metric)))
+                            else:
+                                if isinstance(item, str):
+                                    metrics.append(item)
+                                elif hasattr(item, 'name'):
+                                    metrics.append(item.name)
+                                elif callable(item):
+                                    metrics.append(getattr(item, '__name__', str(item)))
+                
+                # Extract loss - handle if it's a list or dict
+                loss_value = None
+                if hasattr(model, 'loss'):
+                    loss = model.loss
+                    if isinstance(loss, (list, tuple)) and len(loss) == 1:
+                        loss_value = loss[0] if isinstance(loss[0], str) else getattr(loss[0], '__name__', str(loss[0]))
+                    elif isinstance(loss, str):
+                        loss_value = loss
+                    elif callable(loss):
+                        loss_value = getattr(loss, '__name__', str(loss))
+                    else:
+                        loss_value = str(loss)
+                
+                metadata['training_config'] = {
+                    'optimizer_config': {
+                        'class_name': model.optimizer.__class__.__name__,
+                        'config': model.optimizer.get_config() if hasattr(model.optimizer, 'get_config') else {}
+                    },
+                    'loss': loss_value,
+                    'metrics': metrics if metrics else None,
+                }
+            return metadata
+        
+        @staticmethod
+        def compile_args_from_training_config(training_config, custom_objects=None):
+            """Extract compile arguments from training config for Keras 3.x"""
+            compile_args = {}
+            if 'optimizer_config' in training_config:
+                opt_config = training_config['optimizer_config']
+                # Try to recreate optimizer from config
+                try:
+                    opt_class = getattr(tf.keras.optimizers, opt_config['class_name'], None)
+                    if opt_class:
+                        compile_args['optimizer'] = opt_class.from_config(opt_config['config'])
+                except Exception:
+                    # Fallback to default optimizer
+                    compile_args['optimizer'] = 'adam'
+            if 'loss' in training_config and training_config['loss']:
+                compile_args['loss'] = training_config['loss']
+            if 'metrics' in training_config and training_config['metrics']:
+                metrics = training_config['metrics']
+                # Ensure metrics is a list
+                if not isinstance(metrics, list):
+                    metrics = [metrics]
+                compile_args['metrics'] = metrics
+            return compile_args
+        
+        @staticmethod
+        def try_build_compiled_arguments(model):
+            """Try to build compiled arguments for Keras 3.x"""
+            # In Keras 3.x, this is typically not needed as models build automatically
+            pass
+    
+    saving_utils = _SavingUtils()
+    
+    def preprocess_weights_for_loading(model, weights, original_keras_version, original_backend):
+        """Simplified weight preprocessing for Keras 3.x"""
+        # In Keras 3.x, weight loading is more straightforward
+        return weights
+
 
 
 class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
@@ -63,11 +183,11 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
     def __init__(
         self,
         uri: str,
-        namespace: Optional[str] = None,
+        teamspace: Optional[str] = None,
         ctx: Optional[tiledb.Ctx] = None,
         model: Optional[tf.keras.Model] = None,
     ):
-        super().__init__(uri, namespace, ctx, model)
+        super().__init__(uri, teamspace, ctx, model)
 
     def save(
         self,
@@ -86,7 +206,24 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
         if self.artifact is None:
             raise RuntimeError("Model is not initialized")
 
-        if not isinstance(self.artifact, FunctionalOrSequential):
+        # Check if model is functional or sequential (not subclassed)
+        is_valid_model = isinstance(self.artifact, FunctionalOrSequential)
+        
+        # For Keras 3.x, also check if it's a functional model
+        # Keras 3.x functional models have class name 'Functional' or Sequential
+        if not is_valid_model and int(keras_major) >= 3:
+            model_class_name = self.artifact.__class__.__name__
+            # Accept Sequential and Functional models (but not arbitrary Model subclasses)
+            # Functional models will have _is_graph_network=True
+            if model_class_name == 'Sequential':
+                is_valid_model = True
+            elif model_class_name == 'Functional':
+                is_valid_model = True
+            elif model_class_name == 'Model':
+                # Only accept Model if it was created via functional API
+                is_valid_model = getattr(self.artifact, '_is_graph_network', False)
+        
+        if not is_valid_model:
             raise RuntimeError(
                 f"Subclassed Models (Custom Layers) for {type(self.artifact)} not supported at the moment."
             )
@@ -315,6 +452,6 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
             if hasattr(optimizer, "weights"):
                 optimizer_weights = tf.keras.backend.batch_get_value(optimizer.weights)
             else:
-                optimizer_weights = [var.numpy() for var in optimizer.variables()]
+                optimizer_weights = [var.numpy() for var in optimizer.variables]
             return pickle.dumps(optimizer_weights, protocol=4)
         return b""

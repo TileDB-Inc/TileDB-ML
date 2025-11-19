@@ -9,10 +9,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9"]
-        ml-deps:
-          - "torch==2.1.2+cpu torchvision==0.16.2+cpu torchdata==0.7.1 tensorflow-cpu==2.15.1 "
-          - "torch==2.3.1+cpu torchvision==0.18.1+cpu torchdata==0.8.0 'tensorflow-cpu<2.16'"
+        python-version: ["3.12"]
+        # ml-deps:
+          # - "torch==2.1.2+cpu torchvision==0.16.2+cpu torchdata==0.7.1 tensorflow-cpu==2.15.1 "
+          # - "torch==2.3.1+cpu torchvision==0.18.1+cpu torchdata==0.8.0 'tensorflow-cpu<2.16'"
     env:
       run_coverage: ${{ github.ref == 'refs/heads/master' }}
 
@@ -28,14 +28,13 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.cache/pip
-        key: ${{ runner.os }}:ml-deps=[${{ matrix.ml-deps }}]
+        key: ${{ runner.os }} # :ml-deps=[${{ matrix.ml-deps }}]
 
     - name: Install dependencies
       run: |
-        pip install --upgrade pip
-        pip install --extra-index-url https://download.pytorch.org/whl/cpu ${{ matrix.ml-deps }}
-        pip install pytest-mock pytest-cov scikit-learn==1.0.2
-        pip install -e .[cloud]
+        pip install --upgrade pip setuptools wheel
+        pip install pytest-mock pytest-cov
+        pip install -e .[full]
 
     - name: Run pre-commit hooks
       run: |

@@ -1,6 +1,7 @@
 import os
 
 import tiledb.client
+from tiledb.ml.readers.types import ArrayParams
 
 # Your TileDB username and password, exported as environmental variables
 TILEDB_USER_NAME = os.environ.get("TILEDB_USER_NAME")
@@ -13,9 +14,9 @@ TILEDB_TEAMSPACE = "your_tiledb_TEAMSPACE"
 # Your S3 bucket
 S3_BUCKET = "your_s3_bucket"
 
-IMAGES_URI = f"tiledb://{TILEDB_WORKSPACE}/{TILEDB_TEAMSPACE}/s3://{S3_BUCKET}/mnist_images"
-LABELS_URI = f"tiledb://{TILEDB_WORKSPACE}/{TILEDB_TEAMSPACE}/s3://{S3_BUCKET}/mnist_labels"
-MODEL_URI = f"tiledb://{TILEDB_WORKSPACE}/{TILEDB_TEAMSPACE}/s3://{S3_BUCKET}/mnist_model"
+IMAGES_URI = f"tiledb://{TILEDB_WORKSPACE}/{TILEDB_TEAMSPACE}/mnist_images"
+LABELS_URI = f"tiledb://{TILEDB_WORKSPACE}/{TILEDB_TEAMSPACE}/mnist_labels"
+MODEL_URI = f"tiledb://{TILEDB_WORKSPACE}/{TILEDB_TEAMSPACE}/mnist_model"
 
 # The size of each slice from a image and label TileDB arrays.
 IO_BATCH_SIZE = 20000
@@ -50,8 +51,20 @@ def train() -> None:
             logits = self.linear_relu_stack(x)
             return logits
 
+    def do_random_noise(img, mag=0.1):
+        noise = np.random.uniform(-1, 1,img.shape)*mag
+        img = img + noise
+        img = np.clip(img,0,1)
+        return img
+
     with tiledb.open(IMAGES_URI) as x, tiledb.open(LABELS_URI) as y:
-        train_loader = PyTorchTileDBDataLoader(x, y, batch_size=IO_BATCH_SIZE)
+        train_loader = PyTorchTileDBDataLoader(
+            ArrayParams(x, fn=do_random_noise),
+            ArrayParams(y),
+            batch_size=IO_BATCH_SIZE,
+            num_workers=0,
+            shuffle_buffer_size=256,
+        )
 
         net = Net(shape=(28, 28))
         criterion = nn.CrossEntropyLoss()
@@ -96,7 +109,7 @@ def train() -> None:
 
         model = PyTorchTileDBModel(
             uri="mnist_model",
-            namespace=TILEDB_NAMESPACE,
+            teamspace=TILEDB_TEAMSPACE,
             model=net,
             optimizer=optimizer,
         )

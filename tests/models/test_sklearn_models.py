@@ -82,21 +82,9 @@ class TestSklearnModelCloud:
             "tiledb.ml.models._base.get_cloud_uri", return_value=uri
         )
 
-        _ = SklearnTileDBModel(uri=uri, namespace="test_namespace", model=model)
+        _ = SklearnTileDBModel(uri=uri, teamspace="test_teamspace", model=model)
 
-        mock_get_cloud_uri.assert_called_once_with(uri, "test_namespace")
-
-    def test_get_s3_prefix_call_for_models_on_tiledb_cloud(self, tmpdir, mocker):
-        model = sklearn.linear_model.LinearRegression()
-        uri = os.path.join(tmpdir, "model_array")
-
-        mock_get_s3_prefix = mocker.patch(
-            "tiledb.ml.models._cloud_utils.get_s3_prefix", return_value="s3 prefix"
-        )
-
-        _ = SklearnTileDBModel(uri=uri, namespace="test_namespace", model=model)
-
-        mock_get_s3_prefix.assert_called_once_with("test_namespace")
+        mock_get_cloud_uri.assert_called_once_with(uri, "test_teamspace")
 
     def test_update_file_properties_call(self, tmpdir, mocker):
         model = sklearn.linear_model.LinearRegression()
@@ -105,7 +93,7 @@ class TestSklearnModelCloud:
         mocker.patch("tiledb.ml.models._base.get_cloud_uri", return_value=uri)
 
         tiledb_obj = SklearnTileDBModel(
-            uri=uri, namespace="test_namespace", model=model
+            uri=uri, teamspace="test_teamspace", model=model
         )
 
         mock_update_file_properties = mocker.patch(

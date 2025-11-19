@@ -8,7 +8,7 @@ import tiledb.client
 TILEDB_USER_NAME = os.environ.get("TILEDB_USER_NAME")
 TILEDB_PASSWD = os.environ.get("TILEDB_PASSWD")
 
-# Your TileDB namespace
+# Your TileDB workspace/teamspace
 TILEDB_WORKSPACE = "your_tiledb_WORKSPACE"
 TILEDB_TEAMSPACE = "your_tiledb_TEAMSPACE"
 
