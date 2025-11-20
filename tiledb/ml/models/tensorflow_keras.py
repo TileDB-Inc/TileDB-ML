@@ -358,7 +358,7 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
                 try:
                     # In Keras 3.x, use build() instead of _create_all_weights()
                     if int(keras_major) >= 3:
-                        if hasattr(model.optimizer, 'build'):
+                        if hasattr(model.optimizer, "build"):
                             model.optimizer.build(model.trainable_variables)
                     else:
                         model.optimizer._create_all_weights(model.trainable_variables)
@@ -435,7 +435,7 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
                 try:
                     # In Keras 3.x, use build() instead of _create_all_weights()
                     if int(keras_major) >= 3:
-                        if hasattr(model.optimizer, 'build'):
+                        if hasattr(model.optimizer, "build"):
                             model.optimizer.build(model.trainable_variables)
                     else:
                         model.optimizer._create_all_weights(model.trainable_variables)

@@ -10,9 +10,7 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.12"]
-        # ml-deps:
-          # - "torch==2.1.2+cpu torchvision==0.16.2+cpu torchdata==0.7.1 tensorflow-cpu==2.15.1 "
-          # - "torch==2.3.1+cpu torchvision==0.18.1+cpu torchdata==0.8.0 'tensorflow-cpu<2.16'"
+
     env:
       run_coverage: ${{ github.ref == 'refs/heads/master' }}
 
