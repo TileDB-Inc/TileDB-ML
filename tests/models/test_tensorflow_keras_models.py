@@ -7,10 +7,10 @@ import pickle
 import platform
 import shutil
 
+import keras
 import numpy as np
 import pytest
 import tensorflow as tf
-import keras
 
 import tiledb
 from tiledb.ml import __version__ as tiledb_ml_version
@@ -18,7 +18,7 @@ from tiledb.ml.models import SHORT_PREVIEW_LIMIT
 from tiledb.ml.models.tensorflow_keras import TensorflowKerasTileDBModel
 
 # Detect Keras version for conditional test behavior
-keras_version = tuple(int(x) for x in keras.__version__.split('.')[:2])
+keras_version = tuple(int(x) for x in keras.__version__.split(".")[:2])
 KERAS_3_OR_HIGHER = keras_version[0] >= 3
 
 try:
@@ -35,10 +35,7 @@ except ImportError:
     except ImportError:
         try:
             # For Keras 3.x (TensorFlow >=2.16), use the public API
-            from keras.testing import (
-                get_small_functional_mlp,
-                get_small_sequential_mlp,
-            )
+            from keras.testing import get_small_functional_mlp, get_small_sequential_mlp
         except ImportError:
             try:
                 # Fallback for older versions with keras.src
@@ -50,20 +47,25 @@ except ImportError:
                 # Final fallback: implement these functions ourselves for Keras 3.x
                 def get_small_sequential_mlp(num_hidden, num_classes, input_dim):
                     """Create a small sequential MLP for testing."""
-                    model = tf.keras.Sequential([
-                        tf.keras.layers.Input(shape=(input_dim,)),
-                        tf.keras.layers.Dense(num_hidden, activation='relu'),
-                        tf.keras.layers.Dense(num_classes, activation='softmax')
-                    ])
+                    model = tf.keras.Sequential(
+                        [
+                            tf.keras.layers.Input(shape=(input_dim,)),
+                            tf.keras.layers.Dense(num_hidden, activation="relu"),
+                            tf.keras.layers.Dense(num_classes, activation="softmax"),
+                        ]
+                    )
                     return model
-                
+
                 def get_small_functional_mlp(num_hidden, num_classes, input_dim):
                     """Create a small functional MLP for testing."""
                     inputs = tf.keras.Input(shape=(input_dim,))
-                    x = tf.keras.layers.Dense(num_hidden, activation='relu')(inputs)
-                    outputs = tf.keras.layers.Dense(num_classes, activation='softmax')(x)
+                    x = tf.keras.layers.Dense(num_hidden, activation="relu")(inputs)
+                    outputs = tf.keras.layers.Dense(num_classes, activation="softmax")(
+                        x
+                    )
                     model = tf.keras.Model(inputs=inputs, outputs=outputs)
                     return model
+
 
 # Suppress all Tensorflow messages
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
@@ -372,8 +374,10 @@ class TestTensorflowKerasModel:
 
     def test_functional_model_save_load_with_custom_loss_and_metric(self, tmpdir):
         if KERAS_3_OR_HIGHER:
-            pytest.skip("Custom loss/metric with Lambda layers not fully supported in Keras 3.x serialization")
-        
+            pytest.skip(
+                "Custom loss/metric with Lambda layers not fully supported in Keras 3.x serialization"
+            )
+
         inputs = tf.keras.layers.Input(shape=(4,))
         x = tf.keras.layers.Dense(8, activation="relu")(inputs)
         outputs = tf.keras.layers.Dense(3, activation="softmax")(x)
@@ -441,7 +445,7 @@ class TestTensorflowKerasModel:
         model.add(tf.keras.layers.Dense(2))
         model.add(tf.keras.layers.RepeatVector(3))
         model.add(tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(3)))
-        
+
         # sample_weight_mode was removed in Keras 3.x
         if KERAS_3_OR_HIGHER:
             model.compile(

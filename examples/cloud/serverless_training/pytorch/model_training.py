@@ -1,6 +1,7 @@
 import os
 
 import tiledb.client
+
 from tiledb.ml.readers.types import ArrayParams
 
 # Your TileDB username and password, exported as environmental variables
@@ -51,10 +52,10 @@ def train() -> None:
             logits = self.linear_relu_stack(x)
             return logits
 
-    def do_random_noise(img, mag=0.1):
-        noise = np.random.uniform(-1, 1,img.shape)*mag
+    def do_random_noise(img: np.ndarray, mag: float = 0.1) -> np.ndarray:
+        noise = np.random.uniform(-1, 1, img.shape) * mag
         img = img + noise
-        img = np.clip(img,0,1)
+        img = np.clip(img, 0, 1)
         return img
 
     with tiledb.open(IMAGES_URI) as x, tiledb.open(LABELS_URI) as y:
@@ -118,7 +119,9 @@ def train() -> None:
         model.save()
 
 
-tiledb.client.configure(username=TILEDB_USER_NAME, password=TILEDB_PASSWD, workspace=TILEDB_WORKSPACE)
+tiledb.client.configure(
+    username=TILEDB_USER_NAME, password=TILEDB_PASSWD, workspace=TILEDB_WORKSPACE
+)
 tiledb.client.login()
 
 tiledb.client.udf.exec(train)

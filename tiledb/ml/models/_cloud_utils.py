@@ -1,4 +1,3 @@
-import os
 from typing import Mapping, Optional
 
 try:
@@ -37,7 +36,7 @@ FILETYPE_ML_MODEL = "ml_model"
 #                 s3_path = profile.default_s3_path
 #             else:
 #                 raise
-    
+
 #     return os.path.join(s3_path, CLOUD_MODELS) if s3_path is not None else None
 
 #     # if namespace is None:

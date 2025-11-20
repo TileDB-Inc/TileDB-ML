@@ -1,11 +1,7 @@
-import pytest
+from tiledb.ml.models._cloud_utils import update_file_properties
 
-from tiledb.ml.models._cloud_utils import (
-    update_file_properties,
-)
 
 class TestCloudUtils:
-
     def test_update_file_properties(self, mocker):
         mock_tiledb_cloud_update_file_properties = mocker.patch(
             "tiledb.client.array.update_file_properties"

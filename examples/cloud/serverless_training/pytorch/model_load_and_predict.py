@@ -14,9 +14,15 @@ TILEDB_TEAMSPACE = "your_tiledb_TEAMSPACE"
 # Your S3 bucket
 S3_BUCKET = "your_s3_bucket"
 
-IMAGES_URI = f"tiledb://{TILEDB_WORKSPACE}/{TILEDB_TEAMSPACE}/s3://{S3_BUCKET}/mnist_images"
-LABELS_URI = f"tiledb://{TILEDB_WORKSPACE}/{TILEDB_TEAMSPACE}/s3://{S3_BUCKET}/mnist_labels"
-MODEL_URI = f"tiledb://{TILEDB_WORKSPACE}/{TILEDB_TEAMSPACE}/s3://{S3_BUCKET}/mnist_model"
+IMAGES_URI = (
+    f"tiledb://{TILEDB_WORKSPACE}/{TILEDB_TEAMSPACE}/s3://{S3_BUCKET}/mnist_images"
+)
+LABELS_URI = (
+    f"tiledb://{TILEDB_WORKSPACE}/{TILEDB_TEAMSPACE}/s3://{S3_BUCKET}/mnist_labels"
+)
+MODEL_URI = (
+    f"tiledb://{TILEDB_WORKSPACE}/{TILEDB_TEAMSPACE}/s3://{S3_BUCKET}/mnist_model"
+)
 
 IO_BATCH_SIZE = 20000
 
@@ -71,7 +77,9 @@ def predict() -> List[int]:
     return [np.argmax(pred) for pred in output.numpy()]
 
 
-tiledb.client.configure(username=TILEDB_USER_NAME, password=TILEDB_PASSWD, workspace=TILEDB_WORKSPACE)
+tiledb.client.configure(
+    username=TILEDB_USER_NAME, password=TILEDB_PASSWD, workspace=TILEDB_WORKSPACE
+)
 tiledb.client.login()
 
 predictions = tiledb.client.udf.exec(predict)

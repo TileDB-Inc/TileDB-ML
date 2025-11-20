@@ -15,8 +15,12 @@ TILEDB_TEAMSPACE = "your_tiledb_TEAMSPACE"
 # Your S3 bucket
 S3_BUCKET = "your_s3_bucket"
 
-IMAGES_URI = f"tiledb://{TILEDB_WORKSPACE}/{TILEDB_TEAMSPACE}/s3://{S3_BUCKET}/mnist_images"
-LABELS_URI = f"tiledb://{TILEDB_WORKSPACE}/{TILEDB_TEAMSPACE}/s3://{S3_BUCKET}/mnist_labels"
+IMAGES_URI = (
+    f"tiledb://{TILEDB_WORKSPACE}/{TILEDB_TEAMSPACE}/s3://{S3_BUCKET}/mnist_images"
+)
+LABELS_URI = (
+    f"tiledb://{TILEDB_WORKSPACE}/{TILEDB_TEAMSPACE}/s3://{S3_BUCKET}/mnist_labels"
+)
 
 
 # Let's define an ingestion function
@@ -63,7 +67,9 @@ def mnist_ingest(ingestion_func: Any) -> None:
     ingestion_func(data=labels, batch_size=64, uri=LABELS_URI)
 
 
-tiledb.client.configure(username=TILEDB_USER_NAME, password=TILEDB_PASSWD, workspace=TILEDB_WORKSPACE)
+tiledb.client.configure(
+    username=TILEDB_USER_NAME, password=TILEDB_PASSWD, workspace=TILEDB_WORKSPACE
+)
 tiledb.client.login()
 
 tiledb.client.udf.exec(mnist_ingest, ingestion_func=ingest_in_tiledb)
