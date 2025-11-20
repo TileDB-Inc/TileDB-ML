@@ -116,15 +116,22 @@ else:
                 if hasattr(model, "loss"):
                     loss = model.loss
                     if isinstance(loss, (list, tuple)) and len(loss) == 1:
-                        loss_value = (
-                            loss[0]
-                            if isinstance(loss[0], str)
-                            else getattr(loss[0], "__name__", str(loss[0]))
-                        )
+                        loss_item = loss[0]
+                        if isinstance(loss_item, str):
+                            loss_value = loss_item
+                        elif hasattr(loss_item, "name"):
+                            loss_value = loss_item.name
+                        elif hasattr(loss_item, "__name__"):
+                            loss_value = loss_item.__name__
+                        else:
+                            loss_value = str(loss_item)
                     elif isinstance(loss, str):
                         loss_value = loss
-                    elif callable(loss):
-                        loss_value = getattr(loss, "__name__", str(loss))
+                    elif hasattr(loss, "name"):
+                        # For LossFunctionWrapper and similar objects
+                        loss_value = loss.name
+                    elif hasattr(loss, "__name__"):
+                        loss_value = loss.__name__
                     else:
                         loss_value = str(loss)
 
@@ -349,22 +356,24 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
             # Set optimizer weights.
             if optimizer_weights:
                 try:
-                    model.optimizer._create_all_weights(model.trainable_variables)
-                except (NotImplementedError, AttributeError):
+                    # In Keras 3.x, use build() instead of _create_all_weights()
+                    if int(keras_major) >= 3:
+                        if hasattr(model.optimizer, 'build'):
+                            model.optimizer.build(model.trainable_variables)
+                    else:
+                        model.optimizer._create_all_weights(model.trainable_variables)
+                except (NotImplementedError, AttributeError) as e:
                     logging.warning(
-                        "Error when creating the weights of optimizer {}, making it "
-                        "impossible to restore the saved optimizer state. As a result, "
-                        "your model is starting with a freshly initialized optimizer."
+                        f"Error when creating the weights of optimizer: {e}. "
+                        "As a result, your model is starting with a freshly initialized optimizer."
                     )
 
                 try:
                     model.optimizer.set_weights(optimizer_weights)
-                except ValueError:
+                except (ValueError, AttributeError) as e:
                     logging.warning(
-                        "Error in loading the saved optimizer "
-                        "state. As a result, your model is "
-                        "starting with a freshly initialized "
-                        "optimizer."
+                        f"Error in loading the saved optimizer state: {e}. "
+                        "As a result, your model is starting with a freshly initialized optimizer."
                     )
 
         if callback:
@@ -424,22 +433,24 @@ class TensorflowKerasTileDBModel(TileDBArtifact[tf.keras.Model]):
             # Set optimizer weights.
             if optimizer_weights:
                 try:
-                    model.optimizer._create_all_weights(model.trainable_variables)
-                except (NotImplementedError, AttributeError):
+                    # In Keras 3.x, use build() instead of _create_all_weights()
+                    if int(keras_major) >= 3:
+                        if hasattr(model.optimizer, 'build'):
+                            model.optimizer.build(model.trainable_variables)
+                    else:
+                        model.optimizer._create_all_weights(model.trainable_variables)
+                except (NotImplementedError, AttributeError) as e:
                     logging.warning(
-                        "Error when creating the weights of optimizer {}, making it "
-                        "impossible to restore the saved optimizer state. As a result, "
-                        "your model is starting with a freshly initialized optimizer."
+                        f"Error when creating the weights of optimizer: {e}. "
+                        "As a result, your model is starting with a freshly initialized optimizer."
                     )
 
                 try:
                     model.optimizer.set_weights(optimizer_weights)
-                except ValueError:
+                except (ValueError, AttributeError) as e:
                     logging.warning(
-                        "Error in loading the saved optimizer "
-                        "state. As a result, your model is "
-                        "starting with a freshly initialized "
-                        "optimizer."
+                        f"Error in loading the saved optimizer state: {e}. "
+                        "As a result, your model is starting with a freshly initialized optimizer."
                     )
 
         if callback:
