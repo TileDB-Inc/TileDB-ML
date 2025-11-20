@@ -138,6 +138,17 @@ def _rand_array(shape: Sequence[int], sparse: bool = False) -> np.ndarray:
     a = np.zeros((rows, cols))
     col_idxs = np.random.choice(cols, size=rows)
     a[np.arange(rows), col_idxs] = np.random.random(rows)
+
+    # Ensure all columns have at least one non-zero value to avoid dimension mismatch
+    # in sparse array representations
+    for col in range(cols):
+        if not np.any(col_idxs == col):
+            # Pick a random row for this column
+            row = np.random.randint(0, rows)
+            # Only set if this row-col doesn't already have a value
+            if a[row, col] == 0:
+                a[row, col] = np.random.random()
+
     return a.reshape(shape)
 
 
