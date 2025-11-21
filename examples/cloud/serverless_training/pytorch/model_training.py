@@ -9,11 +9,8 @@ TILEDB_USER_NAME = os.environ.get("TILEDB_USER_NAME")
 TILEDB_PASSWD = os.environ.get("TILEDB_PASSWD")
 
 # Your TileDB namespace
-TILEDB_WORKSPACE = "your_tiledb_WORKSPACE"
-TILEDB_TEAMSPACE = "your_tiledb_TEAMSPACE"
-
-# Your S3 bucket
-S3_BUCKET = "your_s3_bucket"
+TILEDB_WORKSPACE = "TileDB-Inc."
+TILEDB_TEAMSPACE = "tiledb-ml-ts"
 
 IMAGES_URI = f"tiledb://{TILEDB_WORKSPACE}/{TILEDB_TEAMSPACE}/mnist_images"
 LABELS_URI = f"tiledb://{TILEDB_WORKSPACE}/{TILEDB_TEAMSPACE}/mnist_labels"
@@ -119,9 +116,9 @@ def train() -> None:
         model.save()
 
 
-tiledb.client.configure(
-    username=TILEDB_USER_NAME, password=TILEDB_PASSWD, workspace=TILEDB_WORKSPACE
-)
+# tiledb.client.configure(
+#     username=TILEDB_USER_NAME, password=TILEDB_PASSWD, workspace=TILEDB_WORKSPACE
+# )
 tiledb.client.login()
 
 tiledb.client.udf.exec(train)
