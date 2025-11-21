@@ -8,7 +8,7 @@ import scipy.sparse
 import sparse
 import torchdata
 from torch.utils.data import DataLoader, IterDataPipe
-from torchdata.datapipes.iter import IterableWrapper
+from torch.utils.data.datapipes.iter import IterableWrapper
 
 from ._pytorch_collators import Collator
 from ._tensor_schema import TensorSchema
