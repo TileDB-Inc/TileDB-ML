@@ -152,7 +152,7 @@ class TileDBArtifact(ABC, Generic[Artifact]):
         tiledb.Array.create(self.uri, schema, ctx=self.ctx)
 
         # In case we are on TileDB-Cloud we have to update model array's file properties
-        if self.teamspace:
+        if self.teamspace or self.uri.startswith("tiledb://"):
             update_file_properties(self.uri, self._file_properties)
 
     def _write_array(
