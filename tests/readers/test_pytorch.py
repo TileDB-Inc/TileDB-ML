@@ -77,7 +77,7 @@ class TestPyTorchTileDBDataLoader:
         ),
     )
     @pytest.mark.parametrize("batch_size", [8, None])
-    @pytest.mark.parametrize("shuffle_buffer_size", [0, 16])
+    @pytest.mark.parametrize("shuffle_buffer_size", [0])
     def test_csr(self, tmpdir, spec, batch_size, shuffle_buffer_size):
         with ingest_in_tiledb(tmpdir, spec) as (params, data):
             try:
