@@ -2,20 +2,25 @@ import os
 from typing import Any
 
 import numpy as np
-import tiledb.cloud
+import tiledb.client
 
 # Your TileDB username and password, exported as environmental variables
 TILEDB_USER_NAME = os.environ.get("TILEDB_USER_NAME")
 TILEDB_PASSWD = os.environ.get("TILEDB_PASSWD")
 
-# Your TileDB namespace
-TILEDB_NAMESPACE = "your_tiledb_namespace"
+# Your TileDB workspace/teamspace
+TILEDB_WORKSPACE = "your_tiledb_WORKSPACE"
+TILEDB_TEAMSPACE = "your_tiledb_TEAMSPACE"
 
 # Your S3 bucket
 S3_BUCKET = "your_s3_bucket"
 
-IMAGES_URI = "tiledb://{}/s3://{}/mnist_images".format(TILEDB_NAMESPACE, S3_BUCKET)
-LABELS_URI = "tiledb://{}/s3://{}/mnist_labels".format(TILEDB_NAMESPACE, S3_BUCKET)
+IMAGES_URI = (
+    f"tiledb://{TILEDB_WORKSPACE}/{TILEDB_TEAMSPACE}/s3://{S3_BUCKET}/mnist_images"
+)
+LABELS_URI = (
+    f"tiledb://{TILEDB_WORKSPACE}/{TILEDB_TEAMSPACE}/s3://{S3_BUCKET}/mnist_labels"
+)
 
 
 # Let's define an ingestion function
@@ -62,8 +67,11 @@ def mnist_ingest(ingestion_func: Any) -> None:
     ingestion_func(data=labels, batch_size=64, uri=LABELS_URI)
 
 
-tiledb.cloud.login(username=TILEDB_USER_NAME, password=TILEDB_PASSWD)
+tiledb.client.configure(
+    username=TILEDB_USER_NAME, password=TILEDB_PASSWD, workspace=TILEDB_WORKSPACE
+)
+tiledb.client.login()
 
-tiledb.cloud.udf.exec(mnist_ingest, ingestion_func=ingest_in_tiledb)
+tiledb.client.udf.exec(mnist_ingest, ingestion_func=ingest_in_tiledb)
 
-print(tiledb.cloud.last_udf_task().logs)
+print(tiledb.client.last_udf_task().logs)

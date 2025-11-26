@@ -25,11 +25,11 @@ class SklearnTileDBModel(TileDBArtifact[BaseEstimator]):
     def __init__(
         self,
         uri: str,
-        namespace: Optional[str] = None,
+        teamspace: Optional[str] = None,
         ctx: Optional[tiledb.Ctx] = None,
         model: Optional[BaseEstimator] = None,
     ):
-        super().__init__(uri, namespace, ctx, model)
+        super().__init__(uri, teamspace, ctx, model)
 
     def save(self, *, meta: Optional[Meta] = None) -> None:
         """Save a Sklearn model as a TileDB array.

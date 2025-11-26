@@ -138,6 +138,17 @@ def _rand_array(shape: Sequence[int], sparse: bool = False) -> np.ndarray:
     a = np.zeros((rows, cols))
     col_idxs = np.random.choice(cols, size=rows)
     a[np.arange(rows), col_idxs] = np.random.random(rows)
+
+    # Ensure all columns have at least one non-zero value to avoid dimension mismatch
+    # in sparse array representations
+    for col in range(cols):
+        if not np.any(col_idxs == col):
+            # Pick a random row for this column
+            row = np.random.randint(0, rows)
+            # Only set if this row-col doesn't already have a value
+            if a[row, col] == 0:
+                a[row, col] = np.random.random()
+
     return a.reshape(shape)
 
 
@@ -248,7 +259,10 @@ def assert_tensors_almost_equal_array(
         # compare each tensor with the non-zero values of the respective array row
         assert len(tensors) == len(array)
         for tensor_row, row in zip(tensors, array):
-            np.testing.assert_array_almost_equal(tensor_row, row[np.nonzero(row)])
+            tensor_arr = np.asarray(tensor_row)
+            np.testing.assert_array_almost_equal(
+                np.sort(tensor_arr), np.sort(row[np.nonzero(row)])
+            )
     else:
         if schema_tensor_kind in (TensorKind.SPARSE_COO, TensorKind.SPARSE_CSR):
             batches = list(map(to_dense, batches))

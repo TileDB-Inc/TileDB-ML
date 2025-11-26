@@ -45,27 +45,25 @@ class TileDBArtifact(ABC, Generic[Artifact]):
     def __init__(
         self,
         uri: str,
-        namespace: Optional[str] = None,
+        teamspace: Optional[str] = None,
         ctx: Optional[tiledb.Ctx] = None,
         artifact: Optional[Artifact] = None,
     ):
         """
         Base class for saving machine learning models as TileDB arrays
         and loading machine learning models from TileDB arrays. In case we need to interact
-        with TileDB-Cloud we have to pass user's TileDB-Cloud namespace. If we don't
-        models will be saved locally.
+        with TileDB-Cloud we have to pass user's TileDB-Cloud teamspace after we have configured the client
+        If we don't pass a teamspace, models will be saved locally.
 
-        :param uri: TileDB array uri
-        :param namespace: In case we want to interact (save, load, update, check) with
-            models on TileDB-Cloud we need the user's namespace on TileDB-Cloud.
-            Moreover, array's uri must have an s3 prefix.
+        :param uri: TileDB array uri. When saving on TileDB-Cloud, this should be the filename of the model.
+        :param teamspace: In case we want to interact (save, load, update, check) with models on TileDB-Cloud we need the user's teamspace on TileDB-Cloud.
         :param ctx: TileDB Context.
         :param artifact: Machine learning artifact (e.g. machine learning model) based on the framework we are using.
         """
-        self.namespace = namespace
+        self.teamspace = teamspace
         self.ctx = ctx
         self.artifact = artifact
-        self.uri = get_cloud_uri(uri, namespace) if namespace else uri
+        self.uri = get_cloud_uri(uri, teamspace) if teamspace else uri
         self._file_properties = {
             ModelFileProperties.TILEDB_ML_MODEL_ML_FRAMEWORK.value: self.Name,
             ModelFileProperties.TILEDB_ML_MODEL_ML_FRAMEWORK_VERSION.value: self.Version,
@@ -154,7 +152,7 @@ class TileDBArtifact(ABC, Generic[Artifact]):
         tiledb.Array.create(self.uri, schema, ctx=self.ctx)
 
         # In case we are on TileDB-Cloud we have to update model array's file properties
-        if self.namespace:
+        if self.teamspace or self.uri.startswith("tiledb://"):
             update_file_properties(self.uri, self._file_properties)
 
     def _write_array(
